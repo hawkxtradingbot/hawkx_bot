@@ -245,8 +245,23 @@ async function setupRouter(bot) {
         const { getPortfolio } = require("./portfolio");
         await getPortfolio(ctx, user);
       } else if (data === "menu_wallets") {
-        const wallets = Array.isArray(db.getWallets(userId)) ? db.getWallets(userId) : [];
-        await safeEdit(ctx, "💼 *Wallets*", buildWalletMenu(user, wallets));
+      await ctx.answerCallbackQuery();
+      const user = db.getUser(userId);
+      const wallets = db.getWallets(userId)|| [];
+      const activeWallet = wallets.find(w => w.wallet_id === user.active_wallet_id) || wallets[0];
+      const address = activeWallet ? (activeWallet.address || activeWallet.public_key) : "No wallet found.";
+        
+      // TODO: CHANGE THIS TO REAL BLOCKCHAIN BALANCE FOR MAINNET
+      const savedMock = db.getSysConfig(`mock_balance_${address}`);
+      const balance = savedMock ? parseFloat(savedMock) : 0;
+      const menuText = `💼 *Wallet Management*\n\n💳 *Active Wallet:*\n\`${address}\`\n\n💰 *Balance:*         ${parseFloat(balance).toFixed(2)} SOL (Devnet)\n\n💡 _Tap your address above to copy it._`;
+
+      
+      const { buildWalletMenu } = require("./keyboards");
+      return ctx.editMessageText(menuText, { 
+        parse_mode: "Markdown", 
+        reply_markup: buildWalletMenu(wallets, user.active_wallet_id)
+      }).catch(() => {});
       } else if (data === "menu_referrals") {
         const stats = getReferralStats(userId);
         await ctx.reply(
@@ -258,24 +273,67 @@ async function setupRouter(bot) {
       } else if (data === "wallet_generate") {
         const { addWallet } = require("./walletVault");
         await addWallet(ctx, user, "generate");
-        const wallets = Array.isArray(db.getWallets(userId)) ? db.getWallets(userId) : [];
-        await safeEdit(ctx, "💼 *Wallets*", buildWalletMenu(db.getUser(userId), wallets));
       } else if (data === "wallet_import") {
-        await ctx.reply("📥 Send your solana privet key:");
+        await ctx.reply("📥 Send your Solana privet key:");
         db.setSysConfig(`pending_${userId}`, "wallet_import");
-      } else if (data.startsWith("wallet_select_")) {
-        await ctx.answerCallbackQuery("✅ Active wallet updated!");
+      
+          // 1. Update the database with the new active wallet
+    } else if (data.startsWith("wallet_select_")) {
         const walletId = parseInt(data.replace("wallet_select_", ""));
-        db.updateUser(userId, { active_wallet_id: walletId });
-        const wallets = [].concat(db.getWallets(userId) || []);
-        await safeEdit(ctx, "💼 *Wallets*", buildWalletMenu(db.getUser(userId), wallets));
+
+        // Stop if the wallet is already active
+        if (user.active_wallet_id === walletId) {
+            return ctx.answerCallbackQuery("✅ This wallet is already active!");
+        }
+
+    // Update DB
+    db.updateUser(userId, { active_wallet_id: walletId });
+  
+  // Force Fresh Data
+  const freshUser = db.getUser(userId);
+  const wallets = db.getWallets(userId) || [];
+  
+  // Stop the loading spinner
+  await ctx.answerCallbackQuery("✅ Active wallet updated!");
+  
+  // Refresh the menu with the dot moved
+    // 1. Find the newly selected wallet's address
+  const activeWallet = wallets.find(w => w.wallet_id === freshUser.active_wallet_id) || wallets[0];
+  const address = activeWallet ? (activeWallet.address || activeWallet.public_key) : "No wallet found.";
+        
+  // TODO: CHANGE THIS TO REAL BLOCKCHAIN BALANCE FOR MAINNET
+  const savedMock = db.getSysConfig(`mock_balance_${address}`);
+  const balance = savedMock ? parseFloat(savedMock) : 0;
+
+// 2. Build the big message board again
+const menuText = `💼 *Wallet Management*\n\n💳 *Active Wallet:*\n\`${address}\`\n\n💰 *Balance:* ${parseFloat(balance).toFixed(2)} SOL (Devnet)\n\n💡 _Tap your address above to copy it._`;
+
+  // 3. Refresh the screen with the new board and moved dot
+  await safeEdit(ctx, menuText, buildWalletMenu(wallets, freshUser.active_wallet_id));
+
+
+        // ── SETTINGS ──
       } else if (data.startsWith("set_")) {
         await handleSettingCallback(ctx, user, data);
-      } else if (data.startsWith("lang_")) {
+          } else if (data.startsWith("lang_")) {
         const newLang = data.replace("lang_", "");
         db.updateUser(userId, { language: newLang });
+        await ctx.answerCallbackQuery("Language updated!");
+        await handleStart(ctx); // This forces the bot to instantly send a fresh menu!
+
+    // 👇 ADD THIS NEW BLOCK HERE 👇
+    } else if (data.startsWith("wallet_export_prompt_")) {
+      const walletId = data.split("_")[3];
+      db.setSysConfig(`pending_${userId}`, `export_auth_${walletId}`);
+      return ctx.reply(t("wallet.export.prompt", user.language), { parse_mode: "Markdown" });
+    // 👆 END NEW BLOCK 👆
+
+    // -- DEVNET TEST BUTTONS --
+    } else if (data === "devnet_faucet") {
+      const { handleFaucet } = require("./faucet");
+      await handleFaucet(ctx, user);
         await ctx.answerCallbackQuery(`Language updated!`);
-                                            
+
         // ── DEVNET TEST BUTTONS ──
       } else if (data === "devnet_faucet") {
         const { handleFaucet } = require("./faucet");
@@ -349,7 +407,22 @@ async function setupRouter(bot) {
       await addWallet(ctx, user, ctx.message.text.trim());
     } else if (pending.startsWith("set_")) {
       await handleTextInput(ctx, user, pending);
-    } else {
+        } else if (pending.startsWith("export_auth_")) {
+      const walletId = pending.split("_")[2];
+      const inputPassword = ctx.message.text.trim();
+      
+      if (inputPassword === process.env.AES_MASTER_SECRET) {
+        const wallet = db.getWalletById(walletId);
+        const { decrypt } = require("./walletVault");
+        const decryptedKey = decrypt(wallet.private_key); 
+        
+        const msg = await ctx.reply(t("wallet.export.success", user.language, { key: decryptedKey }), { parse_mode: "Markdown" });
+        setTimeout(() => ctx.api.deleteMessage(ctx.chat.id, msg.message_id).catch(() => {}), 60000);
+      } else {
+        await ctx.reply(t("wallet.export.invalid", user.language));
+      }
+      db.setSysConfig(`pending_${userId}`, "");
+      } else {
       // Check if it looks like a CA
       const { extractCAs } = require("./caExtractor");
       const cas = extractCAs(ctx.message.text.trim());
@@ -385,5 +458,4 @@ async function ensureUser(ctx) {
   }
   return user;
 }
-
 module.exports = { setupRouter };

@@ -1,3 +1,4 @@
+kb.text('🔑 Export Private Key', `wallet_export_prompt_${activeWalletId}`).row();
 // M05 — Keyboards (Devnet version with faucet button)
 const { InlineKeyboard } = require('grammy');
 const { t } = require('./i18n');
@@ -65,14 +66,20 @@ function buildSettingsMenu(user) {
 
 function buildWalletMenu(wallets, activeWalletId) {
   const kb = new InlineKeyboard();
+    if (!Array.isArray(wallets)) wallets = [];
   wallets.forEach(w => {
     const short = `${w.public_key.slice(0, 4)}...${w.public_key.slice(-4)}`;
     const marker = w.wallet_id === activeWalletId ? ' ●' : '';
+        // This adds the label and short address on a button
     kb.text(`${w.label}: ${short}${marker}`, `wallet_select_${w.wallet_id}`).row();
+    
+    // This adds a dedicated "Copy" button that sends the full address
+    kb.text(`📋 Copy Full Address`, `copy_addr_${w.public_key}`).row();
   });
   kb.text('🆕 Generate Devnet Wallet', 'wallet_generate').row();
   kb.text('📥 Import Private Key', 'wallet_import').row();
   kb.text('🚰 Airdrop SOL to Active', 'devnet_faucet').row();
+  kb.text("🔑 Export Private Key", `wallet_export_prompt_${activeWalletId}`).row();
   kb.text('🔙 Back', 'menu_main').row();
   return kb;
 }

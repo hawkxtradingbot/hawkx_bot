@@ -58,6 +58,8 @@ async function handleFaucet(ctx, user) {
       `💰 Mock Balance: 10 SOL added to your test account.\n\n` +
       `_You can still test all bot features with mock trades._`
     );
+      const db = require('../../database');
+      db.setSysConfig(`mock_balance_${wallet.public_key}`, "10"); 
   }
 }
 

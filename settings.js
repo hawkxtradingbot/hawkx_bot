@@ -43,9 +43,15 @@ async function handleSettingCallback(ctx, user, action) {
       await ctx.reply('Select language:', {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '🇺🇸 English', callback_data: 'lang_en' }, { text: '🇸🇦 Arabic', callback_data: 'lang_ar' }],
-            [{ text: '🇨🇳 Chinese', callback_data: 'lang_zh' }, { text: '🇷🇺 Russian', callback_data: 'lang_ru' }],
-          ],
+                        [
+              { text: '🇺🇸 English', callback_data: 'lang_en' }, 
+              { text: '🇸🇦 العربية', callback_data: 'lang_ar' }
+            ],
+            [
+              { text: '🇨🇳 中文', callback_data: 'lang_zh' }, 
+              { text: '🇷🇺 Русский', callback_data: 'lang_ru' }
+            ]
+          ]
         },
       });
       break;

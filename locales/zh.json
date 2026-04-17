@@ -1,0 +1,13 @@
+{
+  "menu.portfolio": "📊 投资组合",
+  "menu.trade": "⚡️ 交易",
+  "menu.settings": "⚙️ 设置",
+  "menu.referrals": "👥 推荐",
+  "menu.modules": "📦 模块",
+  "menu.wallets": "💼 钱包",
+  "menu.faucet": "🚰 水龙头 (免费 SOL)",
+  "menu.test_trade": "🖊️ 测试交易",
+  "menu.sim_price": "📈 模拟价格",
+  "menu.help": "❓ 帮助",
+    "welcome": "🦅 欢迎来到 HawkX！ *[开发网测试]*\n\n✅ 7天试用期活跃 — 0.3% 固定费率。\n\n🧪 这是一个测试环境。使用 /faucet 获取免费的测试网 SOL。\n\n您的邀请码： `{inviteCode}`"
+}

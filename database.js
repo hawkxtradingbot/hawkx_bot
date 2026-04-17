@@ -1,5 +1,5 @@
 // database.js — HawkX V10 Devnet
-const { DatabaseSync } = require("node:sqlite");
+const Database = require("better-sqlite3");
 const fs = require("fs");
 const path = require("path");
 const config = require("./config");
@@ -8,7 +8,8 @@ let db;
 
 function getDb() {
   if (!db) {
-    db = new DatabaseSync(config.DB_PATH);
+    db = new Database(config.DB_PATH);
+    db.pragma("journal_mode = WAL");
     const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
     db.exec(schema);
     console.log("[DB] SQLite ready:", config.DB_PATH);
@@ -84,7 +85,9 @@ function addWallet(userId, publicKey, encKey, salt, iv, tag, label) {
 }
 
 function getWallets(userId) {
-  return getDb().prepare("SELECT * FROM wallets WHERE user_id = ?").all(userId);
+  return (
+    getDb().prepare("SELECT * FROM wallets WHERE user_id = ?").all(userId) || []
+  );
 }
 
 function getWallet(walletId) {
