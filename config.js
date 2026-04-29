@@ -1,4 +1,3 @@
-// config.js — HawkX V10 DEVNET
 require("dotenv").config();
 
 const config = Object.freeze({
@@ -10,90 +9,97 @@ const config = Object.freeze({
   NETWORK: process.env.NETWORK || "devnet",
 
   // ── DEVNET FLAGS ──
-  DEVNET_MODE: process.env.DEVNET_MODE === "true",
-  MOCK_TRADES: process.env.MOCK_TRADES === "true",
+  DEVNET_MODE:  process.env.DEVNET_MODE  === "true",
+  MOCK_TRADES:  process.env.MOCK_TRADES  === "true",
   AUTO_AIRDROP: process.env.AUTO_AIRDROP === "true",
 
   // ── WALLET & SECURITY ──
-  TREASURY_WALLET: process.env.TREASURY_WALLET,
+  TREASURY_WALLET:      process.env.TREASURY_WALLET,
   TREASURY_PRIVATE_KEY: process.env.TREASURY_PRIVATE_KEY,
-  AES_MASTER_SECRET: process.env.AES_MASTER_SECRET,
+  AES_MASTER_SECRET:    process.env.AES_MASTER_SECRET,
   ADMIN_IDS: (process.env.ADMIN_IDS || "").split(",").map((id) => id.trim()),
 
-  // ── JITO (mocked in devnet) ──
-  JITO_TIP_ACCOUNT: process.env.JITO_TIP_ACCOUNT,
+  // ── JITO ──
+  JITO_TIP_ACCOUNT:      process.env.JITO_TIP_ACCOUNT,
   JITO_BLOCK_ENGINE_URL: process.env.JITO_BLOCK_ENGINE_URL,
 
   // ── DB ──
-  DB_PATH: process.env.DB_PATH || "./hawkx_devnet.db",
+  DB_PATH:        process.env.DB_PATH || "./hawkx_devnet.db",
   MIN_PAYOUT_SOL: parseFloat(process.env.MIN_PAYOUT_SOL || "0.001"),
-  DAILY_PAYOUT_CRON: process.env.DAILY_PAYOUT_CRON || "* * * * *",
-  RANK_CHECK_CRON: process.env.RANK_CHECK_CRON || "*/1 * * * *",
-  INVITE_CODE_REQUIRED: process.env.INVITE_CODE_REQUIRED === "true",
-  INVITE_CODE: process.env.INVITE_CODE || "TESTCODE2026",
+  DAILY_PAYOUT_CRON: "0 */12 * * *",
+  RANK_CHECK_CRON:   "*/2 * * * *",
 
-  // ── FEE RATES (same as mainnet) ──
+  INVITE_CODE_REQUIRED: process.env.INVITE_CODE_REQUIRED === "true",
+  INVITE_CODE: process.env.INVITE_CODE || "FAZLERABBI2026",
+
+  // ── FEE RATES — #03 ──
+  // Rank 1 Degen:     1.00%
+  // Rank 2 Flipper:   0.85%
+  // Rank 3 Trader:    0.80%
+  // Rank 4 Sniper:    0.75%
+  // Rank 5 Whale:     0.70%
+  // Rank 6 Shark:     0.60%
+  // Rank 7 Hawk Elite: 0.50%
   FEE_RATES: {
-    trial: 0.003,
-    scout: 0.01,
-    scoutReferral: 0.009,
-    tracker: 0.0085,
-    hunter: 0.008,
-    predator: 0.0075,
-    apex: 0.007,
-    hawk: 0.006,
-    hawkElite: 0.005,
+    rank1: 0.0100,
+    rank2: 0.0085,
+    rank3: 0.0080,
+    rank4: 0.0075,
+    rank5: 0.0070,
+    rank6: 0.0060,
+    rank7: 0.0050,
   },
 
-  // ── RANK THRESHOLDS (LOWERED FOR FAST TESTING) ──
-  // Normal: 10/50/200/500/1000/2000 SOL
-  // Devnet: 0.1/0.5/1/2/5/10 SOL so you can rank up quickly
+  // ── RANK THRESHOLDS (devnet = lowered for fast testing) ──
   RANK_THRESHOLDS: {
     1: 0,
-    2: 0.1,
-    3: 0.5,
-    4: 1,
-    5: 2,
-    6: 5,
-    7: 10,
+    2: 0.1,    // mainnet: 10 SOL
+    3: 0.5,    // mainnet: 50 SOL
+    4: 1,      // mainnet: 200 SOL
+    5: 2,      // mainnet: 500 SOL
+    6: 5,      // mainnet: 1000 SOL
+    7: 10,     // mainnet: 2000 SOL
   },
 
+  // ── RANK NAMES — #02 Option A ──
   RANK_NAMES: {
-    1: "Scout",
-    2: "Tracker",
-    3: "Hunter",
-    4: "Predator",
-    5: "Apex",
-    6: "Hawk",
+    1: "Degen",
+    2: "Flipper",
+    3: "Trader",
+    4: "Sniper",
+    5: "Whale",
+    6: "Shark",
     7: "Hawk Elite",
   },
 
   RANK_FEE_KEYS: {
-    1: "scout",
-    2: "tracker",
-    3: "hunter",
-    4: "predator",
-    5: "apex",
-    6: "hawk",
-    7: "hawkElite",
+    1: "rank1",
+    2: "rank2",
+    3: "rank3",
+    4: "rank4",
+    5: "rank5",
+    6: "rank6",
+    7: "rank7",
   },
 
+  // ── WALLET LIMITS BY RANK — #09 ──
   WALLET_LIMITS: {
     1: 5,
-    2: 8,
-    3: 10,
+    2: 5,
+    3: 5,
     4: 15,
-    5: 18,
-    6: 20,
-    7: 20,
+    5: 15,
+    6: 15,
+    7: 15,
   },
 
-  REFERRAL_RATES: [0.3, 0.04, 0.03, 0.02, 0.015, 0.01],
+  // ── REFERRAL RATES — #04 L1 = 30% standard ──
+  REFERRAL_RATES: [0.30, 0.04, 0.03, 0.02, 0.015, 0.01],
 
-  // ── DEVNET TEST TOKENS (real devnet CAs for testing) ──
+  // ── DEVNET TEST TOKENS ──
   TEST_TOKENS: {
     USDC_DEVNET: "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr",
-    SOL: "So11111111111111111111111111111111111111112",
+    SOL:         "So11111111111111111111111111111111111111112",
   },
 });
 

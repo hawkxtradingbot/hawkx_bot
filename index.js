@@ -1,83 +1,161 @@
-// index.js — HawkX V10 DEVNET ENTRY POINT
-require('dotenv').config();
-const { Bot } = require('grammy');
-const config = require('./config');
-const db = require('./database');
-const { setupRouter } = require('./src/modules/router');
-const { startTrialCron, startRankCron } = require('./src/modules/ranks');
-const { startDailyPayoutCron } = require('./src/modules/referrals');
-const { startHealthMonitor } = require('./src/modules/rpcFailover');
-const { setBotRef, notify } = require('./src/modules/notifications');
-const { monitorPositions } = require('./src/modules/stopLoss');
+// ============================================================
+require("dotenv").config();
+const { Bot } = require("grammy");
+const config  = require("./config");
+const db      = require("./database");
 
-// ── STARTUP ──
-console.log('');
-console.log('🦅 HawkX Bot V10 — DEVNET MODE');
-console.log('================================');
-console.log(`Network:    ${config.NETWORK}`);
-console.log(`RPC:        ${config.HELIUS_RPC_URL}`);
-console.log(`DB:         ${config.DB_PATH}`);
+const { setupRouter }          = require("./src/modules/router");
+const { startRankCron } = require("./src/modules/ranks");
+const { startPayoutCron } = require("./src/modules/referrals");
+const { startHealthMonitor }   = require("./src/modules/rpcFailover");
+const { setBotRef, notify }    = require("./src/modules/notifications");
+const { monitorPositions }     = require("./src/modules/stopLoss");
+const { isActive: killSwitchActive } = require("./src/modules/killSwitch");
+
+// ── STARTUP LOG ───────────────────────────────────────────────
+console.log("");
+console.log("🦅 HawkX Bot V11 — DEVNET MODE");
+console.log("================================");
+console.log(`Network:     ${config.NETWORK}`);
+console.log(`RPC:         ${config.HELIUS_RPC_URL}`);
+console.log(`DB:          ${config.DB_PATH}`);
 console.log(`Mock Trades: ${config.MOCK_TRADES}`);
-console.log('');
+console.log(`Version:     V11`);
+console.log("");
 
-// Init DB
+// ── INIT DB ───────────────────────────────────────────────────
 db.getDb();
-console.log('[DB] ✅ SQLite ready');
+console.log("[DB] ✅ SQLite WAL ready (V11 schema)");
 
-// Init bot
+// ── INIT BOT ──────────────────────────────────────────────────
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 setBotRef(bot);
-console.log('[Bot] ✅ Telegram bot initialized');
+console.log("[Bot] ✅ Telegram bot initialized");
 
-const notifyCallback = (userId, eventType, data) => notify(userId, eventType, data);
+// ── #29 RATE LIMIT MIDDLEWARE (safe) ─────────────────────────
+bot.use(async (ctx, next) => {
+  try {
+    const tradeActions = ["trade_quickbuy", "devnet_mock_buy", "buy_confirm_", "sell_confirm_"];
+    const isTradeAction =
+      ctx.callbackQuery &&
+      tradeActions.some((a) => ctx.callbackQuery.data?.startsWith(a));
 
-// Setup router
-setupRouter(bot).catch(e => console.error('[Router] Setup error:', e));
-console.log('[Router] ✅ Commands and callbacks registered');
+    if (isTradeAction && ctx.from) {
+      const userId = ctx.from.id;
+      const user   = db.getUser(userId);
+      if (user && user.trade_count_minute !== undefined) {
+        const now      = Date.now();
+        const winStart = user.trade_window_start
+          ? new Date(user.trade_window_start).getTime()
+          : now;
+        const elapsed  = (now - winStart) / 1000;
 
-// Error handler
-bot.catch((err) => {
-  console.error('[Bot Error]', err.message);
+        if (elapsed > 60) {
+          db.resetTradeRateLimit(userId, new Date().toISOString());
+        } else if ((user.trade_count_minute || 0) >= 10) {
+          await ctx.answerCallbackQuery(
+            "⏳ Too many trades — wait 60 seconds.",
+            { show_alert: true }
+          );
+          return;
+        }
+        db.incrementTradeRateLimit(userId);
+      }
+    }
+  } catch (e) {
+    console.log("[Middleware] Rate limit skipped:", e.message.slice(0, 50));
+  }
+  return next();
 });
 
-// Start polling
+// ── SETUP ROUTER ─────────────────────────────────────────────
+const notifyCallback = (userId, eventType, data) =>
+  notify(userId, eventType, data);
+
+setupRouter(bot);
+console.log("[Router] ✅ Commands and callbacks registered");
+
+// ── ERROR HANDLER ────────────────────────────────────────────
+bot.catch((err) => {
+  if (err.message?.includes("query is too old")) return; // ignore expired callbacks
+  console.error("[Bot Error]", err.message);
+   // Don't crash the bot on individual errorssh
+});
+
+// ── START POLLING ────────────────────────────────────────────
 bot.start({
   onStart: async (info) => {
-    console.log('');
+    console.log("");
     console.log(`[Bot] ✅ @${info.username} is LIVE on DEVNET`);
-    console.log(`[Kill-Switch] ${require('./src/modules/killSwitch').isActive() ? '🔴 ACTIVE' : '✅ OFF'}`);
-    console.log('');
-    console.log('─────────────────────────────────');
-    console.log('🦅 HawkX Devnet Ready!');
-    console.log('Always Watching. Always First.');
-    console.log('─────────────────────────────────');
-    console.log('');
-    console.log('TEST COMMANDS:');
-    console.log('  /start       — Register as new user');
-    console.log('  /faucet      — Get free devnet SOL');
-    console.log('  /mockbuy     — Simulate a buy trade');
-    console.log('  /mocksell    — Simulate a sell');
-    console.log('  /addvolume 5 — Add 5 SOL volume (rank up)');
-    console.log('  /mystats     — Check your stats + rank');
-    console.log('  /portfolio   — View open positions');
-    console.log('  /referrals   — Referral stats');
-    console.log('  /admin       — Admin panel');
-    console.log('');
+    console.log(
+      `[Kill-Switch] ${killSwitchActive() ? "🔴 ACTIVE" : "✅ OFF"}`
+    );
+    console.log("[Mode System] ✅ Beginner/Pro toggle active (#01)");
+    console.log("[Rate Limit]  ✅ 10 trades/min per user (#29)");
+    console.log("");
+    console.log("─────────────────────────────────");
+    console.log("🦅 HawkX V11 Devnet Ready!");
+    console.log("Always Watching. Always First.");
+    console.log("─────────────────────────────────");
+    console.log("");
+    console.log("TEST COMMANDS:");
+    console.log("  /start       — Register (Beginner Mode default)");
+    console.log("  /faucet      — Get free devnet SOL");
+    console.log("  /mockbuy     — Simulate a buy trade");
+    console.log("  /mocksell    — Simulate a sell");
+    console.log("  /addvolume 5 — Add 5 SOL volume (rank up)");
+    console.log("  /mystats     — Check your stats + rank");
+    console.log("  /portfolio   — View open positions");
+    console.log("  /referrals   — Referral stats");
+    console.log("  /admin       — Admin panel");
+    console.log("");
+    console.log("V11 CALLBACKS:");
+    console.log("  mode_set_pro       — Switch to Pro Mode");
+    console.log("  mode_set_beginner  — Switch to Beginner Mode");
+    console.log("  menu_watchlist     — Open Watchlist");
+    console.log("  set_sap            — Set Security PIN");
+    console.log("");
   },
 });
 
-// Background jobs
-startTrialCron(bot);
+// ── BACKGROUND JOBS ──────────────────────────────────────────
 startRankCron(notifyCallback);
-startDailyPayoutCron(notifyCallback);
+startPayoutCron(bot);
 startHealthMonitor();
 
-// Position monitor every 30s
-setInterval(() => {
-  monitorPositions().catch(e => console.error('[Monitor]', e.message));
+// Position monitor every 30s (#34 — retry on fail)
+let positionMonitorErrors = 0;
+setInterval(async () => {
+  try {
+    await monitorPositions();
+    positionMonitorErrors = 0; // Reset error count on success
+  } catch (e) {
+    positionMonitorErrors++;
+    console.error(`[Monitor] Error #${positionMonitorErrors}:`, e.message);
+    if (positionMonitorErrors >= 5) {
+      console.error("[Monitor] ⚠️ 5 consecutive errors — check stopLoss.js");
+    }
+  }
 }, 30000);
 
-console.log('[Jobs] ✅ Trial cron, rank cron, payout cron, position monitor started');
+console.log("[Jobs] ✅ Trial cron, rank cron, payout cron, position monitor started");
 
-process.on('SIGINT', () => { console.log('\n[HawkX] Shutting down...'); process.exit(0); });
-process.on('uncaughtException', (e) => console.error('[Uncaught]', e.message));
+// ── GRACEFUL SHUTDOWN ────────────────────────────────────────
+process.on("SIGINT", () => {
+  console.log("\n[HawkX V11] Shutting down gracefully...");
+  process.exit(0);
+});
+
+process.on("uncaughtException", (e) => {
+  console.error("[Uncaught Exception]", e.message);
+  // Don't exit — keep bot running
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[Unhandled Rejection]", reason);
+});
+
+const express = require("express");
+const app = express();
+app.get("/", (req, res) => res.send("HawkX Running 🦅"));
+app.listen(8080, () => console.log("[Web] Server on port 8080"));

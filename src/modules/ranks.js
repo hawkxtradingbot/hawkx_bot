@@ -1,38 +1,29 @@
-// M08 — Rank System (Devnet: lowered thresholds for fast testing)
-const cron = require("node-cron");
-const db = require("../../database");
+const cron   = require("node-cron");
+const db     = require("../../database");
 const config = require("../../config");
-const { t } = require("./i18n");
 
+// ── Fee rate by rank only — no trial ────────────────────────
 function getFeeRate(user) {
-  // Rule 2 — Trial first
-  if (user.trial_active) return config.FEE_RATES.trial;
-  if (user.rank === 1 && user.joiner_discount)
-    return config.FEE_RATES.scoutReferral;
-  const rankKey = config.RANK_FEE_KEYS[user.rank] || "scout";
+  if (!user) return config.FEE_RATES.rank1;
+  const rankKey = config.RANK_FEE_KEYS[user.rank] || "rank1";
   return config.FEE_RATES[rankKey];
 }
 
-function getRankName(rankNum, lang = "en") {
-  const keys = {
-    1: "rank.scout",
-    2: "rank.tracker",
-    3: "rank.hunter",
-    4: "rank.predator",
-    5: "rank.apex",
-    6: "rank.hawk",
-    7: "rank.hawkelite",
-  };
-  return t(keys[rankNum] || "rank.scout", lang);
+// ── Get rank name from config ────────────────────────────────
+function getRankName(rankNum) {
+  return config.RANK_NAMES[rankNum] || config.RANK_NAMES[1];
 }
 
+// ── Check volume and promote user ───────────────────────────
 function checkAndPromote(userId, notifyCallback) {
   const user = db.getUser(userId);
   if (!user) return false;
 
+  const vol = Math.max(0, user.cumulative_volume_sol || 0);
   let newRank = 1;
+
   for (let r = 7; r >= 1; r--) {
-    if (user.cumulative_volume_sol >= config.RANK_THRESHOLDS[r]) {
+    if (vol >= config.RANK_THRESHOLDS[r]) {
       newRank = r;
       break;
     }
@@ -40,16 +31,15 @@ function checkAndPromote(userId, notifyCallback) {
 
   if (newRank > user.rank) {
     db.updateUser(userId, { rank: newRank });
+
     if (notifyCallback) {
-      const rankKey = config.RANK_FEE_KEYS[newRank];
-      const fee = (config.FEE_RATES[rankKey] * 100).toFixed(2);
+      const rankKey  = config.RANK_FEE_KEYS[newRank];
+      const fee      = (config.FEE_RATES[rankKey] * 100).toFixed(2);
       const rankName = config.RANK_NAMES[newRank];
       notifyCallback(userId, "RANK_UP", {
-        rank: rankName,
-        num: newRank,
-        volume: user.cumulative_volume_sol.toFixed(2),
+        rankName,
+        newRank,
         fee,
-        tagline: "",
         username: user.username || "Trader",
       });
     }
@@ -58,40 +48,22 @@ function checkAndPromote(userId, notifyCallback) {
   return false;
 }
 
-function startTrialCron(bot) {
-  // Runs every minute in devnet for fast testing
-  cron.schedule("* * * * *", async () => {
-    const users = db.getAllUsers();
-    for (const user of users) {
-      if (!user.trial_active) continue;
-      const joinDate = new Date(user.join_date);
-      const daysSince =
-        (Date.now() - joinDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSince >= 7) {
-        db.updateUser(user.user_id, { trial_active: 0 });
-        try {
-          await bot.api.sendMessage(
-            user.user_id,
-            t("trial.expired", user.language),
-            { parse_mode: "Markdown" },
-          );
-        } catch {}
-      }
-    }
-  });
-}
-
+// ── Rank cron ────────────────────────────────────────────────
 function startRankCron(notifyCallback) {
   cron.schedule(config.RANK_CHECK_CRON, () => {
     const users = db.getAllUsers();
-    for (const user of users) checkAndPromote(user.user_id, notifyCallback);
+    for (const user of users) {
+      checkAndPromote(user.user_id, notifyCallback);
+    }
   });
+  console.log("[Ranks] ✅ Rank cron started — checking every 2 min");
 }
+
+// startTrialCron REMOVED — #01
 
 module.exports = {
   getFeeRate,
   getRankName,
   checkAndPromote,
-  startTrialCron,
   startRankCron,
 };
