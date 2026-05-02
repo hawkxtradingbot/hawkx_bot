@@ -4,6 +4,7 @@
 // Source tracking on every position
 
 const db         = require("../../database");
+const { InputFile } = require("grammy");
 const killSwitch = require("./killSwitch");
 const { checkSafety } = require("./safetyChecker");
 const config     = require("../../config");
@@ -70,7 +71,14 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
   const feeRate     = getEffectiveFeeRate(user);
   const feeSol      = solAmount * feeRate;
   const tokenName   = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
-
+  let entryMcap = 0;
+  try {
+    const axiosMcap = require("axios");
+    const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 4000 });
+    const pairs  = dexRes.data?.pairs;
+    if (pairs && pairs.length > 0) entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+  } catch {}
+  
   const tradeId = db.recordTrade({
     userId: user.user_id, walletId: user.active_wallet_id,
     tokenCa: ca, tokenName, platform: "devnet_mock",
@@ -99,7 +107,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
       solInvested: solAmount, tokenAmount,
       platform: "devnet_mock",
       source:    source    || "manual",
-      sourceRef: sourceRef || "",
+      sourceRef: sourceRef || "",entryMcap,
     });
     positionId = result?.lastInsertRowid || db.getDb()
       .prepare("SELECT position_id FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1")
@@ -188,7 +196,38 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
     `Fee: *${feeSol.toFixed(6)} SOL*`,
     { parse_mode: "Markdown" }
   );
-
+  // Auto PnL card on every sell
+  try {
+    const { generatePnlCard } = require("./cardGenerator");
+    let exitMcap = 0;
+    try {
+      const axiosMcap = require("axios");
+      const dexRes = await axiosMcap.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${position.token_ca}`,
+        { timeout: 4000 }
+      );
+      const pairs = dexRes.data?.pairs;
+      if (pairs && pairs.length > 0) exitMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+    } catch {}
+      const result = await generatePnlCard({
+      username:    user.username || "Trader",
+      rankNum:     user.rank || 1,
+      tokenName:   position.token_name || position.token_ca.slice(0,8),
+      pnlPct,
+      pnlSol,
+      entryMcap:   position.entry_mcap || 0,
+      exitMcap,
+      hideAmounts: false,
+    });
+    if (result && result.type === "text") {
+      await ctx.reply(result.text, {
+        parse_mode: "Markdown",
+        reply_markup: { inline_keyboard: [[
+          { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
+        ]]},
+      });
+    }
+  } catch {}
   return { tradeId, txHash, pnlPct, solReceived };
 }
 

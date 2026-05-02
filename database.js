@@ -539,16 +539,25 @@ function removeFromWatchlist(userId, id) {
 
 // ── COPY WALLETS ──────────────────────────────────────────────
 function getCopyWallets(userId) {
-  return getDb().prepare("SELECT * FROM copy_wallets WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+  return getDb().prepare(
+    "SELECT cw.*, w.label as wallet_label FROM copy_wallets cw LEFT JOIN wallets w ON cw.wallet_id = w.wallet_id WHERE cw.user_id = ? ORDER BY cw.id DESC"
+  ).all(userId);
 }
 
-function addCopyWallet(userId, address, label, solAmount, mirrorSells, maxSol) {
+function addCopyWallet(userId, address, label, solAmount, mirrorSells, maxSol, walletId = null, slippage = 50, gasFee = 0.005, copySell = 1) {
   const count = getCopyWallets(userId).length;
   if (count >= 5) return { error: "Max 5 copy wallets reached." };
-  getDb().prepare(
-    "INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active) VALUES (?, ?, ?, ?, ?, ?, 1)"
-  ).run(userId, address, label || address.slice(0,8)+"...", solAmount || 0.1, mirrorSells ? 1 : 0, maxSol || 1);
-  return { success: true };
+  try {
+    const existing = getDb().prepare("SELECT id FROM copy_wallets WHERE user_id = ? AND wallet_address = ?").get(userId, address);
+    if (existing) return { error: "Wallet already added." };
+    getDb().prepare(
+      `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`
+    ).run(userId, address, label || address.slice(0,8)+"...", solAmount || 0.1, mirrorSells ? 1 : 0, maxSol || 1, walletId, slippage, gasFee, copySell);
+    return { success: true };
+  } catch (e) {
+    return { error: e.message };
+  }
 }
 
 function deleteCopyWallet(userId, id) {

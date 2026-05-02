@@ -1,5 +1,4 @@
 // M04 — Router V12 — All callbacks wired
-
 const { handleStart }       = require("./onboarding");
 const { showSettings, handleSettingCallback, handleTextInput, doExportKey } = require("./settings");
 const { getPortfolio, getTokenPosition } = require("./portfolio");
@@ -18,9 +17,47 @@ const {
   buildLimitOrderSetupMenu, buildWatchlistMenu, getModeLabel, getGuide,
 } = require("./keyboards");
 const db     = require("../../database");
+const { InputFile } = require("grammy");
 const config = require("../../config");
 const bcrypt = require("bcryptjs");
 const { getTokenInfo, formatNum, formatPrice } = require("./tokenInfo");
+
+async function handlePnlCard(ctx, user, posId, hideAmounts) {
+  const pos = db.getPosition(posId, user.user_id);
+  if (!pos) { await ctx.reply("❌ Position not found."); return; }
+  const { simulatePriceMovement } = require("./executor");
+  const currentPrice = simulatePriceMovement(pos.token_ca);
+  const pnlPct = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
+  const pnlSol = pos.sol_invested * (pnlPct / 100);
+  let exitMcap = 0;
+  try {
+    const axios = require("axios");
+    const dexRes = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${pos.token_ca}`, { timeout: 4000 });
+    const pairs = dexRes.data?.pairs;
+    if (pairs && pairs.length > 0) exitMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+  } catch {}
+  const loadMsg = await ctx.reply("⏳ Generating your PnL card...");
+  const cardKb = {
+    inline_keyboard: [[{ text: "← Back to Portfolio", callback_data: "menu_portfolio" }]],
+  };
+  try {
+    const { generatePnlCard } = require("./cardGenerator");
+    const buf = await generatePnlCard({
+      username: user.username || "Trader", rankNum: user.rank || 1,
+      tokenName: pos.token_name || pos.token_ca.slice(0, 8),
+      pnlPct, pnlSol, entryMcap: pos.entry_mcap || 0, exitMcap, hideAmounts,
+    });
+    try { await ctx.api.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
+    if (buf) {
+      await ctx.replyWithPhoto(new InputFile(buf, "pnl_card.png"), { reply_markup: cardKb });
+    } else {
+      await ctx.reply("❌ Card not available.", { parse_mode: "Markdown", reply_markup: cardKb });
+    }
+  } catch (e) {
+    try { await ctx.api.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
+    await ctx.reply("❌ Could not generate card. " + e.message, { reply_markup: cardKb });
+  }
+}
 
 async function safeEdit(ctx, text, keyboard) {
   const opts = { parse_mode: "Markdown", reply_markup: keyboard };
@@ -30,6 +67,68 @@ async function safeEdit(ctx, text, keyboard) {
 
 async function deleteUserMsg(ctx) {
   try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+}
+
+async function showCwSetupScreen(ctx, userId) {
+  const addr     = db.getSysConfig(`cw_pending_addr_${userId}`) || "";
+  const name     = db.getSysConfig(`cw_pending_name_${userId}`) || "";
+  const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`));
+  const sol      = db.getSysConfig(`cw_pending_sol_${userId}`) || "0.1";
+  const copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) !== "0";
+  const slippage = db.getSysConfig(`cw_pending_slippage_${userId}`) || "50";
+  const gas      = db.getSysConfig(`cw_pending_gas_${userId}`) || "0.005";
+  const wallets  = db.getWallets(userId) || [];
+  const selWal   = wallets.find(w => w.wallet_id === walletId);
+  const walletIdx = selWal ? wallets.indexOf(selWal) + 1 : 1;
+
+  const walletBtns = [];
+  for (let i = 0; i < wallets.length; i += 3) {
+    walletBtns.push(wallets.slice(i, i + 3).map((w, idx) => {
+      const num   = i + idx + 1;
+      const isSel = w.wallet_id === walletId;
+      return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `cw_setwallet_${w.wallet_id}` };
+    }));
+  }
+
+  const msg =
+    `👛 *Add Copy Wallet*\n\n` +
+    `📚 *Guide:*\n` +
+    `🎯 Paste wallet address to follow\n` +
+    `📝 Give it a name (optional)\n` +
+    `💼 Select your wallet to use\n` +
+    `💰 Set buy amount per trade\n` +
+    `🔄 Copy Sell — auto-sell when they sell\n` +
+    `📊 Slippage — applies to buy & sell\n` +
+    `⛽ Gas Fee — applies to buy & sell\n\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🎯 *Follow:* ${addr ? `\`${addr.slice(0, 16)}...\`` : "❗ Not set"}\n` +
+    `📝 *Name:* ${name || "Not set"}\n` +
+    `💼 *Your Wallet:* W${walletIdx}\n` +
+    `💰 *Buy Amount:* ${sol} SOL\n` +
+    `🔄 *Copy Sell:* ${copySell ? "ON ✅" : "OFF ❌"}\n` +
+    `📊 *Slippage:* ${slippage}%\n` +
+    `⛽ *Gas Fee:* ${gas} SOL\n` +
+    `━━━━━━━━━━━━━━━━━━━\n\n` +
+    `_Tap any button below to change:_`;
+
+  return safeEdit(ctx, msg, { inline_keyboard: [
+    [{ text: "🎯 Paste Follow Address", callback_data: "cw_paste_address" }],
+    [{ text: "📝 Set Name",             callback_data: "cw_set_name"      },
+     { text: "💰 Buy Amount",           callback_data: "cw_set_amount"    }],
+    ...(db.getSysConfig(`cw_wallet_expanded_${userId}`) === "1"
+      ? [
+          ...walletBtns,
+          [{ text: "▲ Hide Wallets", callback_data: "cw_hide_wallets" }],
+        ]
+      : [[{ text: `💼 W${walletIdx} ✅ ▼ tap to change`, callback_data: "cw_show_wallets" }]]
+    ),
+    [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_toggle_copysell" }],
+    [{ text: `📊 Slippage: ${slippage}%`, callback_data: "cw_set_slippage" },
+     { text: `⛽ Gas: ${gas} SOL`,        callback_data: "cw_set_gas"      }],
+    [{ text: "🤖 Auto Sell (soon)",       callback_data: "noop"            }],
+    [{ text: "✅ Add Copy Wallet",        callback_data: "cw_confirm_add"  }],
+    [{ text: "← Back",                   callback_data: "copy_wallet_menu" }],
+  ]});
 }
 
 
@@ -110,7 +209,16 @@ async function buildReferralScreen(ctx, userId, showWallets) {
 
 function setupRouter(bot) {
 
-  bot.command("start", (ctx) => handleStart(ctx, bot));
+  bot.command("start", async (ctx) => {
+    const param = ctx.match || "";
+    if (param.startsWith("pnlcard_")) {
+      const posId = parseInt(param.replace("pnlcard_", ""));
+      const user  = db.getUser(ctx.from.id);
+      if (!user) { await ctx.reply("Please /start first."); return; }
+      return handlePnlCard(ctx, user, posId, false);
+    }
+    return handleStart(ctx, bot);
+  });
   bot.command("admin", async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     await showAdminPanel(ctx);
@@ -193,6 +301,7 @@ function setupRouter(bot) {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [
+            [{ text: "🏅 My Rank Card", callback_data: "gen_rank_card" }],
             [{ text: "🔄 Refresh", callback_data: "menu_stats" }],
             [{ text: "← Back",    callback_data: "menu_main" }],
           ],
@@ -788,72 +897,143 @@ function setupRouter(bot) {
 
     if (data === "copy_wallet_add") {
       await ctx.answerCallbackQuery();
-      const msg = await ctx.reply(
-        "👛 *Add Copy Wallet*\n\nPaste the Solana wallet address you want to copy.\n\n_When that wallet buys, you auto-buy._",
-        { parse_mode: "Markdown" }
-      );
+      const freshUser = db.getUser(userId);
+      db.setSysConfig(`cw_pending_wallet_${userId}`, String(freshUser.active_wallet_id));
+      db.setSysConfig(`cw_pending_slippage_${userId}`, "50");
+      db.setSysConfig(`cw_pending_gas_${userId}`, "0.005");
+      db.setSysConfig(`cw_pending_copysell_${userId}`, "1");
+      db.setSysConfig(`cw_pending_addr_${userId}`, "");
+      db.setSysConfig(`cw_pending_name_${userId}`, "");
+      db.setSysConfig(`cw_pending_sol_${userId}`, "0.1");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_paste_address") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("🎯 Paste the Solana wallet address you want to follow:");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
-      db.setSysConfig(`pending_${userId}`, "copy_wallet_address");
+      db.setSysConfig(`pending_${userId}`, "cw_follow_address");
       return;
     }
 
+    if (data.startsWith("cw_setwallet_")) {
+      const walletId = parseInt(data.replace("cw_setwallet_", ""));
+      db.setSysConfig(`cw_pending_wallet_${userId}`, String(walletId));
+      db.setSysConfig(`cw_wallet_expanded_${userId}`, "0");
+      await ctx.answerCallbackQuery("✅ Wallet selected!");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_set_name") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("📝 Enter a name for this copy wallet (e.g. Whale Tracker):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_name");
+      return;
+    }
+
+    if (data === "cw_set_amount") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("💰 Enter buy amount in SOL per trade (e.g. 0.5):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_amount");
+      return;
+    }
+
+    if (data === "cw_toggle_copysell") {
+      const current = db.getSysConfig(`cw_pending_copysell_${userId}`) || "1";
+      db.setSysConfig(`cw_pending_copysell_${userId}`, current === "1" ? "0" : "1");
+      await ctx.answerCallbackQuery(current === "1" ? "Copy Sell OFF" : "Copy Sell ON");
+      return showCwSetupScreen(ctx, userId);
+    }
+    if (data === "cw_show_wallets") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_wallet_expanded_${userId}`, "1");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_hide_wallets") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_wallet_expanded_${userId}`, "0");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_back_to_setup") {
+      await ctx.answerCallbackQuery();
+      return showCwSetupScreen(ctx, userId);
+    }
+    if (data === "cw_set_slippage") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("📊 Enter slippage % for buy & sell (e.g. 50):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_slippage");
+      return;
+    }
+
+    if (data === "cw_set_gas") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("⛽ Enter gas fee in SOL for buy & sell (e.g. 0.005):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_gas");
+      return;
+    }
+    
     if (data.startsWith("copy_wallet_view_")) {
       const id = parseInt(data.replace("copy_wallet_view_", ""));
       const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
       if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
-      await ctx.reply(
-        `👛 *${cw.label}*\n\n📋 \`${cw.wallet_address}\`\n💰 Amount: *${cw.sol_amount} SOL*\n🔄 Mirror Sells: *${cw.mirror_sells ? "YES" : "NO"}*\nStatus: *${cw.active ? "🟢 Active" : "⏸ Paused"}*`,
-        {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` }],
-              [{ text: "🗑 Delete",  callback_data: `copy_wallet_delete_${id}` }],
-              [{ text: "← Back",    callback_data: "copy_wallet_menu" }],
-            ],
-          },
+      const wallets   = db.getWallets(userId) || [];
+      const selWal    = wallets.find(w => w.wallet_id === cw.wallet_id);
+      const walletIdx = selWal ? wallets.indexOf(selWal) + 1 : "—";
+      const name      = cw.label || cw.wallet_address.slice(0,16) + "...";
+      return safeEdit(ctx,
+        `👛 *${name}*\n\n` +
+        `🎯 Address:\n\`${cw.wallet_address}\`\n\n` +
+        `💼 Using: *W${walletIdx}*\n` +
+        `💰 Buy Amount: *${cw.sol_amount} SOL*\n` +
+        `🔄 Copy Sell: *${cw.copy_sell ? "ON ✅" : "OFF ❌"}*\n` +
+        `📊 Slippage: *${cw.slippage || 50}%*\n` +
+        `⛽ Gas Fee: *${cw.gas_fee || 0.005} SOL*\n` +
+        `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}*\n` +
+        `Trades copied: *${cw.trades_executed || 0}*`,
+        { inline_keyboard: [
+          [{ text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` }],
+          [{ text: "🗑 Delete", callback_data: `copy_wallet_delete_${id}` }],
+          [{ text: "← Back",   callback_data: "copy_wallet_menu" }],
+        ]}
+      );
+    }
+
+        if (data.startsWith("copy_wallet_toggle_")) {
+          const id = parseInt(data.replace("copy_wallet_toggle_", ""));
+          const cw = db.getDb().prepare("SELECT active FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+          if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
+          db.getDb().prepare("UPDATE copy_wallets SET active = ? WHERE id = ? AND user_id = ?").run(cw.active ? 0 : 1, id, userId);
+          await ctx.answerCallbackQuery(cw.active ? "⏸ Paused" : "▶ Resumed");
+          return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
         }
-      );
-      return;
-    }
-
-    if (data.startsWith("copy_wallet_toggle_")) {
-      const id = parseInt(data.replace("copy_wallet_toggle_", ""));
-      db.toggleCopyWallet(userId, id);
-      await ctx.answerCallbackQuery("✅ Updated.");
+    if (data === "cw_confirm_add") {
+      const addr     = db.getSysConfig(`cw_pending_addr_${userId}`);
+      const name     = db.getSysConfig(`cw_pending_name_${userId}`) || null;
+      const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`));
+      const sol      = parseFloat(db.getSysConfig(`cw_pending_sol_${userId}`) || "0.1");
+      const copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) === "1";
+      const slippage = parseFloat(db.getSysConfig(`cw_pending_slippage_${userId}`) || "50");
+      const gas      = parseFloat(db.getSysConfig(`cw_pending_gas_${userId}`) || "0.005");
+      if (!addr) { await ctx.answerCallbackQuery("❌ No address set."); return; }
+      db.getDb().prepare(
+        `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, active, wallet_id, slippage, gas_fee, copy_sell)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`
+      ).run(userId, addr, name, sol, copySell ? 1 : 0, walletId || null, slippage, gas, copySell ? 1 : 0);
+        
+      // Clear pending
+      [`cw_pending_addr_`, `cw_pending_name_`, `cw_pending_wallet_`,
+       `cw_pending_sol_`, `cw_pending_copysell_`, `cw_pending_slippage_`, `cw_pending_gas_`
+      ].forEach(k => db.setSysConfig(k + userId, ""));
+      await ctx.answerCallbackQuery("✅ Copy wallet added!");
       return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
     }
-
-    if (data.startsWith("copy_wallet_delete_")) {
-      const id = parseInt(data.replace("copy_wallet_delete_", ""));
-      db.deleteCopyWallet(userId, id);
-      await ctx.answerCallbackQuery("🗑 Deleted.");
-      return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
-    }
-
-    if (data === "copy_wallet_pause_all") {
-      db.getDb().prepare("UPDATE copy_wallets SET active = 0 WHERE user_id = ?").run(userId);
-      await ctx.answerCallbackQuery("⏸ All paused.");
-      return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
-    }
-
-    if (data === "copy_wallet_mirror_yes" || data === "copy_wallet_mirror_no") {
-      const mirror  = data === "copy_wallet_mirror_yes";
-      const address = db.getSysConfig(`copy_pending_addr_${userId}`);
-      const sol     = parseFloat(db.getSysConfig(`copy_pending_sol_${userId}`) || "0.1");
-      const result  = db.addCopyWallet(userId, address, null, sol, mirror, sol * 10);
-      await ctx.answerCallbackQuery();
-      db.setSysConfig(`copy_pending_addr_${userId}`, "");
-      db.setSysConfig(`copy_pending_sol_${userId}`, "");
-      if (result.error) { await ctx.reply(`❌ ${result.error}`); return; }
-      await ctx.reply(
-        `✅ *Copy Wallet Added!*\n\n📋 \`${address}\`\n💰 ${sol} SOL per trade\n🔄 Mirror Sells: ${mirror ? "YES" : "NO"}`,
-        { parse_mode: "Markdown" }
-      );
-      return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
-    }
-
     // ── COPY CHANNEL ──────────────────────────────────────────
     if (data === "copy_channel_menu") {
       await ctx.answerCallbackQuery();
@@ -1141,7 +1321,34 @@ function setupRouter(bot) {
       db.setSysConfig(`pending_${userId}`, "referral_payout_address");
       return;
     }
+     if (data.startsWith("pnlcard_toggle_")) {
+       const parts    = data.split("_");
+       const posId    = parseInt(parts[2]);
+       const hideAmts = parts[3] === "1";
+       await ctx.answerCallbackQuery("⏳ Regenerating...");
+       return handlePnlCard(ctx, user, posId, hideAmts);
+     }
 
+     if (data === "gen_rank_card") {
+       await ctx.answerCallbackQuery("⏳ Generating rank card...");
+       try {
+         const { generateRankCard } = require("./cardGenerator");
+         const freshUser = db.getUser(userId);
+         const result = await generateRankCard({
+           username: freshUser.username || "Trader",
+           rankNum:  freshUser.rank || 1,
+           volume:   freshUser.cumulative_volume_sol || 0,
+         });
+       if (result && result.type === "text") {
+             await ctx.reply(result.text, { parse_mode: "Markdown" });
+           } else {
+             await ctx.reply("❌ Card not available.");
+           }
+         } catch (e) {
+           await ctx.reply("❌ Could not generate card. " + e.message);
+         }
+         return;
+       }
     // ── DEVNET TOOLS ──────────────────────────────────────────
     if (data === "devnet_faucet") { await ctx.answerCallbackQuery(); return handleFaucet(ctx, user); }
 
@@ -1196,8 +1403,7 @@ function setupRouter(bot) {
       if (!isAdmin(userId)) { await ctx.answerCallbackQuery("❌ Admin only."); return; }
       return handleAdminCallback(ctx, data);
     }
-
-    // ── DEFAULT ───────────────────────────────────────────────
+  // ── DEFAULT ───────────────────────────────────────────────
     await ctx.answerCallbackQuery();
   });
 
@@ -1356,7 +1562,53 @@ function setupRouter(bot) {
       );
       return;
     }
+    
+    if (pending === "cw_follow_address") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      if (!isSolanaAddress(text)) { await ctx.reply("❌ Invalid Solana address."); return; }
+      db.setSysConfig(`cw_pending_addr_${userId}`, text);
+      db.setSysConfig(`pending_${userId}`, "");
+      return showCwSetupScreen(ctx, userId);
+    }
 
+    if (pending === "cw_name") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`cw_pending_name_${userId}`, text);
+      db.setSysConfig(`pending_${userId}`, "");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (pending === "cw_amount") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid amount."); return; }
+      db.setSysConfig(`cw_pending_sol_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (pending === "cw_slippage") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid slippage."); return; }
+      db.setSysConfig(`cw_pending_slippage_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (pending === "cw_gas") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid gas fee."); return; }
+      db.setSysConfig(`cw_pending_gas_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId);
+    }
     if (pending === "copy_wallet_address") {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}

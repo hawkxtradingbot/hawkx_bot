@@ -311,17 +311,18 @@ function buildCopyTradeMenu() {
   return kb;
 }
 
-function buildCopyWalletListMenu(copyWallets) {
-  const kb    = new InlineKeyboard();
-  const count = copyWallets?.length || 0;
-  if (count === 0) { kb.text("No copy wallets yet", "noop").row(); }
-  else {
-    copyWallets.forEach((cw) => {
-      kb.text(`${cw.active?"🟢":"⏸"} ${cw.label}`, `copy_wallet_view_${cw.id}`)
-        .text("🗑", `copy_wallet_delete_${cw.id}`)
-        .row();
-    });
-  }
+  function buildCopyWalletListMenu(copyWallets) {
+    const kb    = new InlineKeyboard();
+    const count = copyWallets?.length || 0;
+    if (count === 0) { kb.text("No copy wallets yet", "noop").row(); }
+    else {
+      copyWallets.forEach((cw) => {
+        const name = cw.label || cw.wallet_address.slice(0,12) + "...";
+        kb.text(`${cw.active ? "🟢" : "⏸"} ${name}`, `copy_wallet_view_${cw.id}`)
+          .text("🗑", `copy_wallet_delete_${cw.id}`)
+          .row();
+      });
+    }
   if (count < 5) kb.text(`➕ Add Copy Wallet (${count}/5)`, "copy_wallet_add").row();
   else kb.text("Max 5 — delete one to add", "noop").row();
   kb.text("⏸ Pause All", "copy_wallet_pause_all").row();
