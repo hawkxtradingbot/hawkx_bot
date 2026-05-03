@@ -51,7 +51,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
   const safety = await checkSafety(ca, user.mode || "beginner");
   if (safety.status === "BLOCK") {
     await ctx.reply(
-      `🚫 *Trade Blocked — Safety Check*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${safety.reason}*\n\n_Blocked to protect you._`,
+      `🚫 *Trade Blocked — Safety Check*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${String(safety.reason||"").replace(/[_*`[\]]/g,"")}*\n\n_Blocked to protect you._`,
       { parse_mode: "Markdown" }
     );
     return null;
@@ -131,7 +131,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
   } catch {}
 
   if (safety.status === "WARNING") {
-    await ctx.reply(`⚠️ *Safety Warning:* ${safety.reason}`, { parse_mode: "Markdown" });
+    await ctx.reply(`⚠️ *Safety Warning:* ${String(safety.reason||"").replace(/[_*`[\]]/g,"")}`, { parse_mode: "Markdown" });
   }
 
   // Wait 100ms then delete confirmed message and open position screen

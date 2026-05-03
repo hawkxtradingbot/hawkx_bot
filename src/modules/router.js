@@ -62,9 +62,33 @@ async function handlePnlCard(ctx, user, posId, hideAmounts) {
 }
 
 async function safeEdit(ctx, text, keyboard) {
-  const opts = { parse_mode: "Markdown", reply_markup: keyboard };
-  try { await ctx.editMessageText(text, opts); }
-  catch { await ctx.reply(text, opts); }
+  const mdOpts   = { parse_mode: "Markdown", reply_markup: keyboard };
+  const plainOpts = { reply_markup: keyboard };
+  try {
+    await ctx.editMessageText(text, mdOpts);
+  } catch (e) {
+    if (e?.description?.includes("parse entities") || e?.description?.includes("can't parse")) {
+      try { await ctx.editMessageText(text, plainOpts); } catch { await ctx.reply(text, plainOpts); }
+    } else {
+      try { await ctx.reply(text, mdOpts); }
+      catch (e2) {
+        if (e2?.description?.includes("parse entities") || e2?.description?.includes("can't parse")) {
+          await ctx.reply(text, plainOpts);
+        }
+      }
+    }
+  }
+}
+
+async function safeReply(ctx, text, extra = {}) {
+  try {
+    await ctx.reply(text, { parse_mode: "Markdown", ...extra });
+  } catch (e) {
+    if (e?.description?.includes("parse entities") || e?.description?.includes("can't parse")) {
+      const { parse_mode, ...rest } = extra;
+      await ctx.reply(text, rest);
+    } else { throw e; }
+  }
 }
 
 function stripMd(str) {
@@ -110,7 +134,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
     `⛽ Gas Fee — applies to buy & sell\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `🎯 *Follow:* ${addr ? `\`${addr}\`` : "❗ Not set"}\n` +
-    `📝 *Name:* ${name || "Not set"}\n` +
+    `📝 *Name:* ${stripMd(name) || "Not set"}\n` +
     `💼 *Your Wallet:* W${walletIdx}\n` +
     `💰 *Buy Amount:* ${sol} SOL\n` +
     `🔄 *Copy Sell:* ${copySell ? "ON ✅" : "OFF ❌"}\n` +
@@ -582,7 +606,7 @@ function setupRouter(bot) {
       if (!wallet) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
       return ctx.reply(
-        `🗑 *Confirm Delete*\n\n*${wallet.label}*\n\`${wallet.public_key.slice(0,12)}...\`\n\n⚠️ Cannot be undone. Back up key first.`,
+        `🗑 *Confirm Delete*\n\n*${stripMd(wallet.label || "")}*\n\`${wallet.public_key.slice(0,12)}...\`\n\n⚠️ Cannot be undone. Back up key first.`,
         {
           parse_mode: "Markdown",
           reply_markup: {
@@ -1828,7 +1852,7 @@ function setupRouter(bot) {
       const wallet   = db.getWallet(walletId);
       const balance  = await getBalance(wallet?.public_key || "");
       await ctx.reply(
-        `✅ *Valid Solana Address*\n\n📤 From: *${wallet?.label}*\n📥 To: \`${text.slice(0,8)}...${text.slice(-4)}\`\n💰 Balance: ${balance.toFixed(4)} SOL\n\nSelect amount:`,
+        `✅ *Valid Solana Address*\n\n📤 From: *${stripMd(wallet?.label || "")}*\n📥 To: \`${text.slice(0,8)}...${text.slice(-4)}\`\n💰 Balance: ${balance.toFixed(4)} SOL\n\nSelect amount:`,
         {
           parse_mode: "Markdown",
           reply_markup: {
