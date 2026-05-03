@@ -198,4 +198,4 @@ process.on("unhandledRejection", (reason) => {
 const express = require("express");
 const app = express();
 app.get("/", (req, res) => res.send("HawkX Running 🦅"));
-app.listen(8080, () => console.log("[Web] Server on port 8080"));
+app.listen(3000, () => console.log("[Web] Health-check on port 3000"));
