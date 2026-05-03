@@ -325,7 +325,8 @@ function buildCopyTradeMenu() {
     }
   if (count < 5) kb.text(`➕ Add Copy Wallet (${count}/5)`, "copy_wallet_add").row();
   else kb.text("Max 5 — delete one to add", "noop").row();
-  kb.text("⏸ Pause All", "copy_wallet_pause_all").row();
+    const anyActive2 = copyWallets && copyWallets.some(w => w.active);
+    kb.text(anyActive2 ? "⏸ Pause All" : "▶ Resume All", "copy_wallet_pause_all").row();
   kb.text("← Back",    "menu_copy_trade")
     .text("🔄 Refresh", "copy_wallet_menu")
     .row();
@@ -337,40 +338,38 @@ function buildCopyChannelListMenu(copyChannels) {
   if (!copyChannels?.length) { kb.text("No copy channels yet", "noop").row(); }
   else {
     copyChannels.forEach((cc) => {
-      kb.text(`${cc.status==="active"?"🟢":"⏸"} ${cc.channel_name||cc.channel_id}`, `copy_channel_view_${cc.id}`)
+      const name   = cc.channel_name || cc.channel_id;
+      const status = cc.status === "active" ? "🟢" : "⏸";
+      kb.text(`${status} ${name}`, `copy_channel_view_${cc.id}`)
         .text("🗑", `copy_channel_delete_${cc.id}`)
         .row();
     });
   }
   kb.text("➕ Add Copy Channel", "copy_channel_add").row();
-  kb.text("⏸ Pause All",        "copy_channel_pause_all").row();
-  kb.text("← Back",    "menu_copy_trade")
-    .text("🔄 Refresh", "copy_channel_menu")
-    .row();
+  const anyActive = copyChannels && copyChannels.some(c => c.status === "active");
+  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "copy_channel_pause_all").row();
+  kb.text("← Back", "menu_copy_trade").text("🔄 Refresh", "copy_channel_menu").row();
   return kb;
 }
 
 function buildCopyChannelSettingsMenu(ch) {
   const kb = new InlineKeyboard();
-  kb.text(`💰 ${ch.buy_amount||0.1} SOL`, `cch_buy_${ch.id}`)
-    .text(`📉 ${ch.slippage||50}%`,        `cch_slip_${ch.id}`)
-    .text(`⛽ ${ch.tip||0.0075} tip`,      `cch_tip_${ch.id}`)
+  const sl = ch.stop_loss_pct   || 0;
+  const tp = ch.take_profit_pct || 0;
+
+  kb.text(`💰 Buy: ${ch.buy_amount||0.1} SOL`,  `cch_buy_${ch.id}`)
+    .text(`📊 Slip: ${ch.slippage||50}%`,         `cch_slip_${ch.id}`)
     .row();
-  kb.text(ch.mev_protection       ? "✅ MEV"       : "◻️ MEV",       `cch_mev_${ch.id}`)
-    .text(ch.auto_sell_enabled     ? "✅ Auto Sell" : "◻️ Auto Sell", `cch_autosell_${ch.id}`)
+  kb.text(`⛽ Gas: ${ch.tip||0.005} SOL`,         `cch_tip_${ch.id}`)
+    .text(`💼 Wallet: W${ch.wallet_id||"Active"}`, `cch_wallet_${ch.id}`)
     .row();
-  if (ch.auto_sell_enabled) {
-    const sl = ch.stop_loss_pct   || 0;
-    const tp = ch.take_profit_pct || 0;
-    kb.text(`🛑 SL:${sl===0?"OFF":sl+"%"}`, `cch_sl_${ch.id}`)
-      .text(`🎯 TP:${tp===0?"OFF":tp+"%"}`, `cch_tp_${ch.id}`)
-      .row();
-  }
-  kb.text(ch.mint_auth_revoked   ? "✅ Mint Rev"   : "◻️ Mint Rev",   `cch_mint_${ch.id}`)
-    .text(ch.freeze_auth_revoked ? "✅ Freeze Rev" : "◻️ Freeze Rev", `cch_freeze_${ch.id}`)
+  kb.text(`🛑 SL: ${sl===0?"OFF":sl+"%"}`,        `cch_sl_${ch.id}`)
+    .text(`🎯 TP: ${tp===0?"OFF":tp+"%"}`,         `cch_tp_${ch.id}`)
     .row();
-  kb.text(`Max/Signal:${ch.max_buys_per_signal||1}`, `cch_maxbuys_${ch.id}`).row();
-  kb.text("✅ Activate Channel", `copy_channel_activate_${ch.id}`).row();
+  kb.text(ch.auto_sell_enabled ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", `cch_autosell_${ch.id}`).row();
+  kb.text(ch.mev_protection    ? "🛡 MEV: ON ✅"       : "🛡 MEV: OFF ❌",       `cch_mev_${ch.id}`).row();
+  kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_toggle_${ch.id}`).row();
+  kb.text("🗑 Delete", `copy_channel_delete_${ch.id}`).row();
   kb.text("← Back", "copy_channel_menu").row();
   return kb;
 }

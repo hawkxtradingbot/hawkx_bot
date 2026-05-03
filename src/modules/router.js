@@ -69,7 +69,7 @@ async function deleteUserMsg(ctx) {
   try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
 }
 
-async function showCwSetupScreen(ctx, userId) {
+async function showCwSetupScreen(ctx, userId, chatId = null) {
   const addr     = db.getSysConfig(`cw_pending_addr_${userId}`) || "";
   const name     = db.getSysConfig(`cw_pending_name_${userId}`) || "";
   const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`));
@@ -80,6 +80,7 @@ async function showCwSetupScreen(ctx, userId) {
   const wallets  = db.getWallets(userId) || [];
   const selWal   = wallets.find(w => w.wallet_id === walletId);
   const walletIdx = selWal ? wallets.indexOf(selWal) + 1 : 1;
+  const expanded  = db.getSysConfig(`cw_wallet_expanded_${userId}`) === "1";
 
   const walletBtns = [];
   for (let i = 0; i < wallets.length; i += 3) {
@@ -101,7 +102,7 @@ async function showCwSetupScreen(ctx, userId) {
     `📊 Slippage — applies to buy & sell\n` +
     `⛽ Gas Fee — applies to buy & sell\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🎯 *Follow:* ${addr ? `\`${addr.slice(0, 16)}...\`` : "❗ Not set"}\n` +
+    `🎯 *Follow:* ${addr ? `\`${addr}\`` : "❗ Not set"}\n` +
     `📝 *Name:* ${name || "Not set"}\n` +
     `💼 *Your Wallet:* W${walletIdx}\n` +
     `💰 *Buy Amount:* ${sol} SOL\n` +
@@ -111,15 +112,12 @@ async function showCwSetupScreen(ctx, userId) {
     `━━━━━━━━━━━━━━━━━━━\n\n` +
     `_Tap any button below to change:_`;
 
-  return safeEdit(ctx, msg, { inline_keyboard: [
+  const keyboard = { inline_keyboard: [
     [{ text: "🎯 Paste Follow Address", callback_data: "cw_paste_address" }],
     [{ text: "📝 Set Name",             callback_data: "cw_set_name"      },
      { text: "💰 Buy Amount",           callback_data: "cw_set_amount"    }],
-    ...(db.getSysConfig(`cw_wallet_expanded_${userId}`) === "1"
-      ? [
-          ...walletBtns,
-          [{ text: "▲ Hide Wallets", callback_data: "cw_hide_wallets" }],
-        ]
+    ...(expanded
+      ? [...walletBtns, [{ text: "▲ Hide Wallets", callback_data: "cw_hide_wallets" }]]
       : [[{ text: `💼 W${walletIdx} ✅ ▼ tap to change`, callback_data: "cw_show_wallets" }]]
     ),
     [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_toggle_copysell" }],
@@ -128,9 +126,34 @@ async function showCwSetupScreen(ctx, userId) {
     [{ text: "🤖 Auto Sell (soon)",       callback_data: "noop"            }],
     [{ text: "✅ Add Copy Wallet",        callback_data: "cw_confirm_add"  }],
     [{ text: "← Back",                   callback_data: "copy_wallet_menu" }],
-  ]});
-}
+  ]};
 
+  // If chatId provided (from text handler) — send new message and save its ID
+  if (chatId) {
+    try {
+      const setupMsgId = db.getSysConfig(`cw_setup_msg_${userId}`);
+      if (setupMsgId) {
+        try {
+          await ctx.api.editMessageText(chatId, parseInt(setupMsgId), msg, { parse_mode: "Markdown", reply_markup: keyboard });
+          return;
+        } catch {}
+      }
+      const sent = await ctx.api.sendMessage(chatId, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(sent.message_id));
+    } catch (e) {
+      await ctx.api.sendMessage(chatId, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+    }
+    return;
+  }
+
+  // Normal callback — use safeEdit
+  const opts = { parse_mode: "Markdown", reply_markup: keyboard };
+  try { await ctx.editMessageText(msg, opts); }
+  catch {
+    const sent = await ctx.reply(msg, opts);
+    db.setSysConfig(`cw_setup_msg_${userId}`, String(sent.message_id));
+  }
+}
 
 // ── Referral screen builder ───────────────────────────────────
 async function buildReferralScreen(ctx, userId, showWallets) {
@@ -886,13 +909,35 @@ function setupRouter(bot) {
     // ── COPY TRADE ────────────────────────────────────────────
     if (data === "menu_copy_trade") {
       await ctx.answerCallbackQuery();
-      return safeEdit(ctx, `👥 *Copy Trade*\n\n${getGuide("copy_trade")}`, buildCopyTradeMenu());
+      const copyGuide =
+        `👥 *Copy Trade*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📚 *GUIDE:*\n\n` +
+        `💼 *Copy Wallet*\n` +
+        `   Follow a specific whale wallet.\n` +
+        `   Bot auto-buys when they buy.\n` +
+        `   Bot auto-sells when they sell.\n` +
+        `   Best for: trusted whale wallets.\n\n` +
+        `📡 *Copy Channel*\n` +
+        `   Follow a Telegram signal channel.\n` +
+        `   Bot auto-buys any CA posted there.\n` +
+        `   Best for: hot token alert channels.\n` +
+        `━━━━━━━━━━━━━━━━━━━`;
+      return safeEdit(ctx, copyGuide, buildCopyTradeMenu());
     }
 
     if (data === "copy_wallet_menu") {
       await ctx.answerCallbackQuery();
       const cw = db.getCopyWallets(userId);
-      return safeEdit(ctx, `👛 *Copy Wallet*\n\n${getGuide("copy_wallet")}`, buildCopyWalletListMenu(cw));
+      const guide =
+        `📚 *Guide:*\n` +
+        `➕ Add — add a wallet to copy\n` +
+        `🟢 Active — tap to view details\n` +
+        `⏸ Pause — stops copying trades\n` +
+        `▶ Resume — starts copying again\n` +
+        `🗑 Delete — remove permanently\n` +
+        `⏸ Pause All — stop all at once\n\n`;
+      return safeEdit(ctx, `👛 *Copy Wallet*\n\n${guide}`, buildCopyWalletListMenu(cw));
     }
 
     if (data === "copy_wallet_add") {
@@ -910,6 +955,7 @@ function setupRouter(bot) {
 
     if (data === "cw_paste_address") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
       const msg = await ctx.reply("🎯 Paste the Solana wallet address you want to follow:");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_follow_address");
@@ -926,6 +972,7 @@ function setupRouter(bot) {
 
     if (data === "cw_set_name") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
       const msg = await ctx.reply("📝 Enter a name for this copy wallet (e.g. Whale Tracker):");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_name");
@@ -934,6 +981,7 @@ function setupRouter(bot) {
 
     if (data === "cw_set_amount") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
       const msg = await ctx.reply("💰 Enter buy amount in SOL per trade (e.g. 0.5):");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_amount");
@@ -964,6 +1012,7 @@ function setupRouter(bot) {
     }
     if (data === "cw_set_slippage") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
       const msg = await ctx.reply("📊 Enter slippage % for buy & sell (e.g. 50):");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_slippage");
@@ -972,6 +1021,7 @@ function setupRouter(bot) {
 
     if (data === "cw_set_gas") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
       const msg = await ctx.reply("⛽ Enter gas fee in SOL for buy & sell (e.g. 0.005):");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_gas");
@@ -1000,19 +1050,65 @@ function setupRouter(bot) {
         { inline_keyboard: [
           [{ text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` }],
           [{ text: "🗑 Delete", callback_data: `copy_wallet_delete_${id}` }],
-          [{ text: "← Back",   callback_data: "copy_wallet_menu" }],
-        ]}
-      );
+            [{ text: "← Back",   callback_data: "copy_wallet_menu" }],
+          ]}
+          );
+          }
+
+          if (data.startsWith("copy_wallet_toggle_")) {
+            const id = parseInt(data.replace("copy_wallet_toggle_", ""));
+            const cw = db.getDb().prepare("SELECT active FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+            if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
+            db.getDb().prepare("UPDATE copy_wallets SET active = ? WHERE id = ? AND user_id = ?").run(cw.active ? 0 : 1, id, userId);
+            await ctx.answerCallbackQuery(cw.active ? "⏸ Paused" : "▶ Resumed");
+            return safeEdit(ctx, `👛 *Copy Wallet*
+
+📚 *Guide:*
+➕ Add — add a wallet to copy
+🟢 Active — tap to view details
+⏸ Pause — stops copying trades
+▶ Resume — starts copying again
+🗑 Delete — remove permanently
+⏸ Pause All — stop all at once
+`, buildCopyWalletListMenu(db.getCopyWallets(userId)));
+          }
+    if (data.startsWith("copy_wallet_delete_")) {
+      const id = parseInt(data.replace("copy_wallet_delete_", ""));
+      db.getDb().prepare("DELETE FROM copy_wallets WHERE id = ? AND user_id = ?").run(id, userId);
+      await ctx.answerCallbackQuery("🗑 Deleted.");
+      return safeEdit(ctx, `👛 *Copy Wallet*
+
+📚 *Guide:*
+➕ Add — add a wallet to copy
+🟢 Active — tap to view details
+⏸ Pause — stops copying trades
+▶ Resume — starts copying again
+🗑 Delete — remove permanently
+⏸ Pause All — stop all at once
+`, buildCopyWalletListMenu(db.getCopyWallets(userId)));
     }
 
-        if (data.startsWith("copy_wallet_toggle_")) {
-          const id = parseInt(data.replace("copy_wallet_toggle_", ""));
-          const cw = db.getDb().prepare("SELECT active FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
-          if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
-          db.getDb().prepare("UPDATE copy_wallets SET active = ? WHERE id = ? AND user_id = ?").run(cw.active ? 0 : 1, id, userId);
-          await ctx.answerCallbackQuery(cw.active ? "⏸ Paused" : "▶ Resumed");
-          return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
-        }
+    if (data === "copy_wallet_pause_all") {
+      const cws       = db.getCopyWallets(userId);
+      const anyActive = cws.some(w => w.active);
+      if (anyActive) {
+        db.getDb().prepare("UPDATE copy_wallets SET active = 0 WHERE user_id = ?").run(userId);
+        await ctx.answerCallbackQuery("⏸ All paused.");
+      } else {
+        db.getDb().prepare("UPDATE copy_wallets SET active = 1 WHERE user_id = ?").run(userId);
+        await ctx.answerCallbackQuery("▶ All resumed.");
+      }
+      return safeEdit(ctx, `👛 *Copy Wallet*
+
+📚 *Guide:*
+➕ Add — add a wallet to copy
+🟢 Active — tap to view details
+⏸ Pause — stops copying trades
+▶ Resume — starts copying again
+🗑 Delete — remove permanently
+⏸ Pause All — stop all at once
+`, buildCopyWalletListMenu(db.getCopyWallets(userId)));
+    }
     if (data === "cw_confirm_add") {
       const addr     = db.getSysConfig(`cw_pending_addr_${userId}`);
       const name     = db.getSysConfig(`cw_pending_name_${userId}`) || null;
@@ -1032,23 +1128,94 @@ function setupRouter(bot) {
        `cw_pending_sol_`, `cw_pending_copysell_`, `cw_pending_slippage_`, `cw_pending_gas_`
       ].forEach(k => db.setSysConfig(k + userId, ""));
       await ctx.answerCallbackQuery("✅ Copy wallet added!");
-      return safeEdit(ctx, "👛 *Copy Wallet*", buildCopyWalletListMenu(db.getCopyWallets(userId)));
+      return safeEdit(ctx, `👛 *Copy Wallet*
+
+📚 *Guide:*
+➕ Add — add a wallet to copy
+🟢 Active — tap to view details
+⏸ Pause — stops copying trades
+▶ Resume — starts copying again
+🗑 Delete — remove permanently
+⏸ Pause All — stop all at once
+`, buildCopyWalletListMenu(db.getCopyWallets(userId)));
     }
     // ── COPY CHANNEL ──────────────────────────────────────────
     if (data === "copy_channel_menu") {
       await ctx.answerCallbackQuery();
       const cc = db.getCopyChannels(userId);
-      return safeEdit(ctx, `📡 *Copy Channel*\n\n${getGuide("copy_channel")}`, buildCopyChannelListMenu(cc));
+      const guide =
+        `📡 *Copy Channel*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📚 *GUIDE:*\n\n` +
+        `➕ *Add* — add a channel to follow\n` +
+        `🟢 *Active* — tap to view/edit settings\n` +
+        `⏸ *Pause* — stop copying from channel\n` +
+        `▶ *Resume* — start copying again\n` +
+        `🗑 *Delete* — remove permanently\n\n` +
+        `💡 *HOW IT WORKS:*\n` +
+        `Add any Telegram channel.\n` +
+        `When a token CA is posted there,\n` +
+        `bot auto-buys using your settings.\n` +
+        `━━━━━━━━━━━━━━━━━━━`;
+      return safeEdit(ctx, guide, buildCopyChannelListMenu(cc));
     }
 
     if (data === "copy_channel_add") {
       await ctx.answerCallbackQuery();
+      return safeEdit(ctx,
+        `📡 *Add Copy Channel*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `*How to add your channel:*\n\n` +
+        `*Step 1 — Add bot as admin*\n` +
+        `Add @hawkx\\_devnet\\_fazle\\_bot as admin to your channel\\.\n` +
+        `_Required for private channels_\n\n` +
+        `*Step 2 — Link your channel*\n` +
+        `Choose one method below:\n` +
+        `━━━━━━━━━━━━━━━━━━━`,
+        { inline_keyboard: [
+          [{ text: "📨 Forward a Message",    callback_data: "cch_add_forward"  }],
+          [{ text: "🔤 Send @channelname",    callback_data: "cch_add_username" }],
+          [{ text: "🔢 Paste Channel ID",     callback_data: "cch_add_id"       }],
+          [{ text: "← Back",                  callback_data: "copy_channel_menu" }],
+        ]}
+      );
+    }
+
+    if (data === "cch_add_forward") {
+      await ctx.answerCallbackQuery();
       const msg = await ctx.reply(
-        "📡 *Add Copy Channel*\n\nForward a message from the channel OR send the @channelname.\n\nBot will auto-buy any CA posted there.",
+        `📨 *Forward a Message*\n\n` +
+        `📢 *Public channel:*\n` +
+        `Just forward any message — no setup needed.\n\n` +
+        `🔒 *Private channel:*\n` +
+        `First add @hawkx_devnet_fazle_bot as admin, then forward a message.\n\n` +
+        `Forward a message now:`,
+        { parse_mode: "Markdown" }
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "copy_channel_forward");
+      return;
+    }
+
+    if (data === "cch_add_username") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply(
+        "🔤 Send the channel username (e.g. @HotTokens):",
         { parse_mode: "Markdown" }
       );
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "copy_channel_id");
+      return;
+    }
+
+    if (data === "cch_add_id") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply(
+        "🔢 Paste the channel ID (e.g. -1001234567890):",
+        { parse_mode: "Markdown" }
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "copy_channel_numeric_id");
       return;
     }
 
@@ -1057,10 +1224,51 @@ function setupRouter(bot) {
       const ch = db.getCopyChannel(id, userId);
       if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
-      return safeEdit(
-        ctx,
-        `📡 *${ch.channel_name || ch.channel_id}*\n\nStatus: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\nSignals: ${ch.signals_caught} | Trades: ${ch.trades_executed}`,
+      const name = ch.channel_name || ch.channel_id;
+      const sl   = ch.stop_loss_pct   || 0;
+      const tp   = ch.take_profit_pct || 0;
+      return safeEdit(ctx,
+        `📡 *${name}*\n\n` +
+        `Status: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
+        `Signals caught: *${ch.signals_caught || 0}*\n` +
+        `Trades executed: *${ch.trades_executed || 0}*\n\n` +
+        `💰 Buy: *${ch.buy_amount || 0.1} SOL*\n` +
+        `📊 Slippage: *${ch.slippage || 50}%*\n` +
+        `⛽ Gas: *${ch.tip || 0.005} SOL*\n` +
+        `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
+        `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
+        `🔄 Copy Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
+        `_Tap any button to change:_`,
         buildCopyChannelSettingsMenu(ch)
+      );
+    }
+
+    if (data.startsWith("copy_channel_toggle_")) {
+      const id = parseInt(data.replace("copy_channel_toggle_", ""));
+      const ch = db.getCopyChannel(id, userId);
+      if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
+      const newStatus = ch.status === "active" ? "paused" : "active";
+      db.updateCopyChannel(userId, id, { status: newStatus });
+      await ctx.answerCallbackQuery(newStatus === "active" ? "▶ Resumed" : "⏸ Paused");
+      const updated = db.getCopyChannel(id, userId);
+      const name    = updated.channel_name || updated.channel_id;
+      const sl2     = updated.stop_loss_pct   || 0;
+      const tp2     = updated.take_profit_pct || 0;
+      return safeEdit(ctx,
+        `📡 *${name}*\n\n` +
+        `Status: ${updated.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
+        `Signals caught: *${updated.signals_caught || 0}*\n` +
+        `Trades executed: *${updated.trades_executed || 0}*\n\n` +
+        `💰 Buy: *${updated.buy_amount || 0.1} SOL*\n` +
+        `📊 Slippage: *${updated.slippage || 50}%*\n` +
+        `⛽ Gas: *${updated.tip || 0.005} SOL*\n` +
+        `🛑 SL: *${sl2 === 0 ? "OFF" : sl2 + "%"}*\n` +
+        `🎯 TP: *${tp2 === 0 ? "OFF" : tp2 + "%"}*\n` +
+        `🔄 Copy Sell: *${updated.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🛡 MEV: *${updated.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
+        `_Tap any button to change:_`,
+        buildCopyChannelSettingsMenu(updated)
       );
     }
 
@@ -1079,9 +1287,30 @@ function setupRouter(bot) {
     }
 
     if (data === "copy_channel_pause_all") {
-      db.getDb().prepare("UPDATE copy_channels SET status = 'paused' WHERE user_id = ?").run(userId);
-      await ctx.answerCallbackQuery("⏸ All paused.");
-      return safeEdit(ctx, "📡 *Copy Channel*", buildCopyChannelListMenu(db.getCopyChannels(userId)));
+      const ccs       = db.getCopyChannels(userId);
+      const anyActive = ccs.some(c => c.status === "active");
+      if (anyActive) {
+        db.getDb().prepare("UPDATE copy_channels SET status = 'paused' WHERE user_id = ?").run(userId);
+        await ctx.answerCallbackQuery("⏸ All paused.");
+      } else {
+        db.getDb().prepare("UPDATE copy_channels SET status = 'active' WHERE user_id = ?").run(userId);
+        await ctx.answerCallbackQuery("▶ All resumed.");
+      }
+      const guide =
+        `📡 *Copy Channel*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📚 *GUIDE:*\n\n` +
+        `➕ *Add* — add a channel to follow\n` +
+        `🟢 *Active* — tap to view/edit settings\n` +
+        `⏸ *Pause* — stop copying from channel\n` +
+        `▶ *Resume* — start copying again\n` +
+        `🗑 *Delete* — remove permanently\n\n` +
+        `💡 *HOW IT WORKS:*\n` +
+        `Add any Telegram channel.\n` +
+        `When a token CA is posted there,\n` +
+        `bot auto-buys using your settings.\n` +
+        `━━━━━━━━━━━━━━━━━━━`;
+      return safeEdit(ctx, guide, buildCopyChannelListMenu(db.getCopyChannels(userId)));
     }
 
     if (data.startsWith("cch_")) {
@@ -1406,7 +1635,54 @@ function setupRouter(bot) {
   // ── DEFAULT ───────────────────────────────────────────────
     await ctx.answerCallbackQuery();
   });
+  // ── Forward message handler ───────────────────────────────
+  bot.on("message:forward_origin", async (ctx) => {
+    const userId  = ctx.from.id;
+    const user    = db.getUser(userId);
+    if (!user) return;
+    const pending  = db.getSysConfig(`pending_${userId}`) || "";
+    const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
+    if (pending !== "copy_channel_forward") return;
 
+    await deleteMsg(ctx, promptId);
+    try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+    db.setSysConfig(`pending_${userId}`, "");
+
+    const fwd = ctx.message.forward_origin || ctx.message.forward_from_chat;
+    if (!fwd) {
+      await ctx.api.sendMessage(ctx.chat.id, "❌ Please forward a message from the channel.");
+      return;
+    }
+    const channelId   = String(fwd.chat?.id || fwd.id || "");
+    const channelName = (fwd.chat?.title || fwd.title || channelId).replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+    if (!channelId) {
+      await ctx.api.sendMessage(ctx.chat.id, "❌ Could not detect channel. Try @username instead.");
+      return;
+    }
+    db.addCopyChannel(userId, channelId, channelName, {});
+    const channels = db.getCopyChannels(userId);
+    const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
+    const sl = newCh?.stop_loss_pct || 0;
+    const tp = newCh?.take_profit_pct || 0;
+    await ctx.api.sendMessage(ctx.chat.id, `✅ *${channelName}* added!`, { parse_mode: "Markdown" });
+    if (newCh) {
+      await ctx.api.sendMessage(ctx.chat.id,
+        `📡 *${channelName}*\n\n` +
+        `Status: ⏸ Paused\n` +
+        `Signals caught: *0*\n` +
+        `Trades executed: *0*\n\n` +
+        `💰 Buy: *${newCh.buy_amount || 0.1} SOL*\n` +
+        `📊 Slippage: *${newCh.slippage || 50}%*\n` +
+        `⛽ Gas: *${newCh.tip || 0.005} SOL*\n` +
+        `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
+        `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
+        `🔄 Copy Sell: *OFF ❌*\n` +
+        `🛡 MEV: *OFF ❌*\n\n` +
+        `_Tap any button to change:_`,
+        { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+      );
+    }
+  });
   // ── Text message handler ─────────────────────────────────────
   bot.on("message:text", async (ctx) => {
     const userId  = ctx.from.id;
@@ -1569,7 +1845,7 @@ function setupRouter(bot) {
       if (!isSolanaAddress(text)) { await ctx.reply("❌ Invalid Solana address."); return; }
       db.setSysConfig(`cw_pending_addr_${userId}`, text);
       db.setSysConfig(`pending_${userId}`, "");
-      return showCwSetupScreen(ctx, userId);
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
     if (pending === "cw_name") {
@@ -1577,7 +1853,7 @@ function setupRouter(bot) {
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       db.setSysConfig(`cw_pending_name_${userId}`, text);
       db.setSysConfig(`pending_${userId}`, "");
-      return showCwSetupScreen(ctx, userId);
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
     if (pending === "cw_amount") {
@@ -1587,7 +1863,7 @@ function setupRouter(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid amount."); return; }
       db.setSysConfig(`cw_pending_sol_${userId}`, String(val));
-      return showCwSetupScreen(ctx, userId);
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
     if (pending === "cw_slippage") {
@@ -1597,7 +1873,7 @@ function setupRouter(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid slippage."); return; }
       db.setSysConfig(`cw_pending_slippage_${userId}`, String(val));
-      return showCwSetupScreen(ctx, userId);
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
     if (pending === "cw_gas") {
@@ -1607,7 +1883,7 @@ function setupRouter(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid gas fee."); return; }
       db.setSysConfig(`cw_pending_gas_${userId}`, String(val));
-      return showCwSetupScreen(ctx, userId);
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
     if (pending === "copy_wallet_address") {
       await deleteMsg(ctx, promptId);
@@ -1643,18 +1919,140 @@ function setupRouter(bot) {
       );
       return;
     }
+      if (pending === "copy_channel_forward") {
+        await deleteMsg(ctx, promptId);
+        try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+        db.setSysConfig(`pending_${userId}`, "");
+        const fwd = ctx.message.forward_origin || ctx.message.forward_from_chat;
+        if (!fwd) { 
+          await ctx.api.sendMessage(ctx.chat.id, "❌ Please forward a message from the channel."); 
+          return; 
+        }
+        const channelId   = String(fwd.chat?.id || fwd.id || "");
+        const channelName = fwd.chat?.title || fwd.title || channelId;
+        if (!channelId) { 
+          await ctx.api.sendMessage(ctx.chat.id, "❌ Could not detect channel. Try @username instead."); 
+          return; 
+        }
+        db.addCopyChannel(userId, channelId, channelName, {});
+        const channels = db.getCopyChannels(userId);
+        const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
+        const sl = newCh?.stop_loss_pct || 0;
+        const tp = newCh?.take_profit_pct || 0;
+    if (newCh) {
+      const safeName = channelName.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+      await ctx.api.sendMessage(ctx.chat.id, `✅ *${safeName}* added!`, { parse_mode: "Markdown" });
+        await ctx.api.sendMessage(ctx.chat.id,
+          `📡 *${safeName}*\n\n` +
+          `Status: ⏸ Paused\n` +
+          `Signals caught: *0*\n` +
+          `Trades executed: *0*\n\n` +
+          `💰 Buy: *${newCh.buy_amount || 0.1} SOL*\n` +
+          `📊 Slippage: *${newCh.slippage || 50}%*\n` +
+          `⛽ Gas: *${newCh.tip || 0.005} SOL*\n` +
+          `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
+          `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
+          `🔄 Copy Sell: *OFF ❌*\n` +
+          `🛡 MEV: *OFF ❌*\n\n` +
+          `_Tap any button to change:_`,
+          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+        );
+      } else {
+        await ctx.api.sendMessage(ctx.chat.id, "❌ Could not add channel. Try again.");
+      }
+      return;
+    }
 
+    if (pending === "copy_channel_numeric_id") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const channelId = text.trim();
+      if (!channelId.startsWith("-100")) { await ctx.reply("❌ Invalid channel ID. Must start with -100."); return; }
+      db.addCopyChannel(userId, channelId, channelId, {});
+      const channels = db.getCopyChannels(userId);
+      const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
+      const sl = newCh?.stop_loss_pct || 0;
+      const tp = newCh?.take_profit_pct || 0;
+      if (newCh) {
+        await ctx.reply(`✅ Channel *${channelId}* added!`, { parse_mode: "Markdown" });
+        await ctx.reply(
+          `📡 *${channelId}*\n\n` +
+          `Status: ⏸ Paused\n` +
+          `Signals caught: *0*\n` +
+          `Trades executed: *0*\n\n` +
+          `💰 Buy: *${newCh.buy_amount || 0.1} SOL*\n` +
+          `📊 Slippage: *${newCh.slippage || 50}%*\n` +
+          `⛽ Gas: *${newCh.tip || 0.005} SOL*\n` +
+          `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
+          `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
+          `🔄 Copy Sell: *OFF ❌*\n` +
+          `🛡 MEV: *OFF ❌*\n\n` +
+          `_Tap any button to change:_`,
+          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+        );
+      }
+      return;
+    }
+    if (pending === "copy_channel_forward") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const fwd = ctx.message.forward_origin || ctx.message.forward_from_chat;
+      if (!fwd) { await ctx.reply("❌ Please forward a message from the channel."); return; }
+      const channelId   = String(fwd.chat?.id || fwd.id || "");
+      const channelName = fwd.chat?.title || fwd.title || channelId;
+      if (!channelId) { await ctx.reply("❌ Could not detect channel. Try @username instead."); return; }
+      db.addCopyChannel(userId, channelId, channelName, {});
+      const channels = db.getCopyChannels(userId);
+      const newCh    = channels[0];
+      await ctx.reply(`✅ *${channelName}* added!`, { parse_mode: "Markdown" });
+      if (newCh) return safeEdit(ctx, `📡 *${channelName}*\n\nConfigure settings:`, buildCopyChannelSettingsMenu(newCh));
+      return;
+    }
+
+    if (pending === "copy_channel_numeric_id") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const channelId = text.trim();
+      if (!channelId.startsWith("-100")) { await ctx.reply("❌ Invalid channel ID. Must start with -100."); return; }
+      db.addCopyChannel(userId, channelId, channelId, {});
+      const channels = db.getCopyChannels(userId);
+      const newCh    = channels[0];
+      await ctx.reply(`✅ Channel *${channelId}* added!`, { parse_mode: "Markdown" });
+      if (newCh) return safeEdit(ctx, `📡 *${channelId}*\n\nConfigure settings:`, buildCopyChannelSettingsMenu(newCh));
+      return;
+    }
     if (pending === "copy_channel_id") {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
       const channelId = text.startsWith("@") ? text : `@${text}`;
       db.addCopyChannel(userId, channelId, channelId, {});
       const channels = db.getCopyChannels(userId);
-      const newCh    = channels[channels.length - 1];
-      db.setSysConfig(`pending_${userId}`, "");
-      await ctx.reply(`📡 Channel *${channelId}* added. Configure settings below:`, { parse_mode: "Markdown" });
-      if (newCh) return safeEdit(ctx, `📡 *${channelId}*`, buildCopyChannelSettingsMenu(newCh));
-      return safeEdit(ctx, "📡 *Copy Channel*", buildCopyChannelListMenu(db.getCopyChannels(userId)));
+      const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
+      const sl = newCh?.stop_loss_pct || 0;
+      const tp = newCh?.take_profit_pct || 0;
+      await ctx.api.sendMessage(ctx.chat.id, `✅ Channel *${channelId}* added!`, { parse_mode: "Markdown" });
+      if (newCh) {
+        await ctx.api.sendMessage(ctx.chat.id,
+          `📡 *${channelId}*\n\n` +
+          `Status: ⏸ Paused\n` +
+          `Signals caught: *0*\n` +
+          `Trades executed: *0*\n\n` +
+          `💰 Buy: *${newCh.buy_amount || 0.1} SOL*\n` +
+          `📊 Slippage: *${newCh.slippage || 50}%*\n` +
+          `⛽ Gas: *${newCh.tip || 0.005} SOL*\n` +
+          `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
+          `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
+          `🔄 Copy Sell: *OFF ❌*\n` +
+          `🛡 MEV: *OFF ❌*\n\n` +
+          `_Tap any button to change:_`,
+          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+        );
+      }
+      return;
     }
 
     if (pending.startsWith("cch_set_")) {
@@ -1667,8 +2065,26 @@ function setupRouter(bot) {
       const val      = parseFloat(text);
       const fieldMap = { buy: "buy_amount", slip: "slippage", tip: "tip", sl: "stop_loss_pct", tp: "take_profit_pct", maxbuys: "max_buys_per_signal" };
       if (fieldMap[field] && !isNaN(val)) db.updateCopyChannel(userId, id, { [fieldMap[field]]: val });
-      const ch = db.getCopyChannel(id, userId);
-      if (ch) return safeEdit(ctx, `📡 *${ch.channel_name}*`, buildCopyChannelSettingsMenu(ch));
+      const ch  = db.getCopyChannel(id, userId);
+      if (!ch) return;
+      const sl2 = ch.stop_loss_pct   || 0;
+      const tp2 = ch.take_profit_pct || 0;
+      const name = ch.channel_name || ch.channel_id;
+      await ctx.api.sendMessage(ctx.chat.id,
+        `📡 *${name}*\n\n` +
+        `Status: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
+        `Signals caught: *${ch.signals_caught || 0}*\n` +
+        `Trades executed: *${ch.trades_executed || 0}*\n\n` +
+        `💰 Buy: *${ch.buy_amount || 0.1} SOL*\n` +
+        `📊 Slippage: *${ch.slippage || 50}%*\n` +
+        `⛽ Gas: *${ch.tip || 0.005} SOL*\n` +
+        `🛑 SL: *${sl2 === 0 ? "OFF" : sl2 + "%"}*\n` +
+        `🎯 TP: *${tp2 === 0 ? "OFF" : tp2 + "%"}*\n` +
+        `🔄 Copy Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
+        `_Tap any button to change:_`,
+        { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) }
+      );
       return;
     }
 

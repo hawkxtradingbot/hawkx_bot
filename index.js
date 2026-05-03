@@ -81,7 +81,47 @@ bot.catch((err) => {
   console.error("[Bot Error]", err.message);
    // Don't crash the bot on individual errorssh
 });
+// ── Channel message handler — detect CA from channels ──────
+bot.on("channel_post", async (ctx) => {
+  try {
+    const channelId = String(ctx.chat.id);
+    const text      = ctx.channelPost?.text || ctx.channelPost?.caption || "";
+    if (!text) return;
 
+    // Find Solana CA pattern (32-44 base58 chars)
+    const caMatch = text.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/g);
+    if (!caMatch) return;
+
+    const ca = caMatch[0];
+
+    // Find all users following this channel
+    const followers = db.getDb().prepare(
+      "SELECT * FROM copy_channels WHERE channel_id = ? AND status = 'active'"
+    ).all(channelId);
+
+    if (!followers.length) return;
+
+    const { mockBuy } = require("./src/modules/executor");
+
+    for (const follower of followers) {
+      try {
+        const user = db.getUser(follower.user_id);
+        if (!user) continue;
+        const fakeCtx = {
+          reply: async (msg, opts) => {
+            try { await bot.api.sendMessage(follower.user_id, msg, opts); } catch {}
+          },
+          chat: { id: follower.user_id },
+          from: { id: follower.user_id },
+        };
+        await mockBuy(fakeCtx, user, ca, follower.buy_amount || 0.1, "copy_channel", channelId);
+        db.getDb().prepare(
+          "UPDATE copy_channels SET signals_caught = signals_caught + 1, trades_executed = trades_executed + 1 WHERE id = ?"
+        ).run(follower.id);
+      } catch {}
+    }
+  } catch {}
+});
 // ── START POLLING ────────────────────────────────────────────
 bot.start({
   onStart: async (info) => {
