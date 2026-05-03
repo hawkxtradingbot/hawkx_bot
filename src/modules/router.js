@@ -65,6 +65,10 @@ async function safeEdit(ctx, text, keyboard) {
   catch { await ctx.reply(text, opts); }
 }
 
+function stripMd(str) {
+  return String(str || "").replace(/[_*`[\]()~>#+=|{}.!\-]/g, "");
+}
+
 async function deleteUserMsg(ctx) {
   try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
 }
@@ -1224,7 +1228,7 @@ function setupRouter(bot) {
       const ch = db.getCopyChannel(id, userId);
       if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
-      const name = ch.channel_name || ch.channel_id;
+      const name = stripMd(ch.channel_name || ch.channel_id);
       const sl   = ch.stop_loss_pct   || 0;
       const tp   = ch.take_profit_pct || 0;
       return safeEdit(ctx,
@@ -1237,7 +1241,7 @@ function setupRouter(bot) {
         `⛽ Gas: *${ch.tip || 0.005} SOL*\n` +
         `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
         `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
-        `🔄 Copy Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🤖 Auto Sell: *Coming Soon*\n` +
         `🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
         `_Tap any button to change:_`,
         buildCopyChannelSettingsMenu(ch)
@@ -1252,7 +1256,7 @@ function setupRouter(bot) {
       db.updateCopyChannel(userId, id, { status: newStatus });
       await ctx.answerCallbackQuery(newStatus === "active" ? "▶ Resumed" : "⏸ Paused");
       const updated = db.getCopyChannel(id, userId);
-      const name    = updated.channel_name || updated.channel_id;
+      const name    = stripMd(updated.channel_name || updated.channel_id);
       const sl2     = updated.stop_loss_pct   || 0;
       const tp2     = updated.take_profit_pct || 0;
       return safeEdit(ctx,
@@ -1636,7 +1640,8 @@ function setupRouter(bot) {
     await ctx.answerCallbackQuery();
   });
   // ── Forward message handler ───────────────────────────────
-  bot.on("message:forward_origin", async (ctx) => {
+    bot.on("message", async (ctx) => {
+      if (!ctx.message?.forward_origin && !ctx.message?.forward_from_chat) return;
     const userId  = ctx.from.id;
     const user    = db.getUser(userId);
     if (!user) return;
@@ -1654,7 +1659,7 @@ function setupRouter(bot) {
       return;
     }
     const channelId   = String(fwd.chat?.id || fwd.id || "");
-    const channelName = (fwd.chat?.title || fwd.title || channelId).replace(/[_*`[\]()~>#+=|{}.!\-]/g, '');
+    const channelName = stripMd(fwd.chat?.title || fwd.title || channelId);
     if (!channelId) {
       await ctx.api.sendMessage(ctx.chat.id, "❌ Could not detect channel. Try @username instead.");
       return;
@@ -1664,10 +1669,10 @@ function setupRouter(bot) {
     const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
     const sl = newCh?.stop_loss_pct || 0;
     const tp = newCh?.take_profit_pct || 0;
-    await ctx.api.sendMessage(ctx.chat.id, `✅ *${channelName}* added!`, { parse_mode: "Markdown" });
+    await ctx.api.sendMessage(ctx.chat.id, `✅ ${channelName} added!`);
     if (newCh) {
       await ctx.api.sendMessage(ctx.chat.id,
-        `📡 *${channelName}*\n\n` +
+        `📡 ${channelName}\n\n` +
         `Status: ⏸ Paused\n` +
         `Signals caught: *0*\n` +
         `Trades executed: *0*\n\n` +
@@ -1679,7 +1684,7 @@ function setupRouter(bot) {
         `🔄 Copy Sell: *OFF ❌*\n` +
         `🛡 MEV: *OFF ❌*\n\n` +
         `_Tap any button to change:_`,
-        { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+                                { reply_markup: buildCopyChannelSettingsMenu(newCh) }
       );
     }
   });
@@ -1929,7 +1934,7 @@ function setupRouter(bot) {
           return; 
         }
         const channelId   = String(fwd.chat?.id || fwd.id || "");
-        const channelName = fwd.chat?.title || fwd.title || channelId;
+        const channelName = stripMd(fwd.chat?.title || fwd.title || channelId);
         if (!channelId) { 
           await ctx.api.sendMessage(ctx.chat.id, "❌ Could not detect channel. Try @username instead."); 
           return; 
@@ -1940,10 +1945,9 @@ function setupRouter(bot) {
         const sl = newCh?.stop_loss_pct || 0;
         const tp = newCh?.take_profit_pct || 0;
     if (newCh) {
-      const safeName = channelName.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
-      await ctx.api.sendMessage(ctx.chat.id, `✅ *${safeName}* added!`, { parse_mode: "Markdown" });
+      await ctx.api.sendMessage(ctx.chat.id, `✅ *${channelName}* added!`, { parse_mode: "Markdown" });
         await ctx.api.sendMessage(ctx.chat.id,
-          `📡 *${safeName}*\n\n` +
+          `📡 *${channelName}*\n\n` +
           `Status: ⏸ Paused\n` +
           `Signals caught: *0*\n` +
           `Trades executed: *0*\n\n` +
@@ -1955,7 +1959,7 @@ function setupRouter(bot) {
           `🔄 Copy Sell: *OFF ❌*\n` +
           `🛡 MEV: *OFF ❌*\n\n` +
           `_Tap any button to change:_`,
-          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+          { reply_markup: buildCopyChannelSettingsMenu(newCh) }
         );
       } else {
         await ctx.api.sendMessage(ctx.chat.id, "❌ Could not add channel. Try again.");
@@ -1989,7 +1993,7 @@ function setupRouter(bot) {
           `🔄 Copy Sell: *OFF ❌*\n` +
           `🛡 MEV: *OFF ❌*\n\n` +
           `_Tap any button to change:_`,
-          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+          { reply_markup: buildCopyChannelSettingsMenu(newCh) }
         );
       }
       return;
@@ -2001,7 +2005,7 @@ function setupRouter(bot) {
       const fwd = ctx.message.forward_origin || ctx.message.forward_from_chat;
       if (!fwd) { await ctx.reply("❌ Please forward a message from the channel."); return; }
       const channelId   = String(fwd.chat?.id || fwd.id || "");
-      const channelName = fwd.chat?.title || fwd.title || channelId;
+      const channelName = stripMd(fwd.chat?.title || fwd.title || channelId);
       if (!channelId) { await ctx.reply("❌ Could not detect channel. Try @username instead."); return; }
       db.addCopyChannel(userId, channelId, channelName, {});
       const channels = db.getCopyChannels(userId);
@@ -2049,7 +2053,7 @@ function setupRouter(bot) {
           `🔄 Copy Sell: *OFF ❌*\n` +
           `🛡 MEV: *OFF ❌*\n\n` +
           `_Tap any button to change:_`,
-          { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+          { reply_markup: buildCopyChannelSettingsMenu(newCh) }
         );
       }
       return;
@@ -2069,7 +2073,7 @@ function setupRouter(bot) {
       if (!ch) return;
       const sl2 = ch.stop_loss_pct   || 0;
       const tp2 = ch.take_profit_pct || 0;
-      const name = ch.channel_name || ch.channel_id;
+      const name = stripMd(ch.channel_name || ch.channel_id);
       await ctx.api.sendMessage(ctx.chat.id,
         `📡 *${name}*\n\n` +
         `Status: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
