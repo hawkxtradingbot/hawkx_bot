@@ -16,6 +16,75 @@ function getMockPrice(ca) {
   return mockPrices.get(ca);
 }
 
+function isRealtimeSniperEnabled(userId) {
+  const settings = db.getSettings(userId) || {};
+  return (settings.sniper_rt_enabled || 0) === 1;
+}
+
+function getRealtimeSniperConfig(userId) {
+  return db.getRealtimeSniperConfig(userId) || {};
+}
+
+async function executeRealtimeSnipe(ctx, user, tokenCa, meta = {}) {
+  if (killSwitch.isActive()) return null;
+  if (!user?.active_wallet_id) return null;
+  if (!isRealtimeSniperEnabled(user.user_id)) return null;
+
+  const rt = getRealtimeSniperConfig(user.user_id);
+  const solAmount = rt.sniper_rt_amount || 0.1;
+  const slippage = rt.sniper_rt_slippage || 50;
+  const price = getMockPrice(tokenCa);
+  const tokenAmount = (solAmount / price) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
+  const txHash = `DEVNET_RT_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const tokenName = meta.tokenName || tokenCa.slice(0, 8);
+  const feeRate = typeof rt.sniper_rt_fee === "number" ? rt.sniper_rt_fee : 0.003;
+  const feeSol = solAmount * feeRate;
+
+  db.recordTrade({
+    userId: user.user_id,
+    walletId: user.active_wallet_id,
+    tokenCa,
+    tokenName,
+    platform: "devnet_mock",
+    action: "buy",
+    solAmount,
+    tokenAmount,
+    priceSol: price,
+    feeSol,
+    feeRate,
+    txHash,
+    status: "confirmed",
+  });
+
+  db.openPosition({
+    userId: user.user_id,
+    walletId: user.active_wallet_id,
+    tokenCa,
+    tokenName,
+    buyPrice: price,
+    solInvested: solAmount,
+    tokenAmount,
+    platform: "devnet_mock",
+    source: "realtime_sniper",
+    sourceRef: meta.sourceRef || "",
+    entryMcap: meta.entryMcap || 0,
+  });
+
+  db.addVolume(user.user_id, solAmount);
+
+  try {
+    const { notify } = require("./notifications");
+    notify(user.user_id, "TRADE_CONFIRMED", {
+      action: "buy",
+      token: tokenName,
+      sol: solAmount.toFixed(4),
+      txHash,
+    });
+  } catch {}
+
+  return { txHash, solAmount, tokenAmount };
+}
+
 function simulatePriceMovement(ca) {
   const current  = getMockPrice(ca);
   const change   = (Math.random() - 0.45) * 0.3;
@@ -244,4 +313,4 @@ async function handleAutoBuy(ctx, user, ca) {
   return true;
 }
 
-module.exports = { mockBuy, mockSell, getMockPrice, simulatePriceMovement, getEffectiveFeeRate, isAutoBuyEnabled, handleAutoBuy };
+module.exports = { mockBuy, mockSell, getMockPrice, simulatePriceMovement, getEffectiveFeeRate, isAutoBuyEnabled, handleAutoBuy, executeRealtimeSnipe, isRealtimeSniperEnabled };

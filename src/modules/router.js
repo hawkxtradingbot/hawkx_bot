@@ -2,7 +2,7 @@
 const { handleStart }       = require("./onboarding");
 const { showSettings, handleSettingCallback, handleTextInput, doExportKey } = require("./settings");
 const { getPortfolio, getTokenPosition } = require("./portfolio");
-const { mockBuy, mockSell, handleAutoBuy } = require("./executor");
+const { mockBuy, mockSell, handleAutoBuy, executeRealtimeSnipe } = require("./executor");
 const { addWallet, deleteWallet, decryptWallet, isSolanaAddress } = require("./walletVault");
 const { getActiveWallet, setActiveWallet, getBalance } = require("./walletSwitcher");
 const { handleFaucet }      = require("./faucet");
@@ -2278,6 +2278,28 @@ function setupRouter(bot) {
         },
       });
       return;
+    }
+
+    if (!pending) {
+      const rt = db.getRealtimeSniperConfig(userId);
+      if ((rt?.sniper_rt_enabled || 0) === 1) {
+        const buyDefaults = {
+          solAmount: rt.sniper_rt_amount || 0.1,
+          slippage: rt.sniper_rt_slippage || 50,
+          fee: rt.sniper_rt_fee || 0.003,
+        };
+        const tokenName = `RT-${text.slice(0, 6)}`;
+        db.setSysConfig(`sniper_screen_${userId}`, "realtime");
+        await executeRealtimeSnipe(ctx, db.getUser(userId), text, { tokenName, sourceRef: "realtime", entryMcap: 0 });
+        return safeEdit(ctx,
+          `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\n` +
+          `Live sniper is armed.\n` +
+          `Amount: *${buyDefaults.solAmount} SOL*\n` +
+          `Slippage: *${buyDefaults.slippage}%*\n` +
+          `Fee: *${buyDefaults.fee} SOL*`,
+          buildRealtimeSnipeMenu(rt)
+        );
+      }
     }
   });
 }
