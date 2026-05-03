@@ -381,6 +381,8 @@ function buildSniperMainMenu() {
   const kb = new InlineKeyboard();
   kb.text("🎯 Auto Sniper",      "sniper_auto_menu")
     .text("🔀 Migration Sniper", "sniper_migration_menu")
+    .row()
+    .text("⚡ Real-Time Snipe",  "sniper_realtime_menu")
     .row();
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", "menu_sniper")
@@ -441,6 +443,25 @@ function buildMigrationSniperMenu(snipes) {
   kb.text("⏸ Pause All", "sniper_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_migration_menu")
+    .row();
+  return kb;
+}
+
+function buildRealtimeSnipeMenu(cfg) {
+  const kb = new InlineKeyboard();
+  kb.text(cfg?.enabled ? "✅ Real-Time Snipe ON" : "◻️ Real-Time Snipe OFF", "sniper_rt_toggle").row();
+  kb.text(`💰 Amount: ${cfg?.amount || 0.1} SOL`, "sniper_rt_amount")
+    .text(`📉 Slippage: ${cfg?.slippage || 50}%`, "sniper_rt_slippage")
+    .row();
+  kb.text(`⛽ Fee: ${cfg?.fee || 0.003} SOL`, "sniper_rt_fee")
+    .text(`🛡 MEV: ${cfg?.mev ? "ON ✅" : "OFF ❌"}`, "sniper_rt_mev")
+    .row();
+  kb.text(`🌊 Raydium: ${cfg?.raydium ? "ON ✅" : "OFF ❌"}`, "sniper_rt_raydium")
+    .text(`🔥 Migrating: ${cfg?.migrating ? "ON ✅" : "OFF ❌"}`, "sniper_rt_migrating")
+    .row();
+  kb.text("✅ Save", "sniper_rt_save").row();
+  kb.text("← Back", "menu_sniper")
+    .text("🔄 Refresh", "sniper_realtime_menu")
     .row();
   return kb;
 }
@@ -558,7 +579,7 @@ module.exports = {
   buildWalletExportSelect, buildCopyTradeMenu, buildCopyWalletListMenu,
   buildCopyChannelListMenu, buildCopyChannelSettingsMenu,
   buildSniperMainMenu, buildAutoSniperMenu, buildSniperConfigMenu,
-  buildMigrationSniperMenu, buildLimitOrdersMenu,      buildLimitOrderSetupMenu,
+  buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildLimitOrdersMenu, buildLimitOrderSetupMenu,
   buildWatchlistMenu, buildRankUpBanner, buildRankInfoMessage,
   buildQuickStats, getModeLabel, getFeeDisplay, getGuide, RANKS,
 };

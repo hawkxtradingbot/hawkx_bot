@@ -1432,11 +1432,13 @@ function setupRouter(bot) {
     if (data === "sniper_migration_menu") {
       await ctx.answerCallbackQuery();
       const snipes = db.getActiveSnipes(userId);
-      return safeEdit(ctx, "🔀 *Migration Sniper*\n\nSnipes tokens migrating from PumpFun → Raydium.", buildMigrationSniperMenu(snipes));
+      db.setSysConfig(`sniper_screen_${userId}`, "migration");
+      return safeEdit(ctx, `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`, buildMigrationSniperMenu(snipes));
     }
 
     if (data === "sniper_migration_new") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`sniper_screen_${userId}`, "migration");
       const msg = await ctx.reply("🔀 *New Migration Snipe*\n\nPaste the token CA:", { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "snipe_ca");
@@ -1446,14 +1448,42 @@ function setupRouter(bot) {
     if (data === "sniper_pause_all") {
       db.pauseAllSnipes(userId);
       await ctx.answerCallbackQuery("⏸ All snipes paused.");
-      return safeEdit(ctx, "🎯 *Sniper*", buildSniperMainMenu());
+      const screen = db.getSysConfig(`sniper_screen_${userId}`) || "main";
+      if (screen === "migration") {
+        return safeEdit(ctx, `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`, buildMigrationSniperMenu(db.getActiveSnipes(userId)));
+      }
+      if (screen === "realtime") {
+        return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
+      }
+      return safeEdit(ctx, `🎯 *Sniper*\n\n${getGuide("sniper")}`, buildSniperMainMenu());
+    }
+
+    if (data === "sniper_realtime_menu") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`sniper_screen_${userId}`, "realtime");
+      return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
+    }
+
+    if (data === "sniper_rt_toggle") {
+      await ctx.answerCallbackQuery();
+      const cfg = db.getRealtimeSniperConfig(userId);
+      db.updateRealtimeSniperConfig(userId, { sniper_rt_enabled: cfg.enabled ? 0 : 1 });
+      db.setSysConfig(`sniper_screen_${userId}`, "realtime");
+      return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
+    }
+
+    if (data === "sniper_rt_save") {
+      await ctx.answerCallbackQuery("✅ Saved.");
+      db.setSysConfig(`sniper_screen_${userId}`, "realtime");
+      return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
     }
 
     if (data.startsWith("snipe_cancel_")) {
       const id = parseInt(data.replace("snipe_cancel_", ""));
       db.cancelSnipe(userId, id);
       await ctx.answerCallbackQuery("✅ Cancelled.");
-      return safeEdit(ctx, "🔀 *Migration Sniper*", buildMigrationSniperMenu(db.getActiveSnipes(userId)));
+      db.setSysConfig(`sniper_screen_${userId}`, "migration");
+      return safeEdit(ctx, `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`, buildMigrationSniperMenu(db.getActiveSnipes(userId)));
     }
 
     if (data.startsWith("scfg_")) {
@@ -2158,6 +2188,22 @@ function setupRouter(bot) {
         { parse_mode: "Markdown" }
       );
       return;
+    }
+
+    if (pending === "sniper_rt_amount" || pending === "sniper_rt_slippage" || pending === "sniper_rt_fee") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid value."); return; }
+      const patch = pending === "sniper_rt_amount"
+        ? { sniper_rt_amount: val }
+        : pending === "sniper_rt_slippage"
+          ? { sniper_rt_slippage: val }
+          : { sniper_rt_fee: val };
+      db.updateRealtimeSniperConfig(userId, patch);
+      db.setSysConfig(`sniper_screen_${userId}`, "realtime");
+      return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
     }
 
     if (pending === "watchlist_add_ca") {

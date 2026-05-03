@@ -39,6 +39,13 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN max_open_positions INTEGER DEFAULT 10",
     "ALTER TABLE settings ADD COLUMN daily_loss_limit REAL DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN daily_trade_limit INTEGER DEFAULT 0",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_enabled INTEGER DEFAULT 0",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_amount REAL DEFAULT 0.1",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_slippage REAL DEFAULT 50",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_fee REAL DEFAULT 0.003",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_mev INTEGER DEFAULT 1",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_raydium INTEGER DEFAULT 1",
+    "ALTER TABLE settings ADD COLUMN sniper_rt_migrating INTEGER DEFAULT 1",
     "ALTER TABLE copy_wallets ADD COLUMN wallet_id INTEGER DEFAULT NULL",
     "ALTER TABLE copy_wallets ADD COLUMN slippage REAL DEFAULT 50",
     "ALTER TABLE copy_wallets ADD COLUMN gas_fee REAL DEFAULT 0.005",
@@ -667,6 +674,23 @@ function addSnipe(userId, tokenCa, solAmount, slippage, configId) {
     .run(userId, tokenCa, solAmount || 0.1, slippage || 50, configId || null);
 }
 
+function getRealtimeSniperConfig(userId) {
+  const s = getSettings(userId) || {};
+  return {
+    enabled: !!(s.sniper_rt_enabled ?? 0),
+    amount: Number(s.sniper_rt_amount ?? 0.1),
+    slippage: Number(s.sniper_rt_slippage ?? 50),
+    fee: Number(s.sniper_rt_fee ?? 0.003),
+    mev: !!(s.sniper_rt_mev ?? 1),
+    raydium: !!(s.sniper_rt_raydium ?? 1),
+    migrating: !!(s.sniper_rt_migrating ?? 1),
+  };
+}
+
+function updateRealtimeSniperConfig(userId, fields) {
+  updateSettings(userId, fields);
+}
+
 function cancelSnipe(userId, id) {
   getDb().prepare("UPDATE snipes SET active = 0 WHERE id = ? AND user_id = ?").run(id, userId);
 }
@@ -803,7 +827,7 @@ module.exports = {
   getCopyChannels, addCopyChannel, deleteCopyChannel, updateCopyChannel,
   toggleCopyChannel, getCopyChannel,
   getSniperConfigs, createSniperConfig, updateSniperConfig, deleteSniperConfig,
-  getSniperConfig, pauseAllSnipes, getActiveSnipes, addSnipe, cancelSnipe,
+  getSniperConfig, pauseAllSnipes, getActiveSnipes, addSnipe, getRealtimeSniperConfig, updateRealtimeSniperConfig, cancelSnipe,
   getLimitOrders, addLimitOrder, cancelLimitOrder,
   getAutoSellRules, addAutoSellRule, deleteAutoSellRule,
   getSysConfig, setSysConfig, addVolume,
