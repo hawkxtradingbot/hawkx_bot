@@ -366,7 +366,7 @@ function buildCopyChannelSettingsMenu(ch) {
   kb.text(`🛑 SL: ${sl===0?"OFF":sl+"%"}`,        `cch_sl_${ch.id}`)
     .text(`🎯 TP: ${tp===0?"OFF":tp+"%"}`,         `cch_tp_${ch.id}`)
     .row();
-  kb.text(ch.auto_sell_enabled ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", `cch_autosell_${ch.id}`).row();
+  kb.text("🤖 Auto Sell (coming soon)", "noop").row();
   kb.text(ch.mev_protection    ? "🛡 MEV: ON ✅"       : "🛡 MEV: OFF ❌",       `cch_mev_${ch.id}`).row();
   kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_toggle_${ch.id}`).row();
   kb.text("🗑 Delete", `copy_channel_delete_${ch.id}`).row();

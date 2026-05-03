@@ -1265,7 +1265,7 @@ function setupRouter(bot) {
         `⛽ Gas: *${updated.tip || 0.005} SOL*\n` +
         `🛑 SL: *${sl2 === 0 ? "OFF" : sl2 + "%"}*\n` +
         `🎯 TP: *${tp2 === 0 ? "OFF" : tp2 + "%"}*\n` +
-        `🔄 Copy Sell: *${updated.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🤖 Auto Sell: *Coming Soon*\n` +
         `🛡 MEV: *${updated.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
         `_Tap any button to change:_`,
         buildCopyChannelSettingsMenu(updated)
@@ -1654,7 +1654,7 @@ function setupRouter(bot) {
       return;
     }
     const channelId   = String(fwd.chat?.id || fwd.id || "");
-    const channelName = (fwd.chat?.title || fwd.title || channelId).replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+    const channelName = (fwd.chat?.title || fwd.title || channelId).replace(/[_*`[\]()~>#+=|{}.!\-]/g, '');
     if (!channelId) {
       await ctx.api.sendMessage(ctx.chat.id, "❌ Could not detect channel. Try @username instead.");
       return;
@@ -2080,7 +2080,7 @@ function setupRouter(bot) {
         `⛽ Gas: *${ch.tip || 0.005} SOL*\n` +
         `🛑 SL: *${sl2 === 0 ? "OFF" : sl2 + "%"}*\n` +
         `🎯 TP: *${tp2 === 0 ? "OFF" : tp2 + "%"}*\n` +
-        `🔄 Copy Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+        `🤖 Auto Sell: *Coming Soon*\n` +
         `🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
         `_Tap any button to change:_`,
         { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) }
