@@ -13,7 +13,7 @@ const {
   buildWalletDeleteSelect, buildWalletExportSelect,
   buildCopyTradeMenu, buildCopyWalletListMenu, buildCopyChannelListMenu,
   buildCopyChannelSettingsMenu, buildSniperMainMenu, buildAutoSniperMenu,
-  buildSniperConfigMenu, buildMigrationSniperMenu, buildLimitOrdersMenu,
+  buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildLimitOrdersMenu,
   buildLimitOrderSetupMenu, buildWatchlistMenu, getModeLabel, getGuide,
 } = require("./keyboards");
 const db     = require("../../database");
