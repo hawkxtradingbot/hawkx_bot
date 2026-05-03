@@ -199,9 +199,13 @@ async function notifyAllUsers(message, langFilter) {
 // ════════════════════════════════════════════════════════════
 async function sendMsg(userId, text) {
   try {
-    await botRef.api.sendMessage(user.user_id, message);
-  } catch (e) {
-    console.error(`[Notify] Failed to send to ${userId}:`, e.message);
+    await botRef.api.sendMessage(userId, text, { parse_mode: "Markdown" });
+  } catch {
+    try {
+      await botRef.api.sendMessage(userId, text);
+    } catch (e) {
+      console.error(`[Notify] Failed to send to ${userId}:`, e.message);
+    }
   }
 }
 

@@ -2035,16 +2035,17 @@ function setupRouter(bot) {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       db.setSysConfig(`pending_${userId}`, "");
-      const channelId = text.startsWith("@") ? text : `@${text}`;
+      const channelId    = text.startsWith("@") ? text : `@${text}`;
+      const safeChId     = stripMd(channelId);
       db.addCopyChannel(userId, channelId, channelId, {});
       const channels = db.getCopyChannels(userId);
       const newCh    = channels.find(c => c.channel_id === channelId) || channels[0];
       const sl = newCh?.stop_loss_pct || 0;
       const tp = newCh?.take_profit_pct || 0;
-      await ctx.api.sendMessage(ctx.chat.id, `✅ Channel *${channelId}* added!`, { parse_mode: "Markdown" });
+      await ctx.api.sendMessage(ctx.chat.id, `✅ Channel *${safeChId}* added!`, { parse_mode: "Markdown" });
       if (newCh) {
         await ctx.api.sendMessage(ctx.chat.id,
-          `📡 *${channelId}*\n\n` +
+          `📡 *${safeChId}*\n\n` +
           `Status: ⏸ Paused\n` +
           `Signals caught: *0*\n` +
           `Trades executed: *0*\n\n` +

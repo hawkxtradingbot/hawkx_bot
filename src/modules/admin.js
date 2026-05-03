@@ -331,7 +331,11 @@ async function handleAdminTextInput(ctx, pendingKey) {
     let sent = 0, failed = 0;
     for (const u of users) {
       try {
-        await ctx.api.sendMessage(u.user_id, `📢 *HawkX Announcement*\n\n${text}`, { parse_mode: "Markdown" });
+        try {
+          await ctx.api.sendMessage(u.user_id, `📢 *HawkX Announcement*\n\n${text}`, { parse_mode: "Markdown" });
+        } catch {
+          await ctx.api.sendMessage(u.user_id, `📢 HawkX Announcement\n\n${text}`);
+        }
         sent++;
       } catch { failed++; }
     }
