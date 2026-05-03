@@ -1,8 +1,8 @@
-// cardGenerator.js — HawkX Text Card Generator
-// Clean text-based cards for Telegram
-// Image cards will be added on Render/mainnet with puppeteer
+// cardGenerator.js — HawkX Card Generator (image + text fallback)
 
+const path = require("path");
 const SOL_PRICE  = 150;
+const CARDS_DIR  = path.join(__dirname, "../assets/cards");
 
 const RANK_NAMES = ["","Degen","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite"];
 const RANK_EMOJI = ["","🎲","🔄","📊","🎯","🐋","🦈","👑"];
@@ -58,7 +58,37 @@ function formatMcap(n) {
   return `$${n.toFixed(2)}`;
 }
 
-// ── Generate PnL Card (text) ─────────────────────────────────
+// ── Try to load card image with sharp border ─────────────────
+async function loadCardImage(imgFile, isProfit) {
+  const sharp = require("sharp");
+  const fs    = require("fs");
+  const imgPath = path.join(CARDS_DIR, imgFile);
+  if (!fs.existsSync(imgPath)) return null;
+
+  const borderColor = isProfit
+    ? { r: 0, g: 200, b: 80, alpha: 1 }
+    : { r: 220, g: 40, b: 40, alpha: 1 };
+  const borderSize = 8;
+
+  const meta   = await sharp(imgPath).metadata();
+  const width  = meta.width  || 800;
+  const height = meta.height || 600;
+
+  const bordered = await sharp(imgPath)
+    .flatten({ background: { r: 0, g: 0, b: 0 } })
+    .extend({
+      top: borderSize, bottom: borderSize,
+      left: borderSize, right: borderSize,
+      background: borderColor,
+    })
+    .resize(width, height)
+    .png()
+    .toBuffer();
+
+  return bordered;
+}
+
+// ── Generate PnL Card ────────────────────────────────────────
 async function generatePnlCard(opts) {
   const {
     username    = "Trader",
@@ -71,19 +101,27 @@ async function generatePnlCard(opts) {
     hideAmounts = false,
   } = opts;
 
-  const isProfit = pnlPct >= 0;
-  const level    = isProfit ? getProfitLevel(pnlPct) : getLossLevel(pnlPct);
-  const expr     = isProfit ? PROFIT_EXPR[level] : LOSS_EXPR[level];
-  const mood     = isProfit ? PROFIT_MOOD[level] : LOSS_MOOD[level];
-  const sign     = isProfit ? "+" : "";
-  const arrow    = isProfit ? "📈" : "📉";
-  const pnlUsd   = Math.abs(pnlSol * SOL_PRICE);
-  const rankName = RANK_NAMES[rankNum] || "Degen";
+  const isProfit  = pnlPct >= 0;
+  const level     = isProfit ? getProfitLevel(pnlPct) : getLossLevel(pnlPct);
+  const expr      = isProfit ? PROFIT_EXPR[level] : LOSS_EXPR[level];
+  const mood      = isProfit ? PROFIT_MOOD[level] : LOSS_MOOD[level];
+  const sign      = isProfit ? "+" : "";
+  const arrow     = isProfit ? "📈" : "📉";
+  const pnlUsd    = Math.abs(pnlSol * SOL_PRICE);
+  const rankName  = RANK_NAMES[rankNum] || "Degen";
   const rankEmoji = RANK_EMOJI[rankNum] || "🎲";
 
   const solLine = hideAmounts ? `${sign}**** SOL` : `${sign}${Math.abs(pnlSol).toFixed(4)} SOL`;
-  const usdLine = hideAmounts ? `${sign}$****` : `${sign}$${pnlUsd.toFixed(2)}`;
+  const usdLine = hideAmounts ? `${sign}$****`    : `${sign}$${pnlUsd.toFixed(2)}`;
 
+  // Try image card first
+  try {
+    const imgFile = isProfit ? `profit_${level}.png` : `loss_${level}.png`;
+    const buf = await loadCardImage(imgFile, isProfit);
+    if (buf) return { type: "photo", buffer: buf };
+  } catch {}
+
+  // Text fallback
   const card =
     `🦅 *HAWKX PNL CARD*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -101,31 +139,39 @@ async function generatePnlCard(opts) {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `_Always Watching. Always First. 🦅_`;
 
-  // Return as text object — not image buffer
   return { type: "text", text: card };
 }
 
-// ── Generate Rank Card (text) ────────────────────────────────
+// ── Generate Rank Card ───────────────────────────────────────
 async function generateRankCard(opts) {
   const { username = "Trader", rankNum = 1, volume = 0 } = opts;
 
-  const name     = RANK_NAMES[rankNum] || "Unknown";
-  const emoji    = RANK_EMOJI[rankNum] || "🎲";
-  const nextVol  = [0,10,50,200,500,1000,2000,2000][rankNum] || 2000;
-  const fee      = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50][rankNum] || 1.00;
-  const wallets  = rankNum >= 4 ? 15 : 5;
-  const pct      = rankNum === 7 ? 100 : Math.min(99, (volume / nextVol) * 100);
-  const savings  = ((1.0 - fee) * 100).toFixed(0);
-  const tags     = ["","Every legend starts here.","You found the rhythm.",
+  const name    = RANK_NAMES[rankNum] || "Unknown";
+  const emoji   = RANK_EMOJI[rankNum] || "🎲";
+  const nextVol = [0,10,50,200,500,1000,2000,2000][rankNum] || 2000;
+  const fee     = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50][rankNum] || 1.00;
+  const wallets = rankNum >= 4 ? 15 : 5;
+  const pct     = rankNum === 7 ? 100 : Math.min(99, (volume / nextVol) * 100);
+  const savings = ((1.0 - fee) * 100).toFixed(0);
+  const tags    = ["","Every legend starts here.","You found the rhythm.",
     "Strategy over luck.","Precision is your edge.","The market feels you.",
     "Always hunting. Always winning.","Always Watching. Always First."];
-  const topPct   = ["","","","","Top 25%","Top 15%","Top 5%","Top 1% 👑"][rankNum] || "";
+  const topPct  = ["","","","","Top 25%","Top 15%","Top 5%","Top 1% 👑"][rankNum] || "";
 
-  // Progress bar
   const barLen  = 20;
   const filled  = Math.round((pct / 100) * barLen);
   const bar     = "█".repeat(filled) + "░".repeat(barLen - filled);
 
+  // Try image card (rank images exist from rank 2+)
+  if (rankNum >= 2) {
+    try {
+      const imgFile = `rank_${rankNum}.png`;
+      const buf = await loadCardImage(imgFile, true);
+      if (buf) return { type: "photo", buffer: buf };
+    } catch {}
+  }
+
+  // Text fallback
   const card =
     `🦅 *HAWKX RANK CARD*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +

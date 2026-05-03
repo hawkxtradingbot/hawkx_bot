@@ -1,0 +1,68 @@
+Fix the following issues in the HawkX Telegram Solana trading bot:
+
+1. FORWARD MESSAGE HANDLER (router.js)
+Find: bot.on("message:forward_origin", async (ctx) => {
+Replace with: bot.on("message", async (ctx) => {
+  if (!ctx.message?.forward_origin && !ctx.message?.forward_from_chat) return;
+
+2. AUTO PNL CARD ON SELL (executor.js)
+After the sell confirmation message is sent, find the auto PnL card code.
+Find: const buf = await generatePnlCard(
+Replace with: const result = await generatePnlCard(
+
+Then find: await ctx.replyWithPhoto(new InputFile(buf, "pnl_card.png")
+Replace entire block with:
+if (result && result.type === "text") {
+  await ctx.reply(result.text, {
+    parse_mode: "Markdown",
+    reply_markup: { inline_keyboard: [[
+      { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
+    ]]},
+  });
+}
+
+3. COPY CHANNEL SETTINGS (keyboards.js)
+Find buildCopyChannelSettingsMenu function.
+Remove this line:
+kb.text(ch.auto_sell_enabled ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", `cch_autosell_${ch.id}`).row();
+Replace with:
+kb.text("🤖 Auto Sell (coming soon)", "noop").row();
+
+4. CHANNEL NAME MARKDOWN FIX (router.js)
+In the forward message handler, find:
+await ctx.api.sendMessage(ctx.chat.id, `✅ *${channelName}* added!`, { parse_mode: "Markdown" });
+Replace with:
+await ctx.api.sendMessage(ctx.chat.id, `✅ ${channelName} added!`);
+
+Also find:
+`📡 *${channelName}*\n\n` +
+Replace with:
+`📡 ${channelName}\n\n` +
+
+And find the sendMessage with parse_mode Markdown and reply_markup for channel settings after forward:
+{ parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }
+Replace with:
+{ reply_markup: buildCopyChannelSettingsMenu(newCh) }
+
+5. IMAGE CARD ON SELL (cardGenerator.js)
+Currently returns text format. Update generatePnlCard and generateRankCard to:
+- Load hawk image from src/assets/cards/ based on rank and profit/loss
+- Use sharp to add colored border (green for profit, red for loss)
+- Return { type: "photo", buffer: <sharp buffer> } instead of { type: "text", text: "..." }
+- Keep text fallback if image fails
+
+profit images: src/assets/cards/profit_1.png to profit_7.png
+loss images: src/assets/cards/loss_1.png to loss_7.png
+rank images: src/assets/cards/rank_2.png to rank_7.png
+
+6. PAUSE/RESUME ALL FIX (router.js)
+Find copy_wallet_pause_all handler.
+Change: const allActive = cws.every(w => w.active);
+To: const anyActive = cws.some(w => w.active);
+Then:
+if anyActive → set all to 0 (paused), show "⏸ All paused"
+if not anyActive → set all to 1 (active), show "▶ All resumed"
+
+Same fix for copy_channel_pause_all:
+Change: db.getDb().prepare("UPDATE copy_channels SET status = 'paused' WHERE user_id = ?").run(userId);
+To check first if any active, then toggle all accordingly.

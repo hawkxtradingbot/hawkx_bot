@@ -1,0 +1,39 @@
+7. DATABASE MISSING COLUMNS
+Run these ALTER TABLE statements if columns don't exist:
+ALTER TABLE copy_channels ADD COLUMN slippage REAL DEFAULT 50
+ALTER TABLE copy_channels ADD COLUMN gas_fee REAL DEFAULT 0.005
+ALTER TABLE copy_channels ADD COLUMN wallet_id INTEGER DEFAULT NULL
+ALTER TABLE copy_channels ADD COLUMN tip REAL DEFAULT 0.005
+ALTER TABLE copy_channels ADD COLUMN mev_protection INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN stop_loss_pct REAL DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN take_profit_pct REAL DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN max_buys_per_signal INTEGER DEFAULT 1
+ALTER TABLE copy_channels ADD COLUMN mint_auth_revoked INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN freeze_auth_revoked INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN signals_caught INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN trades_executed INTEGER DEFAULT 0
+ALTER TABLE copy_channels ADD COLUMN status TEXT DEFAULT 'active'
+ALTER TABLE copy_wallets ADD COLUMN wallet_id INTEGER DEFAULT NULL
+ALTER TABLE copy_wallets ADD COLUMN slippage REAL DEFAULT 50
+ALTER TABLE copy_wallets ADD COLUMN gas_fee REAL DEFAULT 0.005
+ALTER TABLE copy_wallets ADD COLUMN label TEXT DEFAULT NULL
+ALTER TABLE copy_wallets ADD COLUMN copy_sell INTEGER DEFAULT 1
+ALTER TABLE positions ADD COLUMN entry_mcap REAL DEFAULT 0
+
+Add all of these in database.js setup or migration function wrapped in try/catch so they don't fail if column already exists.
+
+8. COPY CHANNEL VIEW FIX (router.js)
+In copy_channel_view_ handler, all sendMessage and safeEdit calls that use parse_mode Markdown with channel name must escape or remove markdown formatting from channel name:
+const safeName = (ch.channel_name || ch.channel_id).replace(/[_*`[\]]/g, '');
+
+Use safeName instead of ch.channel_name everywhere in that block.
+
+9. CCH SETTINGS UPDATE FIX (router.js)
+In cch_set_ pending handler, after updating channel settings,
+change safeEdit to ctx.api.sendMessage so it always sends new message instead of trying to edit.
+
+10. COPY WALLET AUTO SELECT (router.js)
+In showCwSetupScreen function, if cw_pending_wallet is empty or 0,
+auto-select the user's active_wallet_id:
+const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`)) || freshUser.active_wallet_id;

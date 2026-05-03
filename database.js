@@ -39,6 +39,13 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN max_open_positions INTEGER DEFAULT 10",
     "ALTER TABLE settings ADD COLUMN daily_loss_limit REAL DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN daily_trade_limit INTEGER DEFAULT 0",
+    "ALTER TABLE copy_wallets ADD COLUMN wallet_id INTEGER DEFAULT NULL",
+    "ALTER TABLE copy_wallets ADD COLUMN slippage REAL DEFAULT 50",
+    "ALTER TABLE copy_wallets ADD COLUMN gas_fee REAL DEFAULT 0.005",
+    "ALTER TABLE copy_wallets ADD COLUMN copy_sell INTEGER DEFAULT 1",
+    "ALTER TABLE copy_channels ADD COLUMN wallet_id INTEGER DEFAULT NULL",
+    "ALTER TABLE copy_channels ADD COLUMN gas_fee REAL DEFAULT 0.005",
+    "ALTER TABLE positions ADD COLUMN entry_mcap REAL DEFAULT 0",
     `CREATE TABLE IF NOT EXISTS copy_wallets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

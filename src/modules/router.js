@@ -42,14 +42,16 @@ async function handlePnlCard(ctx, user, posId, hideAmounts) {
   };
   try {
     const { generatePnlCard } = require("./cardGenerator");
-    const buf = await generatePnlCard({
+    const result = await generatePnlCard({
       username: user.username || "Trader", rankNum: user.rank || 1,
       tokenName: pos.token_name || pos.token_ca.slice(0, 8),
       pnlPct, pnlSol, entryMcap: pos.entry_mcap || 0, exitMcap, hideAmounts,
     });
     try { await ctx.api.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
-    if (buf) {
-      await ctx.replyWithPhoto(new InputFile(buf, "pnl_card.png"), { reply_markup: cardKb });
+    if (result && result.type === "photo") {
+      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: cardKb });
+    } else if (result && result.type === "text") {
+      await ctx.reply(result.text, { parse_mode: "Markdown", reply_markup: cardKb });
     } else {
       await ctx.reply("❌ Card not available.", { parse_mode: "Markdown", reply_markup: cardKb });
     }
@@ -76,7 +78,8 @@ async function deleteUserMsg(ctx) {
 async function showCwSetupScreen(ctx, userId, chatId = null) {
   const addr     = db.getSysConfig(`cw_pending_addr_${userId}`) || "";
   const name     = db.getSysConfig(`cw_pending_name_${userId}`) || "";
-  const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`));
+  const freshUser = db.getUser(userId);
+  const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`)) || freshUser.active_wallet_id;
   const sol      = db.getSysConfig(`cw_pending_sol_${userId}`) || "0.1";
   const copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) !== "0";
   const slippage = db.getSysConfig(`cw_pending_slippage_${userId}`) || "50";

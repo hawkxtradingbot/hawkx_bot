@@ -219,13 +219,13 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
       exitMcap,
       hideAmounts: false,
     });
-    if (result && result.type === "text") {
-      await ctx.reply(result.text, {
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: [[
-          { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
-        ]]},
-      });
+    const pnlKb = { inline_keyboard: [[
+      { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
+    ]]};
+    if (result && result.type === "photo") {
+      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: pnlKb });
+    } else if (result && result.type === "text") {
+      await ctx.reply(result.text, { parse_mode: "Markdown", reply_markup: pnlKb });
     }
   } catch {}
   return { tradeId, txHash, pnlPct, solReceived };
