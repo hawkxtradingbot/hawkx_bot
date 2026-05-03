@@ -38,9 +38,10 @@ async function executeCopyWalletBuy(bot, copyWallet, tokenCa, tokenName) {
   const { creditReferralEarnings } = require("./referrals");
   creditReferralEarnings(user.user_id, tradeId, feeSol);
 
+  const safeLabel = String(copyWallet.label || "").replace(/[_*`[\]]/g, "");
   try {
     await bot.api.sendMessage(user.user_id,
-      `👛 *Copy Wallet Buy*\n\nCopied: *${copyWallet.label}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${copyWallet.auto_sell_enabled ? "Auto sell active." : "Sell from Positions or add limit orders."}_`,
+      `👛 *Copy Wallet Buy*\n\nCopied: *${safeLabel}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${copyWallet.auto_sell_enabled ? "Auto sell active." : "Sell from Positions or add limit orders."}_`,
       { parse_mode: "Markdown" }
     );
   } catch {}
@@ -55,9 +56,11 @@ async function executeCopyChannelBuy(bot, channel, tokenCa) {
 
   const safety = await checkSafety(tokenCa, user.mode || "beginner");
   if (safety.status === "BLOCK") {
+    const safeCh     = String(channel.channel_name || channel.channel_id || "").replace(/[_*`[\]]/g, "");
+    const safeReason = String(safety.reason || "").replace(/[_*`[\]]/g, "");
     try {
       await bot.api.sendMessage(user.user_id,
-        `🚫 *Channel Buy Blocked*\n\nChannel: *${channel.channel_name}*\nReason: *${safety.reason}*`,
+        `🚫 *Channel Buy Blocked*\n\nChannel: *${safeCh}*\nReason: *${safeReason}*`,
         { parse_mode: "Markdown" }
       );
     } catch {}
@@ -103,9 +106,10 @@ async function executeCopyChannelBuy(bot, channel, tokenCa) {
     ? `Auto sell: SL ${channel.stop_loss_pct||0}% / TP ${channel.take_profit_pct||0}%`
     : "Auto sell OFF — sell manually or add limit orders from Positions.";
 
+  const safeName = String(channel.channel_name || channel.channel_id || "").replace(/[_*`[\]]/g, "");
   try {
     await bot.api.sendMessage(user.user_id,
-      `📡 *Copy Channel Buy*\n\nChannel: *${channel.channel_name || channel.channel_id}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${note}_`,
+      `📡 *Copy Channel Buy*\n\nChannel: *${safeName}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${note}_`,
       { parse_mode: "Markdown" }
     );
   } catch {}

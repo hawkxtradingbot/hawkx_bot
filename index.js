@@ -77,9 +77,16 @@ console.log("[Router] ✅ Commands and callbacks registered");
 
 // ── ERROR HANDLER ────────────────────────────────────────────
 bot.catch((err) => {
-  if (err.message?.includes("query is too old")) return; // ignore expired callbacks
-  console.error("[Bot Error]", err.message);
-   // Don't crash the bot on individual errorssh
+  if (err.message?.includes("query is too old")) return;
+  const isParseError = err.message?.includes("can't parse entities") || err.message?.includes("parse entities");
+  if (isParseError) {
+    const payload = err.error?.payload || {};
+    const preview = String(payload.text || payload.caption || "").slice(0, 200);
+    console.error("[Bot Error] Markdown parse error — message preview:", JSON.stringify(preview));
+    console.error("[Bot Error]", err.message);
+  } else {
+    console.error("[Bot Error]", err.message);
+  }
 });
 // ── Channel message handler — detect CA from channels ──────
 bot.on("channel_post", async (ctx) => {
