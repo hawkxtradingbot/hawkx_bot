@@ -154,6 +154,9 @@ function buildBeginnerSettingsMenu(user) {
 // ════════════════════════════════════════════════════════════
 function buildProSettingsMenu() {
   const kb = new InlineKeyboard();
+  kb.text("🤖 Auto Buy",  "pset_autobuy_screen")
+  .text("🤖 Auto Sell","pset_autosell_screen")
+  .row();
   kb.text("⚡ Execution", "pset_execution")
     .text("🛡 MEV",       "pset_mev")
     .row();
@@ -366,7 +369,7 @@ function buildCopyChannelSettingsMenu(ch) {
   kb.text(`🛑 SL: ${sl===0?"OFF":sl+"%"}`,        `cch_sl_${ch.id}`)
     .text(`🎯 TP: ${tp===0?"OFF":tp+"%"}`,         `cch_tp_${ch.id}`)
     .row();
-  kb.text("🤖 Auto Sell (coming soon)", "noop").row();
+  kb.text(`🤖 Auto Sell: ${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}`, `cch_autosell_${ch.id}`).row();
   kb.text(ch.mev_protection    ? "🛡 MEV: ON ✅"       : "🛡 MEV: OFF ❌",       `cch_mev_${ch.id}`).row();
   kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_toggle_${ch.id}`).row();
   kb.text("🗑 Delete", `copy_channel_delete_${ch.id}`).row();
@@ -415,9 +418,9 @@ function buildSniperConfigMenu(cfg) {
     .text(`⛽ ${cfg.snipe_fee||0.003}SOL`,   `scfg_fee_${cfg.id}`)
     .row();
   kb.text(`🎯 Tip:${cfg.snipe_tip||0.0075}`, `scfg_tip_${cfg.id}`)
-    .text(cfg.mev_protection ? "✅ MEV" : "◻️ MEV", `scfg_mev_${cfg.id}`)
-    .text(cfg.auto_sell ? "✅ AutoSell" : "◻️ AutoSell", `scfg_as_${cfg.id}`)
+  .text(cfg.mev_protection ? "✅ MEV" : "◻️ MEV", `scfg_mev_${cfg.id}`)
     .row();
+  kb.text(cfg.auto_sell_enabled ? "🤖 AutoSell ON ✅" : "🤖 AutoSell OFF ❌", `sniper_autosell_${cfg.id}`).row();
   kb.text(cfg.platform_raydium  ? "✅ Raydium"  : "◻️ Raydium",  `scfg_ray_${cfg.id}`)
     .text(cfg.platform_pumpfun  ? "✅ Pumpfun"  : "◻️ Pumpfun",  `scfg_pump_${cfg.id}`)
     .text(cfg.platform_moonshot ? "✅ Moonshot" : "◻️ Moonshot", `scfg_moon_${cfg.id}`)
@@ -439,7 +442,7 @@ function buildMigrationSniperMenu(snipes) {
         .row();
     });
   }
-  kb.text("+ New Snipe", "sniper_migration_new").row();
+  kb.text("➕ New Migration Snipe", "sniper_migration_new").row();
   kb.text("⏸ Pause All", "sniper_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_migration_menu")
@@ -459,6 +462,7 @@ function buildRealtimeSnipeMenu(cfg) {
   kb.text(`🌊 Raydium: ${cfg?.raydium ? "ON ✅" : "OFF ❌"}`, "sniper_rt_raydium")
     .text(`🔥 Migrating: ${cfg?.migrating ? "ON ✅" : "OFF ❌"}`, "sniper_rt_migrating")
     .row();
+  kb.text(cfg?.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sniper_rt_autosell").row();
   kb.text("✅ Save", "sniper_rt_save").row();
   kb.text("← Back", "menu_sniper")
     .text("🔄 Refresh", "sniper_realtime_menu")
@@ -512,10 +516,120 @@ function buildLimitOrderSetupMenu(pos, hasBuy, hasSell) {
     .row();
   return kb;
 }
-
+function buildSniperAutoSellScreen(cfg, templates) {
+  const kb = new InlineKeyboard();
+  kb.text(cfg?.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `sniper_autosell_toggle_${cfg.id}`).row();
+  kb.text("━━━ Select Template ━━━", "noop").row();
+  if (!templates?.length) {
+    kb.text("No templates yet", "noop").row();
+  } else {
+    templates.forEach((t) => {
+      const active = cfg.auto_sell_template_id === t.id;
+      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `sniper_autosell_use_${cfg.id}_${t.id}`).row();
+    });
+  }
+  kb.text("➕ New Template", `sniper_autosell_new_${cfg.id}`).row();
+  kb.text("← Back", `sniper_config_view_${cfg.id}`).row();
+  return kb;
+}
+function buildWalletAutoSellScreen(cw, templates) {
+  const kb = new InlineKeyboard();
+  kb.text(cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cw_autosell_toggle_${cw.id}`).row();
+  kb.text("━━━ Select Template ━━━", "noop").row();
+  if (!templates?.length) {
+    kb.text("No templates yet", "noop").row();
+  } else {
+    templates.forEach((t) => {
+      const active = cw.auto_sell_template_id === t.id;
+      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `cw_autosell_use_${cw.id}_${t.id}`).row();
+    });
+  }
+  kb.text("➕ New Template", `cw_autosell_new_${cw.id}`).row();
+  kb.text("← Back", `copy_wallet_view_${cw.id}`).row();
+  return kb;
+}
+function buildChannelAutoSellScreen(ch, templates) {
+  const kb = new InlineKeyboard();
+  kb.text(ch.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cch_autosell_toggle_${ch.id}`).row();
+  kb.text("━━━ Select Template ━━━", "noop").row();
+  if (!templates?.length) {
+    kb.text("No templates yet", "noop").row();
+  } else {
+    templates.forEach((t) => {
+      const active = ch.auto_sell_template_id === t.id;
+      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `cch_autosell_use_${ch.id}_${t.id}`).row();
+    });
+  }
+  kb.text("➕ New Template", `cch_autosell_new_${ch.id}`).row();
+  kb.text("← Back", `copy_channel_view_${ch.id}`).row();
+  return kb;
+}
+function buildAutoSellListScreen(templates) {
+  const kb = new InlineKeyboard();
+  if (!templates?.length) {
+    kb.text("No templates yet", "noop").row();
+  } else {
+    templates.forEach((t) => {
+      kb.text(`${t.active ? "🟢" : "⏸"} ${t.name}`, `ast_view_${t.id}`)
+        .text("🗑", `ast_delete_${t.id}`)
+        .row();
+    });
+  }
+  kb.text("➕ New Template", "ast_new").row();
+  kb.text("← Back", "menu_settings").row();
+  return kb;
+}
+function buildAutoBuyScreen(s) {
+  const kb = new InlineKeyboard();
+  const on = s?.auto_buy_enabled ?? 0;
+  kb.text(on ? "✅ Auto Buy: ON" : "◻️ Auto Buy: OFF", "ab_toggle").row();
+  kb.text(`💰 Amount: ${s?.auto_buy_sol||0.1} SOL`, "ab_amount")
+    .text(`📉 Slip: ${s?.auto_buy_slippage||10}%`,   "ab_slippage")
+    .row();
+  kb.text(`⛽ Gas: ${s?.auto_buy_gas||0.005} SOL`,   "ab_gas")
+    .text(s?.auto_buy_mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", "ab_mev")
+    .row();
+  kb.text(`🔢 Max Buys/Token: ${s?.auto_buy_max||1}`, "ab_max").row();
+  kb.text("← Back", "menu_settings")
+  .text("🔄 Refresh", "pset_autobuy_screen")
+  .row();
+  return kb;
+}
 // ════════════════════════════════════════════════════════════
 // WATCHLIST
 // ════════════════════════════════════════════════════════════
+function buildAutoSellTemplateScreen(t) {
+  const kb = new InlineKeyboard();
+  kb.text(t?.active ? "✅ Active" : "⏸ Paused", `ast_toggle_${t.id}`)
+    .text("✏️ Rename", `ast_rename_${t.id}`)
+    .row();
+
+  // SL rows — up to 3
+  kb.text("━━━ 🛑 Stop Loss ━━━", "noop").row();
+  for (let i = 1; i <= 3; i++) {
+    const sl  = t[`sl_${i}`] || 0;
+    const tr  = t[`sl_${i}_trail`] ? "🔄" : "📍";
+    kb.text(`${tr} SL${i}: ${sl===0?"OFF":sl+"%"}`, `ast_sl_${i}_${t.id}`)
+      .text(t[`sl_${i}_trail`] ? "✅ Trail" : "◻️ Trail", `ast_sl_trail_${i}_${t.id}`)
+      .row();
+  }
+
+  // TP rows — up to 5
+  kb.text("━━━ 🎯 Take Profit ━━━", "noop").row();
+  for (let i = 1; i <= 5; i++) {
+    const tp  = t[`tp_${i}`] || 0;
+    const pct = t[`tp_${i}_pct`] || 100;
+    const tr  = t[`tp_${i}_trail`] ? "🔄" : "📍";
+    kb.text(`${tr} TP${i}: ${tp===0?"OFF":tp+"%"}`, `ast_tp_${i}_${t.id}`)
+      .text(`Sell:${pct}%`, `ast_tp_pct_${i}_${t.id}`)
+      .text(t[`tp_${i}_trail`] ? "✅ Trail" : "◻️ Trail", `ast_tp_trail_${i}_${t.id}`)
+      .row();
+  }
+
+  kb.text("✅ Save", `ast_save_${t.id}`).row();
+  kb.text("← Back", "pset_autosell_screen").row();
+  return kb;
+}
 function buildWatchlistMenu(items) {
   const kb = new InlineKeyboard();
   if (!items?.length) { kb.text("No tokens in watchlist yet", "noop").row(); }
@@ -580,6 +694,6 @@ module.exports = {
   buildCopyChannelListMenu, buildCopyChannelSettingsMenu,
   buildSniperMainMenu, buildAutoSniperMenu, buildSniperConfigMenu,
   buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildLimitOrdersMenu, buildLimitOrderSetupMenu,
-  buildWatchlistMenu, buildRankUpBanner, buildRankInfoMessage,
+  buildAutoBuyScreen, buildAutoSellListScreen, buildAutoSellTemplateScreen, buildWalletAutoSellScreen, buildChannelAutoSellScreen, buildWatchlistMenu, buildRankUpBanner, buildRankInfoMessage,
   buildQuickStats, getModeLabel, getFeeDisplay, getGuide, RANKS,
 };

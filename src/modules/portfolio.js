@@ -169,7 +169,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .row();
     }
   }
-
+  if (selPos && isProMode) {
+    kb.text("📋 Limit Order", `limit_token_${selPos.position_id}`)
+      .text("📌 Limit Sell",  `sell_limit_${selPos.position_id}`)
+      .row();
+  }
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", `pos_filter_${filter}_${page}_${selPos?.position_id||0}`)
     .row();

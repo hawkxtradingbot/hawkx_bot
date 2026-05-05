@@ -58,8 +58,9 @@ async function refreshSettings(ctx, user) {
 }
 
 // ── Main callback handler ─────────────────────────────────────
-async function handleSettingCallback(ctx, user, action) {
-  const settings = db.getSettings(user.user_id) || {};
+  async function handleSettingCallback(ctx, user, action) {
+    console.log("[Settings] action:", action);
+    const settings = db.getSettings(user.user_id) || {};
 
   // ── INSTANT TOGGLES ──────────────────────────────────────────
   if (action === "set_autobuy") {
@@ -286,6 +287,201 @@ async function handleSettingCallback(ctx, user, action) {
   }
 
   // ── PRO SUB-SETTINGS SCREENS ─────────────────────────────────
+  if (action === "pset_autosell_screen") {
+    await ctx.answerCallbackQuery();
+    const { buildAutoSellListScreen } = require("./keyboards");
+    const templates = db.getAutoSellTemplates(user.user_id);
+    const msg =
+      `🤖 *Auto Sell Templates*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `📚 *HOW IT WORKS:*\n` +
+      `Create named templates with SL & TP.\n` +
+      `Each template works separately.\n` +
+      `Assign any template to any channel,\n` +
+      `wallet or sniper independently.\n` +
+      `━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates) }); }
+    catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates) }); }
+    return;
+  }
+
+  if (action === "ast_new") {
+    await ctx.answerCallbackQuery();
+    const promptId = await sendPrompt(ctx, "✏️ *New Auto Sell Template*\n\nEnter a name (e.g. Scalp 50%):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ast_set_name");
+    return;
+  }
+
+  if (action.startsWith("ast_view_") || action?.startsWith("ast_view_")) {
+    const id = parseInt(action.replace("ast_view_", ""));
+    const t  = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    await ctx.answerCallbackQuery();
+    const { buildAutoSellTemplateScreen } = require("./keyboards");
+    try { await ctx.editMessageText(`🤖 *${t.name}*\n\nConfigure SL & TP:`, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); }
+    catch { await ctx.reply(`🤖 *${t.name}*\n\nConfigure SL & TP:`, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); }
+    return;
+  }
+
+  if (action.startsWith("ast_toggle_")) {
+    const id = parseInt(action.replace("ast_toggle_", ""));
+    const t  = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    db.updateAutoSellTemplate(user.user_id, id, { active: t.active ? 0 : 1 });
+    await ctx.answerCallbackQuery(t.active ? "⏸ Paused" : "✅ Activated");
+    const { buildAutoSellTemplateScreen } = require("./keyboards");
+    const updated = db.getAutoSellTemplate(user.user_id, id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellTemplateScreen(updated) }); } catch {}
+    return;
+  }
+
+  if (action.startsWith("ast_rename_") || action?.startsWith("ast_rename_")) {
+    const id = parseInt(action.replace("ast_rename_", ""));
+    await ctx.answerCallbackQuery();
+    db.setSysConfig(`ast_edit_id_${user.user_id}`, String(id));
+    const promptId = await sendPrompt(ctx, "✏️ Enter new template name:");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ast_set_name");
+    return;
+  }
+
+  if (action.startsWith("ast_delete_") || action?.startsWith("ast_delete_")) {
+    const id = parseInt(action.replace("ast_delete_", ""));
+    db.deleteAutoSellTemplate(user.user_id, id);
+    await ctx.answerCallbackQuery("🗑 Deleted.");
+    const { buildAutoSellListScreen } = require("./keyboards");
+    const templates = db.getAutoSellTemplates(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates) }); } catch {}
+    return;
+  }
+
+  if (action.startsWith("ast_sl_trail_") || action?.startsWith("ast_sl_trail_")) {
+    const parts = action.replace("ast_sl_trail_", "").split("_");
+    const i = parseInt(parts[0]); const id = parseInt(parts[1]);
+    const t = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    db.updateAutoSellTemplate(user.user_id, id, { [`sl_${i}_trail`]: t[`sl_${i}_trail`] ? 0 : 1 });
+    await ctx.answerCallbackQuery("✅ Updated");
+    const { buildAutoSellTemplateScreen } = require("./keyboards");
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellTemplateScreen(db.getAutoSellTemplate(user.user_id, id)) }); } catch {}
+    return;
+  }
+
+  if (action.startsWith("ast_tp_trail_") || action?.startsWith("ast_tp_trail_")) {
+    const parts = action.replace("ast_tp_trail_", "").split("_");
+    const i = parseInt(parts[0]); const id = parseInt(parts[1]);
+    const t = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    db.updateAutoSellTemplate(user.user_id, id, { [`tp_${i}_trail`]: t[`tp_${i}_trail`] ? 0 : 1 });
+    await ctx.answerCallbackQuery("✅ Updated");
+    const { buildAutoSellTemplateScreen } = require("./keyboards");
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellTemplateScreen(db.getAutoSellTemplate(user.user_id, id)) }); } catch {}
+    return;
+  }
+
+  if (action.startsWith("ast_sl_") || action?.startsWith("ast_sl_")) {
+    const parts = action.replace("ast_sl_", "").split("_");
+    const i = parseInt(parts[0]); const id = parseInt(parts[1]);
+    await ctx.answerCallbackQuery();
+    db.setSysConfig(`ast_edit_id_${user.user_id}`, String(id));
+    db.setSysConfig(`ast_edit_field_${user.user_id}`, `sl_${i}`);
+    const promptId = await sendPrompt(ctx, `🛑 *SL${i}*\n\nEnter stop loss % (e.g. -25) or 0 to disable:`);
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ast_set_sl");
+    return;
+  }
+
+  if (action.startsWith("ast_tp_pct_") || action?.startsWith("ast_tp_pct_")) {
+    const parts = action.replace("ast_tp_pct_", "").split("_");
+    const i = parseInt(parts[0]); const id = parseInt(parts[1]);
+    await ctx.answerCallbackQuery();
+    db.setSysConfig(`ast_edit_id_${user.user_id}`, String(id));
+    db.setSysConfig(`ast_edit_field_${user.user_id}`, `tp_${i}_pct`);
+    const promptId = await sendPrompt(ctx, `🎯 *TP${i} Sell %*\n\nEnter % to sell at this TP (e.g. 50):`);
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ast_set_tp_pct");
+    return;
+  }
+
+  if (action.startsWith("ast_save_") || action?.startsWith("ast_save_")) {
+    const id = parseInt(action.replace("ast_save_", ""));
+    await ctx.answerCallbackQuery("✅ Template saved!");
+    return;
+  }
+  
+  if (action === "pset_autobuy_screen" || action === "ab_toggle" || action === "ab_mev") {
+    const s = db.getSettings(user.user_id);
+    if (action === "ab_toggle") {
+      const v = s?.auto_buy_enabled ? 0 : 1;
+      db.updateSettings(user.user_id, { auto_buy_enabled: v });
+      await ctx.answerCallbackQuery(v ? "🤖 Auto Buy: ON ✅" : "🤖 Auto Buy: OFF ◻️");
+    } else if (action === "ab_mev") {
+      const v = s?.auto_buy_mev ? 0 : 1;
+      db.updateSettings(user.user_id, { auto_buy_mev: v });
+      await ctx.answerCallbackQuery(v ? "🛡 MEV: ON" : "🛡 MEV: OFF");
+    } else {
+      await ctx.answerCallbackQuery();
+    }
+    const fresh = db.getSettings(user.user_id);
+    const { buildAutoBuyScreen } = require("./keyboards");
+    const msg =
+      `🤖 *Auto Buy*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `📚 *HOW IT WORKS:*\n` +
+      `When ON — any CA you paste in chat\n` +
+      `auto-buys instantly with your settings.\n` +
+      `No confirm screen needed.\n` +
+      `━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh) }); }
+    catch (e) {
+      if (e?.description?.includes("not modified")) return;
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh) });
+    }
+    return;
+  }
+
+  if (action === "ab_amount") {
+    await ctx.answerCallbackQuery();
+    const promptId = await sendPrompt(ctx, "🤖 *Auto Buy Amount*\n\nEnter SOL per auto buy (e.g. 0.1):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ab_set_amount");
+    return;
+  }
+
+  if (action === "ab_slippage") {
+    await ctx.answerCallbackQuery();
+    const promptId = await sendPrompt(ctx, "📉 *Auto Buy Slippage*\n\nEnter % (e.g. 10):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ab_set_slippage");
+    return;
+  }
+
+  if (action === "ab_gas") {
+    await ctx.answerCallbackQuery();
+    const promptId = await sendPrompt(ctx, "⛽ *Auto Buy Gas*\n\nEnter SOL gas fee (e.g. 0.005):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ab_set_gas");
+    return;
+  }
+
+  if (action === "ab_max") {
+    await ctx.answerCallbackQuery();
+    const promptId = await sendPrompt(ctx, "🔢 *Max Buys Per Token*\n\nEnter max times to auto-buy same token (e.g. 1):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    db.setSysConfig(`pending_${user.user_id}`, "ab_set_max");
+    return;
+  }
+
+    if (action === "ab_mev") {
+    const s = db.getSettings(user.user_id);
+    const v = s?.auto_buy_enabled ? 0 : 1;
+    db.updateSettings(user.user_id, { auto_buy_enabled: v });
+    await ctx.answerCallbackQuery(v ? "🤖 Auto Buy: ON ✅" : "🤖 Auto Buy: OFF ◻️");
+    const { buildAutoBuyScreen } = require("./keyboards");
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoBuyScreen(db.getSettings(user.user_id)) }); } catch {}
+    return;
+  }
   if (action === "pset_execution") {
     await ctx.answerCallbackQuery();
     const s = db.getSettings(user.user_id);
@@ -341,6 +537,80 @@ async function handleTextInput(ctx, user, pendingKey) {
   let handled = true;
 
   switch (pendingKey) {
+      case "ast_set_name": {
+        if (text.length < 1) { await ctx.reply("❌ Enter a name."); handled = false; break; }
+        const editId = parseInt(db.getSysConfig(`ast_edit_id_${userId}`) || "0");
+        if (editId) {
+          db.updateAutoSellTemplate(userId, editId, { name: text });
+          await ctx.reply(`✅ Renamed to *${text}*`, { parse_mode: "Markdown" });
+        } else {
+          db.createAutoSellTemplate(userId, text);
+          await ctx.reply(`✅ Template *${text}* created!`, { parse_mode: "Markdown" });
+        }
+        db.setSysConfig(`ast_edit_id_${userId}`, "");
+        break;
+      }
+      case "ast_set_sl": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v > 0) { await ctx.reply("❌ Enter negative % (e.g. -25) or 0."); handled = false; break; }
+        const id    = parseInt(db.getSysConfig(`ast_edit_id_${userId}`) || "0");
+        const field = db.getSysConfig(`ast_edit_field_${userId}`) || "sl_1";
+        db.updateAutoSellTemplate(userId, id, { [field]: v });
+        await ctx.reply(`✅ ${field.toUpperCase()}: *${v===0?"OFF":v+"%"}*`, { parse_mode: "Markdown" });
+        db.setSysConfig(`ast_edit_id_${userId}`, "");
+        db.setSysConfig(`ast_edit_field_${userId}`, "");
+        break;
+      }
+      case "ast_set_tp": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v < 0) { await ctx.reply("❌ Enter positive % (e.g. 100) or 0."); handled = false; break; }
+        const id    = parseInt(db.getSysConfig(`ast_edit_id_${userId}`) || "0");
+        const field = db.getSysConfig(`ast_edit_field_${userId}`) || "tp_1";
+        db.updateAutoSellTemplate(userId, id, { [field]: v });
+        await ctx.reply(`✅ ${field.toUpperCase()}: *${v===0?"OFF":v+"%"}*`, { parse_mode: "Markdown" });
+        db.setSysConfig(`ast_edit_id_${userId}`, "");
+        db.setSysConfig(`ast_edit_field_${userId}`, "");
+        break;
+      }
+      case "ast_set_tp_pct": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v <= 0 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
+        const id    = parseInt(db.getSysConfig(`ast_edit_id_${userId}`) || "0");
+        const field = db.getSysConfig(`ast_edit_field_${userId}`) || "tp_1_pct";
+        db.updateAutoSellTemplate(userId, id, { [field]: v });
+        await ctx.reply(`✅ Sell *${v}%* at this TP`, { parse_mode: "Markdown" });
+        db.setSysConfig(`ast_edit_id_${userId}`, "");
+        db.setSysConfig(`ast_edit_field_${userId}`, "");
+        break;
+      }
+      case "ab_set_amount": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
+        db.updateSettings(userId, { auto_buy_sol: v });
+        await ctx.reply(`✅ Amount set: *${v} SOL*`, { parse_mode: "Markdown" });
+        break;
+      }
+      case "ab_set_slippage": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v < 1 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
+        db.updateSettings(userId, { auto_buy_slippage: v });
+        await ctx.reply(`✅ Slippage set: *${v}%*`, { parse_mode: "Markdown" });
+        break;
+      }
+      case "ab_set_gas": {
+        const v = parseFloat(text);
+        if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
+        db.updateSettings(userId, { auto_buy_gas: v });
+        await ctx.reply(`✅ Gas set: *${v} SOL*`, { parse_mode: "Markdown" });
+        break;
+      }
+      case "ab_set_max": {
+        const v = parseInt(text);
+        if (isNaN(v) || v < 1) { await ctx.reply("❌ Enter 1 or more."); handled = false; break; }
+        db.updateSettings(userId, { auto_buy_max: v });
+        await ctx.reply(`✅ Max buys set: *${v}*`, { parse_mode: "Markdown" });
+        break;
+      }
     case "set_slippage": {
       const v = parseFloat(text);
       if (isNaN(v) || v < 1 || v > 50) {
@@ -480,9 +750,23 @@ async function handleTextInput(ctx, user, pendingKey) {
   }
 
     // Refresh settings after small delay
-if (handled) {
+  if (handled) {
     db.setSysConfig(`pending_${userId}`, "");
     try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
+    // Auto refresh screen
+    const abKeys = ["ab_set_amount","ab_set_slippage","ab_set_gas","ab_set_max"];
+    if (abKeys.includes(pendingKey)) {
+      const { buildAutoBuyScreen } = require("./keyboards");
+      const fresh = db.getSettings(userId);
+      const msg = `🤖 *Auto Buy*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📚 *HOW IT WORKS:*\n` +
+        `When ON — any CA you paste in chat\n` +
+        `auto-buys instantly with your settings.\n` +
+        `No confirm screen needed.\n` +
+        `━━━━━━━━━━━━━━━━━━━`;
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh) });
+    }
   }
 }
 

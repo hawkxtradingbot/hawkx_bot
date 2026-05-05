@@ -50,6 +50,48 @@ function runMigrations(d) {
     "ALTER TABLE copy_wallets ADD COLUMN slippage REAL DEFAULT 50",
     "ALTER TABLE copy_wallets ADD COLUMN gas_fee REAL DEFAULT 0.005",
     "ALTER TABLE copy_wallets ADD COLUMN copy_sell INTEGER DEFAULT 1",
+    "ALTER TABLE settings ADD COLUMN auto_buy_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE settings ADD COLUMN auto_buy_sol REAL DEFAULT 0.1",
+      "ALTER TABLE settings ADD COLUMN auto_buy_slippage REAL DEFAULT 10",
+      "ALTER TABLE settings ADD COLUMN auto_buy_gas REAL DEFAULT 0.005",
+      "ALTER TABLE settings ADD COLUMN auto_buy_mev INTEGER DEFAULT 1",
+      "ALTER TABLE settings ADD COLUMN auto_buy_max INTEGER DEFAULT 1",
+      "ALTER TABLE copy_wallets ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE copy_wallets ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      "ALTER TABLE copy_channels ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE copy_channels ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      "ALTER TABLE sniper_configs ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE sniper_configs ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      "ALTER TABLE snipes ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      `CREATE TABLE IF NOT EXISTS auto_sell_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT DEFAULT 'My Template',
+        active INTEGER DEFAULT 1,
+        sl_1 REAL DEFAULT 0,
+        sl_1_trail INTEGER DEFAULT 0,
+        sl_2 REAL DEFAULT 0,
+        sl_2_trail INTEGER DEFAULT 0,
+        sl_3 REAL DEFAULT 0,
+        sl_3_trail INTEGER DEFAULT 0,
+        tp_1 REAL DEFAULT 0,
+        tp_1_pct REAL DEFAULT 100,
+        tp_1_trail INTEGER DEFAULT 0,
+        tp_2 REAL DEFAULT 0,
+        tp_2_pct REAL DEFAULT 100,
+        tp_2_trail INTEGER DEFAULT 0,
+        tp_3 REAL DEFAULT 0,
+        tp_3_pct REAL DEFAULT 100,
+        tp_3_trail INTEGER DEFAULT 0,
+        tp_4 REAL DEFAULT 0,
+        tp_4_pct REAL DEFAULT 100,
+        tp_4_trail INTEGER DEFAULT 0,
+        tp_5 REAL DEFAULT 0,
+        tp_5_pct REAL DEFAULT 100,
+        tp_5_trail INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')))`,
     "ALTER TABLE copy_channels ADD COLUMN wallet_id INTEGER DEFAULT NULL",
     "ALTER TABLE copy_channels ADD COLUMN gas_fee REAL DEFAULT 0.005",
     "ALTER TABLE positions ADD COLUMN entry_mcap REAL DEFAULT 0",
@@ -709,7 +751,31 @@ function addLimitOrder(userId, data) {
 function cancelLimitOrder(userId, id) {
   getDb().prepare("UPDATE limit_orders SET active = 0 WHERE id = ? AND user_id = ?").run(id, userId);
 }
+// ── AUTO SELL TEMPLATES ───────────────────────────────────────
+function getAutoSellTemplates(userId) {
+  return getDb().prepare("SELECT * FROM auto_sell_templates WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+}
 
+function getAutoSellTemplate(userId, id) {
+  return getDb().prepare("SELECT * FROM auto_sell_templates WHERE id = ? AND user_id = ?").get(id, userId);
+}
+
+function createAutoSellTemplate(userId, name) {
+  const result = getDb().prepare("INSERT INTO auto_sell_templates (user_id, name) VALUES (?, ?)").run(userId, name || "My Template");
+  return result.lastInsertRowid;
+}
+
+function updateAutoSellTemplate(userId, id, fields) {
+  const keys = Object.keys(fields);
+  if (!keys.length) return;
+  const set = keys.map((k) => `${k} = ?`).join(", ");
+  getDb().prepare(`UPDATE auto_sell_templates SET ${set} WHERE id = ? AND user_id = ?`)
+    .run(...keys.map((k) => fields[k]), id, userId);
+}
+
+function deleteAutoSellTemplate(userId, id) {
+  getDb().prepare("DELETE FROM auto_sell_templates WHERE id = ? AND user_id = ?").run(id, userId);
+}
 // ── AUTO SELL RULES ───────────────────────────────────────────
 function getAutoSellRules(userId) {
   return getDb().prepare("SELECT * FROM auto_sell_rules WHERE user_id = ? AND active = 1").all(userId);
@@ -829,7 +895,9 @@ module.exports = {
   getSniperConfigs, createSniperConfig, updateSniperConfig, deleteSniperConfig,
   getSniperConfig, pauseAllSnipes, getActiveSnipes, addSnipe, getRealtimeSniperConfig, updateRealtimeSniperConfig, cancelSnipe,
   getLimitOrders, addLimitOrder, cancelLimitOrder,
-  getAutoSellRules, addAutoSellRule, deleteAutoSellRule,
+  getAutoSellTemplates, getAutoSellTemplate, createAutoSellTemplate,
+    updateAutoSellTemplate, deleteAutoSellTemplate,
+    getAutoSellRules, addAutoSellRule, deleteAutoSellRule,
   getSysConfig, setSysConfig, addVolume,
   getGlobalBlacklist, addGlobalBlacklist, getUserBlacklist, getUserWhitelist,
   flagSuspicious, getTotalUsers, getRankDistribution, getRevenue,

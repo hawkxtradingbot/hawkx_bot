@@ -60,32 +60,38 @@ function formatMcap(n) {
 
 // ── Try to load card image with sharp border ─────────────────
 async function loadCardImage(imgFile, isProfit) {
-  const sharp = require("sharp");
-  const fs    = require("fs");
-  const imgPath = path.join(CARDS_DIR, imgFile);
-  if (!fs.existsSync(imgPath)) return null;
+  try {
+    const fs = require("fs");
+    const imgPath = path.join(CARDS_DIR, imgFile);
+    if (!fs.existsSync(imgPath)) return null;
 
-  const borderColor = isProfit
-    ? { r: 0, g: 200, b: 80, alpha: 1 }
-    : { r: 220, g: 40, b: 40, alpha: 1 };
-  const borderSize = 8;
+    let sharp;
+    try { sharp = require("sharp"); } catch { return null; }
 
-  const meta   = await sharp(imgPath).metadata();
-  const width  = meta.width  || 800;
-  const height = meta.height || 600;
+    const borderColor = isProfit
+      ? { r: 0, g: 200, b: 80, alpha: 1 }
+      : { r: 220, g: 40, b: 40, alpha: 1 };
+    const borderSize = 8;
 
-  const bordered = await sharp(imgPath)
-    .flatten({ background: { r: 0, g: 0, b: 0 } })
-    .extend({
-      top: borderSize, bottom: borderSize,
-      left: borderSize, right: borderSize,
-      background: borderColor,
-    })
-    .resize(width, height)
-    .png()
-    .toBuffer();
+    const meta   = await sharp(imgPath).metadata();
+    const width  = meta.width  || 800;
+    const height = meta.height || 600;
 
-  return bordered;
+    const bordered = await sharp(imgPath)
+      .flatten({ background: { r: 0, g: 0, b: 0 } })
+      .extend({
+        top: borderSize, bottom: borderSize,
+        left: borderSize, right: borderSize,
+        background: borderColor,
+      })
+      .resize(width, height)
+      .png()
+      .toBuffer();
+
+    return bordered;
+  } catch {
+    return null;
+  }
 }
 
 // ── Generate PnL Card ────────────────────────────────────────

@@ -49,11 +49,15 @@ async function handlePnlCard(ctx, user, posId, hideAmounts) {
     });
     try { await ctx.api.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
     if (result && result.type === "photo") {
-      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: cardKb });
+      try {
+        await ctx.replyWithPhoto(new InputFile(Buffer.from(result.buffer), "pnl_card.png"), { reply_markup: cardKb });
+      } catch {
+        await ctx.reply("❌ Could not send card image.", { reply_markup: cardKb });
+      }
     } else if (result && result.type === "text") {
       await ctx.reply(result.text, { parse_mode: "Markdown", reply_markup: cardKb });
     } else {
-      await ctx.reply("❌ Card not available.", { parse_mode: "Markdown", reply_markup: cardKb });
+      await ctx.reply("❌ Card not available.", { reply_markup: cardKb });
     }
   } catch (e) {
     try { await ctx.api.deleteMessage(ctx.chat.id, loadMsg.message_id); } catch {}
@@ -154,7 +158,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
     [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_toggle_copysell" }],
     [{ text: `📊 Slippage: ${slippage}%`, callback_data: "cw_set_slippage" },
      { text: `⛽ Gas: ${gas} SOL`,        callback_data: "cw_set_gas"      }],
-    [{ text: "🤖 Auto Sell (soon)",       callback_data: "noop"            }],
+    [{ text: `🤖 Auto Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: `cw_autosell_${userId}` }],
     [{ text: "✅ Add Copy Wallet",        callback_data: "cw_confirm_add"  }],
     [{ text: "← Back",                   callback_data: "copy_wallet_menu" }],
   ]};
@@ -366,7 +370,7 @@ function setupRouter(bot) {
     // ── SETTINGS ──────────────────────────────────────────────
     if (data === "menu_settings") { await ctx.answerCallbackQuery(); return showSettings(ctx, user); }
 
-    if (data.startsWith("set_") || data.startsWith("bset_") || data.startsWith("pset_") || data.startsWith("sap_") || data.startsWith("alert_")) {
+      if (data.startsWith("set_") || data.startsWith("bset_") || data.startsWith("pset_") || data.startsWith("sap_") || data.startsWith("alert_") || data.startsWith("ast_") || data.startsWith("ab_") || data === "pset_autosell_screen" || data === "pset_autobuy_screen") {
       if (data.startsWith("lang_")) {
         const lang = data.replace("lang_", "");
         db.updateUser(userId, { language: lang });
@@ -1118,7 +1122,68 @@ function setupRouter(bot) {
 ⏸ Pause All — stop all at once
 `, buildCopyWalletListMenu(db.getCopyWallets(userId)));
     }
+    if (data.startsWith("cw_autosell_")) {
 
+      // Toggle ON/OFF
+      if (data.startsWith("cw_autosell_toggle_")) {
+        const id = parseInt(data.replace("cw_autosell_toggle_", ""));
+        const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+        if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
+        db.getDb().prepare("UPDATE copy_wallets SET auto_sell_enabled = ? WHERE id = ? AND user_id = ?").run(cw.auto_sell_enabled ? 0 : 1, id, userId);
+        await ctx.answerCallbackQuery(cw.auto_sell_enabled ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅");
+        const { buildWalletAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildWalletAutoSellScreen(updated, templates) }); } catch {}
+        return;
+      }
+
+      // Open auto sell screen
+      if (!data.startsWith("cw_autosell_use_") && !data.startsWith("cw_autosell_new_") && !data.startsWith("cw_autosell_toggle_")) {
+        const id = parseInt(data.replace("cw_autosell_", ""));
+        const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+        if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
+        await ctx.answerCallbackQuery();
+        const { buildWalletAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageText(
+          `👛 *${cw.label || cw.wallet_address.slice(0,12)} — Auto Sell*\n\n` +
+          `Select a template to use for this wallet.\n` +
+          `Each wallet can have its own template.`,
+          { parse_mode: "Markdown", reply_markup: buildWalletAutoSellScreen(cw, templates) }
+        ); } catch {}
+        return;
+      }
+
+      // Select template
+      if (data.startsWith("cw_autosell_use_")) {
+        const withoutPrefix = data.replace("cw_autosell_use_", "");
+        const lastIdx = withoutPrefix.lastIndexOf("_");
+        const cwId = parseInt(withoutPrefix.slice(0, lastIdx));
+        const tId  = parseInt(withoutPrefix.slice(lastIdx + 1));
+        db.getDb().prepare("UPDATE copy_wallets SET auto_sell_template_id = ? WHERE id = ? AND user_id = ?").run(tId, cwId, userId);
+        await ctx.answerCallbackQuery("✅ Template selected!");
+        const { buildWalletAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildWalletAutoSellScreen(updated, templates) }); } catch {}
+        return;
+      }
+
+      // New template from wallet screen
+      if (data.startsWith("cw_autosell_new_")) {
+        const id = parseInt(data.replace("cw_autosell_new_", ""));
+        db.setSysConfig(`ast_return_to_${userId}`, `cw_autosell_${id}`);
+        await ctx.answerCallbackQuery();
+        const msg = await ctx.reply("✏️ *New Auto Sell Template*\n\nEnter a name (e.g. Scalp 50%):", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+        db.setSysConfig(`pending_${userId}`, "ast_set_name");
+        return;
+      }
+
+      await ctx.answerCallbackQuery();
+      return;
+    }
     if (data === "copy_wallet_pause_all") {
       const cws       = db.getCopyWallets(userId);
       const anyActive = cws.some(w => w.active);
@@ -1316,7 +1381,67 @@ function setupRouter(bot) {
       await ctx.answerCallbackQuery("🗑 Deleted.");
       return safeEdit(ctx, "📡 *Copy Channel*", buildCopyChannelListMenu(db.getCopyChannels(userId)));
     }
+    if (data.startsWith("cch_autosell_")) {
+      const parts = data.split("_");
 
+      // Toggle ON/OFF
+      if (data.startsWith("cch_autosell_toggle_")) {
+        const id = parseInt(data.replace("cch_autosell_toggle_", ""));
+        const ch = db.getCopyChannel(id, userId);
+        if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
+        db.updateCopyChannel(userId, id, { auto_sell_enabled: ch.auto_sell_enabled ? 0 : 1 });
+        await ctx.answerCallbackQuery(ch.auto_sell_enabled ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅");
+        const { buildChannelAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildChannelAutoSellScreen(db.getCopyChannel(id, userId), templates) }); } catch {}
+        return;
+      }
+
+      // Open auto sell screen
+      if (data.startsWith("cch_autosell_") && !data.startsWith("cch_autosell_use_") && !data.startsWith("cch_autosell_new_") && !data.startsWith("cch_autosell_toggle_")) {
+        const id = parseInt(data.replace("cch_autosell_", ""));
+        const ch = db.getCopyChannel(id, userId);
+        if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
+        await ctx.answerCallbackQuery();
+        const { buildChannelAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageText(
+          `📡 *${ch.channel_name || ch.channel_id} — Auto Sell*\n\n` +
+          `Select a template to use for this channel.\n` +
+          `Each channel can have its own template.`,
+          { parse_mode: "Markdown", reply_markup: buildChannelAutoSellScreen(ch, templates) }
+        ); } catch {}
+        return;
+      }
+
+      // Select template
+      if (data.startsWith("cch_autosell_use_")) {
+        const withoutPrefix = data.replace("cch_autosell_use_", "");
+        const lastIdx = withoutPrefix.lastIndexOf("_");
+        const chId = parseInt(withoutPrefix.slice(0, lastIdx));
+        const tId  = parseInt(withoutPrefix.slice(lastIdx + 1));
+        db.updateCopyChannel(userId, chId, { auto_sell_template_id: tId });
+        await ctx.answerCallbackQuery("✅ Template selected!");
+        const { buildChannelAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildChannelAutoSellScreen(db.getCopyChannel(chId, userId), templates) }); } catch {}
+        return;
+      }
+
+      // New template from channel screen
+      if (data.startsWith("cch_autosell_new_")) {
+        const id = parseInt(data.replace("cch_autosell_new_", ""));
+        db.setSysConfig(`ast_return_to_${userId}`, `cch_autosell_${id}`);
+        await ctx.answerCallbackQuery();
+        const msg = await ctx.reply("✏️ *New Auto Sell Template*\n\nEnter a name (e.g. Scalp 50%):", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+        db.setSysConfig(`pending_${userId}`, "ast_set_name");
+        return;
+      }
+
+      await ctx.answerCallbackQuery();
+      return;
+    }
     if (data === "copy_channel_pause_all") {
       const ccs       = db.getCopyChannels(userId);
       const anyActive = ccs.some(c => c.status === "active");
@@ -1438,13 +1563,187 @@ function setupRouter(bot) {
 
     if (data === "sniper_migration_new") {
       await ctx.answerCallbackQuery();
-      db.setSysConfig(`sniper_screen_${userId}`, "migration");
-      const msg = await ctx.reply("🔀 *New Migration Snipe*\n\nPaste the token CA:", { parse_mode: "Markdown" });
-      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
-      db.setSysConfig(`pending_${userId}`, "snipe_ca");
+      const templates = db.getAutoSellTemplates(userId);
+      const freshUser = db.getUser(userId);
+      const wallets   = db.getWallets(userId) || [];
+      const walletIdx = wallets.findIndex(w => w.wallet_id === freshUser.active_wallet_id) + 1;
+      const sol       = db.getSysConfig(`msnipe_sol_${userId}`) || "0.1";
+      const slippage  = db.getSysConfig(`msnipe_slip_${userId}`) || "50";
+      const gas       = db.getSysConfig(`msnipe_gas_${userId}`) || "0.005";
+      const mev       = db.getSysConfig(`msnipe_mev_${userId}`) === "1";
+      const tplId     = parseInt(db.getSysConfig(`msnipe_tpl_${userId}`) || "0");
+      const tpl       = tplId ? templates.find(t => t.id === tplId) : null;
+      const asOn      = db.getSysConfig(`msnipe_as_${userId}`) === "1";
+
+      const msg =
+        `🔀 *New Migration Snipe*\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📚 *HOW IT WORKS:*\n` +
+        `Snipes any token launching on Raydium\n` +
+        `migrating from PumpFun or new launch\n` +
+        `at ~68K market cap automatically.\n` +
+        `No CA needed — bot catches it live.\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `💰 *Amount:* ${sol} SOL\n` +
+        `📉 *Slippage:* ${slippage}%\n` +
+        `⛽ *Gas:* ${gas} SOL\n` +
+        `🛡 *MEV:* ${mev ? "ON ✅" : "OFF ❌"}\n` +
+        `💼 *Wallet:* W${walletIdx}\n` +
+        `🤖 *Auto Sell:* ${asOn ? `ON ✅ — ${tpl?.name||"No template"}` : "OFF ❌"}\n` +
+        `━━━━━━━━━━━━━━━━━━━`;
+
+      const keyboard = { inline_keyboard: [
+        [{ text: `💰 Amount: ${sol} SOL`,   callback_data: "msnipe_set_sol"  },
+         { text: `📉 Slip: ${slippage}%`,   callback_data: "msnipe_set_slip" }],
+        [{ text: `⛽ Gas: ${gas} SOL`,       callback_data: "msnipe_set_gas"  },
+         { text: mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: "msnipe_toggle_mev" }],
+        [{ text: `🤖 Auto Sell: ${asOn ? "ON ✅" : "OFF ❌"}`, callback_data: "msnipe_toggle_as" }],
+        ...(asOn ? [
+          ...(templates.length ? templates.map(t => ([{
+            text: `${tplId === t.id ? "✅" : "◻️"} ${t.name}`,
+            callback_data: `msnipe_tpl_${t.id}`
+          }])) : [[{ text: "No templates yet", callback_data: "noop" }]]),
+          [{ text: "➕ New Template", callback_data: "msnipe_new_tpl" }],
+        ] : []),
+        [{ text: "✅ Start Sniping", callback_data: "msnipe_confirm" }],
+        [{ text: "← Back", callback_data: "sniper_migration_menu" }],
+      ]};
+
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: keyboard }); }
+      catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard }); }
       return;
     }
 
+    if (data.startsWith("msnipe_")) {
+      if (data === "msnipe_set_sol") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("💰 Enter snipe amount in SOL (e.g. 0.5):");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_sol");
+        return;
+      }
+      if (data === "msnipe_set_slip") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("📉 Enter slippage % (e.g. 50):");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_slip");
+        return;
+      }
+      if (data === "msnipe_set_gas") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("⛽ Enter gas fee in SOL (e.g. 0.005):");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_gas");
+        return;
+      }
+      if (data === "msnipe_toggle_mev") {
+        const mev = db.getSysConfig(`msnipe_mev_${userId}`) === "1";
+        db.setSysConfig(`msnipe_mev_${userId}`, mev ? "0" : "1");
+        await ctx.answerCallbackQuery(mev ? "🛡 MEV OFF" : "🛡 MEV ON ✅");
+        // Refresh screen
+        const fakeData = "sniper_migration_new";
+        ctx.callbackQuery.data = fakeData;
+        return;
+      }
+      if (data === "msnipe_toggle_as") {
+        const asOn = db.getSysConfig(`msnipe_as_${userId}`) === "1";
+        db.setSysConfig(`msnipe_as_${userId}`, asOn ? "0" : "1");
+        await ctx.answerCallbackQuery(asOn ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅");
+        ctx.callbackQuery.data = "sniper_migration_new";
+        return;
+      }
+      if (data.startsWith("msnipe_tpl_")) {
+        const tId = parseInt(data.replace("msnipe_tpl_", ""));
+        db.setSysConfig(`msnipe_tpl_${userId}`, String(tId));
+        await ctx.answerCallbackQuery("✅ Template selected!");
+        ctx.callbackQuery.data = "sniper_migration_new";
+        return;
+      }
+      if (data === "msnipe_new_tpl") {
+        db.setSysConfig(`ast_return_to_${userId}`, "sniper_migration_new");
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("✏️ *New Auto Sell Template*\n\nEnter a name:", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "ast_set_name");
+        return;
+      }
+      if (data === "msnipe_confirm") {
+        const sol      = parseFloat(db.getSysConfig(`msnipe_sol_${userId}`) || "0.1");
+        const slippage = parseFloat(db.getSysConfig(`msnipe_slip_${userId}`) || "50");
+        const gas      = parseFloat(db.getSysConfig(`msnipe_gas_${userId}`) || "0.005");
+        const mev      = db.getSysConfig(`msnipe_mev_${userId}`) === "1";
+        const tplId    = parseInt(db.getSysConfig(`msnipe_tpl_${userId}`) || "0");
+        const asOn     = db.getSysConfig(`msnipe_as_${userId}`) === "1";
+        db.addSnipe(userId, null, sol, slippage, null, { gas, mev, auto_sell_template_id: asOn ? tplId : null });
+        await ctx.answerCallbackQuery("✅ Migration Snipe Armed!");
+        const snipes = db.getActiveSnipes(userId);
+        return safeEdit(ctx,
+          `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium at ~68K mcap.`,
+          buildMigrationSniperMenu(snipes)
+        );
+      }
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    if (data.startsWith("sniper_autosell_")) {
+
+      // Open auto sell screen
+      if (!data.startsWith("sniper_autosell_toggle_") && !data.startsWith("sniper_autosell_use_") && !data.startsWith("sniper_autosell_new_")) {
+        const id = parseInt(data.replace("sniper_autosell_", ""));
+        const cfg = db.getSniperConfig(id, userId);
+        if (!cfg) { await ctx.answerCallbackQuery("Not found."); return; }
+        await ctx.answerCallbackQuery();
+        const { buildSniperAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageText(
+          `🎯 *${cfg.label} — Auto Sell*\n\n` +
+          `Select a template for this sniper setup.`,
+          { parse_mode: "Markdown", reply_markup: buildSniperAutoSellScreen(cfg, templates) }
+        ); } catch {}
+        return;
+      }
+
+      // Toggle ON/OFF
+      if (data.startsWith("sniper_autosell_toggle_")) {
+        const id = parseInt(data.replace("sniper_autosell_toggle_", ""));
+        const cfg = db.getSniperConfig(id, userId);
+        if (!cfg) { await ctx.answerCallbackQuery("Not found."); return; }
+        db.updateSniperConfig(userId, id, { auto_sell_enabled: cfg.auto_sell_enabled ? 0 : 1 });
+        await ctx.answerCallbackQuery(cfg.auto_sell_enabled ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅");
+        const { buildSniperAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildSniperAutoSellScreen(db.getSniperConfig(id, userId), templates) }); } catch {}
+        return;
+      }
+
+      // Select template
+      if (data.startsWith("sniper_autosell_use_")) {
+        const withoutPrefix = data.replace("sniper_autosell_use_", "");
+        const lastIdx = withoutPrefix.lastIndexOf("_");
+        const cfgId = parseInt(withoutPrefix.slice(0, lastIdx));
+        const tId   = parseInt(withoutPrefix.slice(lastIdx + 1));
+        db.updateSniperConfig(userId, cfgId, { auto_sell_template_id: tId });
+        await ctx.answerCallbackQuery("✅ Template selected!");
+        const { buildSniperAutoSellScreen } = require("./keyboards");
+        const templates = db.getAutoSellTemplates(userId);
+        try { await ctx.editMessageReplyMarkup({ reply_markup: buildSniperAutoSellScreen(db.getSniperConfig(cfgId, userId), templates) }); } catch {}
+        return;
+      }
+
+      // New template from sniper screen
+      if (data.startsWith("sniper_autosell_new_")) {
+        const id = parseInt(data.replace("sniper_autosell_new_", ""));
+        db.setSysConfig(`ast_return_to_${userId}`, `sniper_autosell_${id}`);
+        await ctx.answerCallbackQuery();
+        const msg = await ctx.reply("✏️ *New Auto Sell Template*\n\nEnter a name (e.g. Scalp 50%):", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+        db.setSysConfig(`pending_${userId}`, "ast_set_name");
+        return;
+      }
+
+      await ctx.answerCallbackQuery();
+      return;
+    }
     if (data === "sniper_pause_all") {
       db.pauseAllSnipes(userId);
       await ctx.answerCallbackQuery("⏸ All snipes paused.");
@@ -1471,7 +1770,59 @@ function setupRouter(bot) {
       db.setSysConfig(`sniper_screen_${userId}`, "realtime");
       return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
     }
+    if (data === "sniper_rt_autosell") {
+      await ctx.answerCallbackQuery();
+      const rtCfg    = db.getRealtimeSniperConfig(userId);
+      const templates = db.getAutoSellTemplates(userId);
+      const tplId    = rtCfg?.auto_sell_template_id || 0;
+      const asOn     = rtCfg?.auto_sell_enabled || 0;
+      const tpl      = templates.find(t => t.id === tplId);
 
+      const msg =
+        `⚡ *Real-Time Snipe — Auto Sell*\n\n` +
+        `Select a template for real-time snipes.\n` +
+        `Each snipe will auto-sell using this template.`;
+
+      const keyboard = { inline_keyboard: [
+        [{ text: asOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: "sniper_rt_as_toggle" }],
+        [{ text: "━━━ Select Template ━━━", callback_data: "noop" }],
+        ...(templates.length ? templates.map(t => ([{
+          text: `${tplId === t.id ? "✅" : "◻️"} ${t.name}`,
+          callback_data: `sniper_rt_as_tpl_${t.id}`
+        }])) : [[{ text: "No templates yet", callback_data: "noop" }]]),
+        [{ text: "➕ New Template", callback_data: "sniper_rt_as_new" }],
+        [{ text: "← Back", callback_data: "sniper_realtime_menu" }],
+      ]};
+
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: keyboard }); }
+      catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard }); }
+      return;
+    }
+
+    if (data === "sniper_rt_as_toggle") {
+      const rtCfg = db.getRealtimeSniperConfig(userId);
+      db.updateRealtimeSniperConfig(userId, { auto_sell_enabled: rtCfg?.auto_sell_enabled ? 0 : 1 });
+      await ctx.answerCallbackQuery(rtCfg?.auto_sell_enabled ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅");
+      ctx.callbackQuery.data = "sniper_rt_autosell";
+      return;
+    }
+
+    if (data.startsWith("sniper_rt_as_tpl_")) {
+      const tId = parseInt(data.replace("sniper_rt_as_tpl_", ""));
+      db.updateRealtimeSniperConfig(userId, { auto_sell_template_id: tId });
+      await ctx.answerCallbackQuery("✅ Template selected!");
+      ctx.callbackQuery.data = "sniper_rt_autosell";
+      return;
+    }
+
+    if (data === "sniper_rt_as_new") {
+      db.setSysConfig(`ast_return_to_${userId}`, "sniper_rt_autosell");
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("✏️ *New Auto Sell Template*\n\nEnter a name:", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "ast_set_name");
+      return;
+    }
     if (data === "sniper_rt_save") {
       await ctx.answerCallbackQuery("✅ Saved.");
       db.setSysConfig(`sniper_screen_${userId}`, "realtime");
@@ -1629,11 +1980,13 @@ function setupRouter(bot) {
            rankNum:  freshUser.rank || 1,
            volume:   freshUser.cumulative_volume_sol || 0,
          });
-       if (result && result.type === "text") {
-             await ctx.reply(result.text, { parse_mode: "Markdown" });
-           } else {
-             await ctx.reply("❌ Card not available.");
-           }
+         if (result && result.type === "photo") {
+           await ctx.replyWithPhoto(new InputFile(result.buffer, "rank_card.png"));
+         } else if (result && result.type === "text") {
+           await ctx.reply(result.text, { parse_mode: "Markdown" });
+         } else {
+           await ctx.reply("❌ Card not available.");
+         }
          } catch (e) {
            await ctx.reply("❌ Could not generate card. " + e.message);
          }
@@ -1753,6 +2106,7 @@ function setupRouter(bot) {
 
     const pending  = db.getSysConfig(`pending_${userId}`) || "";
     const text     = ctx.message.text.trim();
+    console.log("[TEXT HANDLER] pending:", pending, "text:", text);
     const ks       = require("./killSwitch").isActive();
     const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
 
@@ -1761,10 +2115,16 @@ function setupRouter(bot) {
       "set_maxbuy","set_session","set_jito","set_custom_speed",
       "set_buy_amt_1","set_buy_amt_2","set_buy_amt_3",
       "set_sell_pct_1","set_sell_pct_2","set_sell_pct_3",
-      "sap_set_new","sap_verify_change","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
+      "sap_set_new","sap_verify_change",
+      "ab_set_amount","ab_set_slippage","ab_set_gas","ab_set_max",
+      "ast_set_name","ast_set_sl","ast_set_tp","ast_set_tp_pct",
+        "msnipe_sol","msnipe_slip","msnipe_gas",
+        "cch_autosell_new_","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
     ];
+    console.log("[DEBUG] pending:", pending, "userId:", userId, "text:", text);
     if (settingsPending.includes(pending)) {
-      return handleTextInput(ctx, user, pending);
+      const freshUser = db.getUser(userId);
+      return handleTextInput(ctx, freshUser, pending);
     }
 
     if (pending === "wallet_import_key") {
