@@ -174,7 +174,7 @@ startHealthMonitor();
 let positionMonitorErrors = 0;
 setInterval(async () => {
   try {
-    await monitorPositions();
+    await monitorPositions(notifyCallback);
     positionMonitorErrors = 0; // Reset error count on success
   } catch (e) {
     positionMonitorErrors++;
@@ -183,7 +183,7 @@ setInterval(async () => {
       console.error("[Monitor] ⚠️ 5 consecutive errors — check stopLoss.js");
     }
   }
-}, 30000);
+}, 5000);
 
 console.log("[Jobs] ✅ Trial cron, rank cron, payout cron, position monitor started");
 

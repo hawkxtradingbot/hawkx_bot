@@ -170,17 +170,39 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
       .run(newSolInvested, newTokenAmount, avgBuyPrice, existingPos.position_id);
     positionId = existingPos.position_id;
   } else {
+    // Get auto sell template for this position
+    let autoSellTemplateId = null;
+    const src = source || "manual";
+    if (src === "manual" || src === "auto_buy") {
+      const s = db.getSettings(user.user_id) || {};
+      if (s.auto_sell_enabled) autoSellTemplateId = s.auto_sell_template_id || null;
+    } else if (src === "copy_channel" && sourceRef) {
+      const ch = db.getDb().prepare("SELECT * FROM copy_channels WHERE channel_id = ? AND user_id = ?").get(sourceRef, user.user_id);
+      if (ch?.auto_sell_enabled) autoSellTemplateId = ch.auto_sell_template_id || null;
+    } else if (src === "copy_wallet" && sourceRef) {
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE user_id = ? AND label = ?").get(user.user_id, sourceRef);
+      if (cw?.auto_sell_enabled) autoSellTemplateId = cw.auto_sell_template_id || null;
+    }
+
     const result = db.openPosition({
       userId: user.user_id, walletId: user.active_wallet_id,
       tokenCa: ca, tokenName, buyPrice: price,
       solInvested: solAmount, tokenAmount,
       platform: "devnet_mock",
-      source:    source    || "manual",
-      sourceRef: sourceRef || "",entryMcap,
+      source: src,
+      sourceRef: sourceRef || "",
+      entryMcap,
     });
+
     positionId = result?.lastInsertRowid || db.getDb()
       .prepare("SELECT position_id FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1")
       .get(user.user_id, ca)?.position_id;
+
+    // Save template to position
+    if (autoSellTemplateId && positionId) {
+      db.getDb().prepare("UPDATE positions SET auto_sell_template_id = ? WHERE position_id = ?")
+        .run(autoSellTemplateId, positionId);
+    }
   }
 
   db.addVolume(user.user_id, solAmount);
@@ -272,7 +294,7 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
     try {
       const axiosMcap = require("axios");
       const dexRes = await axiosMcap.get(
-        `https://api.dexscreener.com/latest/dex/tokens/${position.token_ca}`,
+  `https://api.dexscreener.com/latest/dex/tokens/${position.token_ca}`,
         { timeout: 4000 }
       );
       const pairs = dexRes.data?.pairs;
@@ -283,7 +305,7 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
       rankNum:     user.rank || 1,
       tokenName:   position.token_name || position.token_ca.slice(0,8),
       pnlPct,
-      pnlSol,
+        pnlSol: solReceived - position.sol_invested,
       entryMcap:   position.entry_mcap || 0,
       exitMcap,
       hideAmounts: false,

@@ -221,6 +221,34 @@ async function getTokenPosition(ctx, user, positionId) {
   if (tokenData.price)     parts.push(`💲 ${formatPrice(tokenData.price)}`);
   if (parts.length > 0)    marketLine = parts.join(" | ") + "\n";
 
+  // Auto sell template status
+  let autoSellLine = "";
+  if (pos.auto_sell_template_id) {
+    const t = db.getAutoSellTemplate(pos.user_id, pos.auto_sell_template_id);
+    if (t) {
+      const state = JSON.parse(db.getSysConfig(`ast_state_${pos.position_id}`) || "{}");
+      const tpHit = state.tp_hit || 0;
+      const slHit = state.sl_triggered || 0;
+      autoSellLine = `\n🤖 Auto Sell: <b>${t.name}</b>\n`;
+      // Show active SL
+      for (let i = 1; i <= 3; i++) {
+        const sl = t[`sl_${i}`] || 0;
+        if (sl !== 0) {
+          const hit = i === 1 ? slHit > 0 : i === 2 ? tpHit >= 1 : tpHit >= 2;
+          autoSellLine += `🛑 SL${i}: ${sl}% ${hit ? "✅ Active" : "⏳ Waiting"}\n`;
+        }
+      }
+      // Show TPs
+      for (let i = 1; i <= 5; i++) {
+        const tp = t[`tp_${i}`] || 0;
+        if (tp !== 0) {
+          const hit = tpHit >= i;
+          autoSellLine += `🎯 TP${i}: +${tp}% ${hit ? "✅ Hit" : "⏳ Waiting"}\n`;
+        }
+      }
+    }
+  }
+
   const msg =
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a>\n` +
     `${getSourceLabel(pos)}\n\n` +
@@ -229,6 +257,7 @@ async function getTokenPosition(ctx, user, positionId) {
     `📈 P&L: <b>${sign}${pnlPct.toFixed(1)}%</b> (${sign}${pnlSol.toFixed(4)} SOL / $${pnlUsd.toFixed(2)})\n` +
     `🏦 Balance: <b>${(pos.token_amount||0).toLocaleString()}</b> tokens\n` +
     (marketLine ? `\n${marketLine}` : "") +
+    (autoSellLine ? `\n${autoSellLine}` : "") +
     `💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
 
   const b1 = settings.buy_amt_1 || 0.1;

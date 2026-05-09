@@ -95,6 +95,7 @@ function runMigrations(d) {
     "ALTER TABLE copy_channels ADD COLUMN wallet_id INTEGER DEFAULT NULL",
     "ALTER TABLE copy_channels ADD COLUMN gas_fee REAL DEFAULT 0.005",
     "ALTER TABLE positions ADD COLUMN entry_mcap REAL DEFAULT 0",
+    "ALTER TABLE positions ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
     `CREATE TABLE IF NOT EXISTS copy_wallets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -708,12 +709,13 @@ function pauseAllSnipes(userId) {
 }
 
 function getActiveSnipes(userId) {
-  return getDb().prepare("SELECT * FROM snipes WHERE user_id = ? AND active = 1").all(userId);
+  return getDb().prepare("SELECT * FROM snipes WHERE user_id = ?").all(userId);
 }
 
-function addSnipe(userId, tokenCa, solAmount, slippage, configId) {
-  getDb().prepare("INSERT INTO snipes (user_id, token_ca, sol_amount, slippage, config_id, active) VALUES (?, ?, ?, ?, ?, 1)")
-    .run(userId, tokenCa, solAmount || 0.1, slippage || 50, configId || null);
+function addSnipe(userId, tokenCa, solAmount, slippage, configId, opts) {
+  const o = opts || {};
+  getDb().prepare("INSERT INTO snipes (user_id, token_ca, sol_amount, slippage, config_id, gas, mev, auto_sell_template_id, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
+    .run(userId, tokenCa, solAmount || 0.1, slippage || 50, configId || null, o.gas || 0.005, o.mev ? 1 : 0, o.auto_sell_template_id || null);
 }
 
 function getRealtimeSniperConfig(userId) {
@@ -734,7 +736,7 @@ function updateRealtimeSniperConfig(userId, fields) {
 }
 
 function cancelSnipe(userId, id) {
-  getDb().prepare("UPDATE snipes SET active = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+  getDb().prepare("DELETE FROM snipes WHERE id = ? AND user_id = ?").run(id, userId);
 }
 
 // ── LIMIT ORDERS ──────────────────────────────────────────────

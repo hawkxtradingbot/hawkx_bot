@@ -434,16 +434,21 @@ function buildSniperConfigMenu(cfg) {
 
 function buildMigrationSniperMenu(snipes) {
   const kb = new InlineKeyboard();
-  if (!snipes?.length) { kb.text("No active snipes", "noop").row(); }
+
+
+  if (!snipes?.length) { kb.text("No snipes yet", "noop").row(); }
   else {
     snipes.forEach((s) => {
-      kb.text(`🟢 ${s.token_ca?.slice(0,8)||"Any"}... ${s.sol_amount}SOL`, `snipe_view_${s.id}`)
+      const icon = s.active ? "🟢" : "🟡";
+      const label = `${icon} ${s.sol_amount}SOL | Slip:${s.slippage||50}%`;
+      kb.text(label, `snipe_view_${s.id}`)
         .text("✖", `snipe_cancel_${s.id}`)
         .row();
     });
   }
   kb.text("➕ New Migration Snipe", "sniper_migration_new").row();
-  kb.text("⏸ Pause All", "sniper_pause_all").row();
+  const anyActive = snipes?.some(s => s.active);
+  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "sniper_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_migration_menu")
     .row();
@@ -561,22 +566,47 @@ function buildChannelAutoSellScreen(ch, templates) {
     });
   }
   kb.text("➕ New Template", `cch_autosell_new_${ch.id}`).row();
-  kb.text("← Back", `copy_channel_view_${ch.id}`).row();
+  kb.text("← Back", ch.id === "setup" ? "cch_autosell_setup" : `copy_channel_view_${ch.id}`).row();
   return kb;
 }
-function buildAutoSellListScreen(templates) {
+function buildSettingsAutoSellScreen(s, templates) {
   const kb = new InlineKeyboard();
+  const on = s?.auto_sell_enabled ?? 0;
+  const tplId = s?.auto_sell_template_id || 0;
+  kb.text(on ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
+  kb.text("━━━ Select Template ━━━", "noop").row();
   if (!templates?.length) {
     kb.text("No templates yet", "noop").row();
   } else {
     templates.forEach((t) => {
+      const active = tplId === t.id;
+      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `sas_use_${t.id}`).row();
+    });
+  }
+  kb.text("➕ New Template", "pset_autosell_screen").row();
+  kb.text("← Back", "menu_settings")
+    .text("🔄 Refresh", "pset_autosell_manual")
+    .row();
+  return kb;
+}
+    function buildAutoSellListScreen(templates, activeTemplateId, autoSellOn) {
+      const kb = new InlineKeyboard();
+      kb.text(autoSellOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
+      if (!templates?.length) {
+    kb.text("No templates yet", "noop").row();
+  } else {
+    templates.forEach((t) => {
+      const isActive = t.id === activeTemplateId;
       kb.text(`${t.active ? "🟢" : "⏸"} ${t.name}`, `ast_view_${t.id}`)
+        .text(isActive ? "✅ Select" : "◻️ Select", `ast_select_${t.id}`)
         .text("🗑", `ast_delete_${t.id}`)
         .row();
     });
   }
   kb.text("➕ New Template", "ast_new").row();
-  kb.text("← Back", "menu_settings").row();
+  kb.text("← Back", "menu_settings")
+    .text("🔄 Refresh", "pset_autosell_screen")
+    .row();
   return kb;
 }
 function buildAutoBuyScreen(s) {
@@ -600,34 +630,41 @@ function buildAutoBuyScreen(s) {
 // ════════════════════════════════════════════════════════════
 function buildAutoSellTemplateScreen(t) {
   const kb = new InlineKeyboard();
-  kb.text(t?.active ? "✅ Active" : "⏸ Paused", `ast_toggle_${t.id}`)
-    .text("✏️ Rename", `ast_rename_${t.id}`)
-    .row();
+  const id = t.id;
 
-  // SL rows — up to 3
+  // Active/Rename
+  const isNewTemplate = t.name === "New Template";
+  kb.text(isNewTemplate ? "📝 Add Name" : "✏️ Rename", `ast_rename_${id}`).row();
+
+  // SL Section
   kb.text("━━━ 🛑 Stop Loss ━━━", "noop").row();
   for (let i = 1; i <= 3; i++) {
-    const sl  = t[`sl_${i}`] || 0;
-    const tr  = t[`sl_${i}_trail`] ? "🔄" : "📍";
-    kb.text(`${tr} SL${i}: ${sl===0?"OFF":sl+"%"}`, `ast_sl_${i}_${t.id}`)
-      .text(t[`sl_${i}_trail`] ? "✅ Trail" : "◻️ Trail", `ast_sl_trail_${i}_${t.id}`)
+    const sl    = t[`sl_${i}`] || 0;
+    const slPct = t[`sl_${i}_sell_pct`] || 100;
+    const slTr  = t[`sl_${i}_trail`] ? "🔄" : "📍";
+    kb.text(`SL${i}`,                                      "noop")
+      .text(`${slTr} ${sl===0?"OFF":sl+"%"}`,              `ast_sl_${i}_${id}`)
+      .text(`Sell:${slPct}%`,                              `ast_sl_pct_${i}_${id}`)
+      .text(t[`sl_${i}_trail`] ? "✅Trail" : "◻️Trail",  `ast_sl_trail_${i}_${id}`)
       .row();
   }
 
-  // TP rows — up to 5
+  // TP Section
   kb.text("━━━ 🎯 Take Profit ━━━", "noop").row();
   for (let i = 1; i <= 5; i++) {
-    const tp  = t[`tp_${i}`] || 0;
-    const pct = t[`tp_${i}_pct`] || 100;
-    const tr  = t[`tp_${i}_trail`] ? "🔄" : "📍";
-    kb.text(`${tr} TP${i}: ${tp===0?"OFF":tp+"%"}`, `ast_tp_${i}_${t.id}`)
-      .text(`Sell:${pct}%`, `ast_tp_pct_${i}_${t.id}`)
-      .text(t[`tp_${i}_trail`] ? "✅ Trail" : "◻️ Trail", `ast_tp_trail_${i}_${t.id}`)
+    const tp    = t[`tp_${i}`] || 0;
+    const tpPct = t[`tp_${i}_pct`] || 100;
+    const tpTr  = t[`tp_${i}_trail`] ? "🔄" : "📍";
+    kb.text(`TP${i}`,                                      "noop")
+      .text(`${tpTr} ${tp===0?"OFF":"+"+tp+"%"}`,         `ast_tp_${i}_${id}`)
+      .text(`Sell:${tpPct}%`,                              `ast_tp_pct_${i}_${id}`)
+      .text(t[`tp_${i}_trail`] ? "✅Trail" : "◻️Trail",  `ast_tp_trail_${i}_${id}`)
       .row();
   }
-
-  kb.text("✅ Save", `ast_save_${t.id}`).row();
-  kb.text("← Back", "pset_autosell_screen").row();
+  kb.text("✅ Save", `ast_save_${id}`).row();
+  kb.text("← Back", `ast_back_${id}`)
+    .text("🔄 Refresh", `ast_view_${id}`)
+    .row();
   return kb;
 }
 function buildWatchlistMenu(items) {
@@ -694,6 +731,6 @@ module.exports = {
   buildCopyChannelListMenu, buildCopyChannelSettingsMenu,
   buildSniperMainMenu, buildAutoSniperMenu, buildSniperConfigMenu,
   buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildLimitOrdersMenu, buildLimitOrderSetupMenu,
-  buildAutoBuyScreen, buildAutoSellListScreen, buildAutoSellTemplateScreen, buildWalletAutoSellScreen, buildChannelAutoSellScreen, buildWatchlistMenu, buildRankUpBanner, buildRankInfoMessage,
+  buildAutoBuyScreen, buildSettingsAutoSellScreen, buildAutoSellListScreen, buildAutoSellTemplateScreen, buildWalletAutoSellScreen, buildChannelAutoSellScreen, buildSniperAutoSellScreen, buildWatchlistMenu, buildRankUpBanner, buildRankInfoMessage,
   buildQuickStats, getModeLabel, getFeeDisplay, getGuide, RANKS,
 };

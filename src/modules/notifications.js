@@ -160,7 +160,10 @@ async function notify(userId, eventType, data = {}) {
         `💰 Bonus: *+${data.reward} SOL* sent to your wallet.\n\n` +
         `Keep sharing your link to unlock more rewards. 🦅`;
       break;
-
+      // ── AUTO SELL ────────────────────────────────────────────
+      case "auto_sell":
+        msg = data.message || `🤖 *Auto Sell Triggered*`;
+        break;
     // ── FALLBACK — never show raw JSON ───────────────────────
     default:
       console.log(`[Notify] Unhandled event: ${eventType}`, data);
