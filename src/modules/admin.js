@@ -177,22 +177,27 @@ async function handleAdminCallback(ctx, action) {
     csv += `All Time: ${(totalRev?.total||0).toFixed(6)} SOL\n\n`;
 
     // Users
-    csv += `=== ALL USERS ===\n`;
-    csv += `UserID,Username,Rank,Volume,Referrals,TotalEarned,Pending,Promoter\n`;
+    csv += `=== ALL USERS ===\n\n`;
     for (const u of users) {
       const count   = db.getDirectReferralCount(u.user_id);
       const earned  = db.getTotalEarnings(u.user_id);
       const pending = db.getPendingEarnings(u.user_id);
-      csv += `${u.user_id},${u.username||""},${u.rank},${(u.cumulative_volume_sol||0).toFixed(4)},${count},${(earned?.total||0).toFixed(6)},${(pending?.total||0).toFixed(6)},${u.promoter_status||0}\n`;
+      const rankName = config.RANK_NAMES?.[u.rank] || "Degen";
+      csv += `────────────────────\n`;
+      csv += `User: ${u.username||"Unknown"} (ID: ${u.user_id})\n`;
+      csv += `Rank: ${rankName} | Volume: ${(u.cumulative_volume_sol||0).toFixed(4)} SOL\n`;
+      csv += `Referrals: ${count} | Earned: ${(earned?.total||0).toFixed(6)} SOL\n`;
+      csv += `Pending: ${(pending?.total||0).toFixed(6)} SOL | Promoter: ${u.promoter_status ? "Yes" : "No"}\n\n`;
     }
 
     // Write file
     const filePath = `/tmp/hawkx_report_${now}.txt`;
     fs.writeFileSync(filePath, csv);
 
+    const { InputFile } = require("grammy");
     await ctx.replyWithDocument(
-      { source: filePath, filename: `HawkX_Report_${now}.txt` },
-      { caption: `📥 *HawkX Admin Report*\n\nGenerated: ${now}\nUsers: ${users.length}`, parse_mode: "Markdown" }
+      new InputFile(fs.readFileSync(filePath), `HawkX_Report_${now}.txt`),
+      { caption: `📥 HawkX Admin Report\nGenerated: ${now}\nUsers: ${users.length}` }
     );
 
     // Cleanup
@@ -211,17 +216,14 @@ async function handleAdminCallback(ctx, action) {
   } else if (action === "admin_users") {
     await ctx.answerCallbackQuery();
     const users = db.getAllUsers();
-    const lines = users.slice(0, 20).map((u) => {
+    const lines = users.slice(0, 20).map((u, i) => {
       const name     = u.username || "Unknown";
       const rankName = config.RANK_NAMES?.[u.rank] || "Degen";
       const vol      = (u.cumulative_volume_sol || 0).toFixed(2);
-      const promo    = u.promoter_status ? " 👑" : "";
-      return `• @${name}${promo} | ${rankName} | ${vol} SOL`;
+      const promo    = u.promoter_status ? "👑" : "";
+      return `${i+1}. ${promo}${name}\n   ID: ${u.user_id} | ${rankName} | ${vol} SOL`;
     });
-    await ctx.reply(
-      `👥 *Users (${users.length} total — showing 20)*\n\n${lines.join("\n")}`,
-      { parse_mode: "Markdown" }
-    );
+    await ctx.reply(`👥 Users (${users.length} total)\n━━━━━━━━━━━━━━━━━━━\n${lines.join("\n━━━━━━━━━━━━━━━━━━━\n")}`);
 
   // ── Simulate Trades ───────────────────────────────────────
   } else if (action === "admin_sim_trades") {

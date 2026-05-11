@@ -214,6 +214,11 @@ async function checkLimitOrders(notifyFn) {
 
   for (const order of orders) {
     try {
+      if (order.paused) continue;
+      if (!order.target_price || order.target_price <= 0) continue;
+      // Don't trigger orders created less than 30 seconds ago
+      const createdAt = new Date(order.created_at).getTime();
+      if (Date.now() - createdAt < 30000) continue;
       const currentPrice = getMockPrice(order.token_ca);
       if (!currentPrice) continue;
 

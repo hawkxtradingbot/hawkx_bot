@@ -22,8 +22,9 @@ const FILTER_LABELS = {
   manual:      "🏷 Manual",
   channel:     "📡 Channel",
   copy_wallet: "👛 Copy Wallet",
+  launch:      "🚀 Launch",
 };
-const FILTERS = ["all", "manual", "channel", "copy_wallet"];
+const FILTERS = ["all", "manual", "channel", "copy_wallet", "launch"];
 
 function getSourceLabel(pos) {
   if (pos.source === "copy_channel" && pos.source_ref) return `📡 ${pos.source_ref.slice(0,10)}`;
@@ -32,9 +33,16 @@ function getSourceLabel(pos) {
 }
 
 // ── Main portfolio screen ─────────────────────────────────────
-async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null) {
-  const allPositions = db.getPositionsBySource(user.user_id, filter);
-  const positions    = allPositions.filter((p) => p.wallet_id === user.active_wallet_id);
+async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
+  const allPositions = db.getPositionsBySource(user.user_id, filter === "launch" ? "all" : filter);
+  const db2 = require("../../database");
+  const launchCa = db2.getSysConfig(`launch_ca_${user.user_id}`) || "";
+  const positions    = allPositions.filter((p) => {
+    if (p.wallet_id !== user.active_wallet_id) return false;
+    if (filter === "launch") return p.source === "launch" || p.token_ca === launchCa;
+    if (filter === "manual") return p.source === "manual" && p.token_ca !== launchCa;
+    return true;
+  });
   const isProMode    = user.mode === "pro";
   const settings     = db.getSettings(user.user_id) || {};
   const activeWallet = db.getWallet(user.active_wallet_id);
@@ -45,16 +53,29 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   const kb = new InlineKeyboard();
 
-  // ── Filter button row ────────────────────────────────────────
-  if (expanded) {
+  // ── Wallet + Filter side by side ────────────────────────────
+  if (walletExpanded) {
+    const wallets4 = db.getWallets(user.user_id) || [];
+    for (let i = 0; i < wallets4.length; i += 4) {
+      wallets4.slice(i, i+4).forEach((w, idx) => {
+        const num = i+idx+1;
+        const isSel = w.wallet_id === user.active_wallet_id;
+        kb.text(isSel ? `W${num} ✅` : `W${num}`, `pos_setwallet_${w.wallet_id}`);
+      });
+      kb.row();
+    }
+    kb.text("▲ Close", `pos_filter_${filter}_${page}_0`).row();
+  } else if (expanded) {
     // Show all filter options
     FILTERS.forEach((f) => {
       kb.text(filter === f ? `${FILTER_LABELS[f]} ✅` : FILTER_LABELS[f], `pos_filter_${f}_0_0`);
     });
     kb.row();
   } else {
-    // Show only selected filter with dropdown arrow
-    kb.text(`${FILTER_LABELS[filter] || FILTER_LABELS.all} ▼`, `pos_expand_${filter}_${page}`).row();
+    // Show wallet + filter side by side
+    kb.text(`💼 W${walletIdx} ▼`, `pos_wallet_expand`)
+      .text(`${FILTER_LABELS[filter] || FILTER_LABELS.all} ▼`, `pos_expand_${filter}_${page}`)
+      .row();
   }
 
   if (!positions.length) {
@@ -170,9 +191,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     }
   }
   if (selPos && isProMode) {
-    kb.text("📋 Limit Order", `limit_token_${selPos.position_id}`)
-      .text("📌 Limit Sell",  `sell_limit_${selPos.position_id}`)
-      .row();
+    kb.text("📋 Limit Orders", "menu_limit_orders").row();
   }
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", `pos_filter_${filter}_${page}_${selPos?.position_id||0}`)
@@ -278,9 +297,7 @@ async function getTokenPosition(ctx, user, positionId) {
       .text("🔴 75%",  `sell_pct_75_${positionId}`)
       .text("🔴 100%", `sell_pct_100_${positionId}`)
       .row();
-    kb.text("📌 Limit Sell",   `sell_limit_${positionId}`)
-      .text("📋 Limit Orders", `limit_token_${positionId}`)
-      .row();
+    kb.text("📋 Limit Orders", "menu_limit_orders").row();
   } else {
     const s1 = settings.sell_pct_1 || 25;
     const s2 = settings.sell_pct_2 || 50;

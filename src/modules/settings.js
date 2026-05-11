@@ -59,7 +59,105 @@ async function refreshSettings(ctx, user) {
 
     // ── Main callback handler ─────────────────────────────────────
     async function handleSettingCallback(ctx, user, action) {
-      const settings = db.getSettings(user.user_id) || {};
+    console.log("[SETTINGS CB]:", action?.slice(0,25));
+    // Handle select FIRST
+    if (action && action.indexOf("ast_select_") === 0) {
+      const id = parseInt(action.replace("ast_select_", ""));
+      const s = db.getSettings(user.user_id);
+      const newId = s?.auto_sell_template_id === id ? null : id;
+      db.updateSettings(user.user_id, { auto_sell_template_id: newId });
+      await ctx.answerCallbackQuery(newId ? "✅ Selected!" : "◻️ Deselected!");
+      const { buildAutoSellListScreen } = require("./keyboards");
+      const templates = db.getAutoSellTemplates(user.user_id);
+      const fresh = db.getSettings(user.user_id);
+      const selMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(selMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, fresh?.auto_sell_template_id, fresh?.auto_sell_enabled) }); }
+      catch { try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates, fresh?.auto_sell_template_id, fresh?.auto_sell_enabled) }); } catch {} }
+      return;
+    }
+
+    // Handle ALL ast_template actions FIRST
+    if (action.startsWith("ast_sl_") || action.startsWith("ast_tp_") || 
+        action.startsWith("ast_toggle_") || action.startsWith("ast_rename_") ||
+        action.startsWith("ast_view_") || action.startsWith("ast_save_")) {
+      // These are handled below - just fall through
+    } else if (action.startsWith("ast_back_")) {
+      const id = parseInt(action.replace("ast_back_", ""));
+      await ctx.answerCallbackQuery();
+      const unsavedId = parseInt(db.getSysConfig(`ast_unsaved_${user.user_id}`) || "0");
+      if (unsavedId && unsavedId === id) {
+        db.deleteAutoSellTemplate(user.user_id, unsavedId);
+        db.setSysConfig(`ast_unsaved_${user.user_id}`, "");
+      }
+      const { buildAutoSellListScreen } = require("./keyboards");
+      const s = db.getSettings(user.user_id);
+      const templates = db.getAutoSellTemplates(user.user_id);
+      const listMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(listMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) }); }
+      catch { await ctx.reply(listMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) }); }
+      return;
+    }
+
+    // Handle sas_toggle FIRST
+    if (action === "sas_toggle") {
+      const s = db.getSettings(user.user_id);
+      const v = s?.auto_sell_enabled ? 0 : 1;
+      db.updateSettings(user.user_id, { auto_sell_enabled: v });
+      await ctx.answerCallbackQuery(v ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌");
+      const { buildAutoSellListScreen } = require("./keyboards");
+      const templates = db.getAutoSellTemplates(user.user_id);
+      const fresh = db.getSettings(user.user_id);
+      const togMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(togMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, fresh?.auto_sell_template_id, fresh?.auto_sell_enabled) }); }
+      catch { try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates, fresh?.auto_sell_template_id, fresh?.auto_sell_enabled) }); } catch {} }
+      return;
+    }
+
+    // Handle ast_new FIRST
+    if (action === "ast_new") {
+      await ctx.answerCallbackQuery();
+      const newId = db.createAutoSellTemplate(user.user_id, "New Template");
+      db.setSysConfig(`ast_unsaved_${user.user_id}`, String(newId));
+      const t = db.getAutoSellTemplate(user.user_id, newId);
+      const { buildAutoSellTemplateScreen } = require("./keyboards");
+      const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
+      const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
+      db.setSysConfig(`ast_msg_${user.user_id}`, String(sent.message_id));
+      return;
+    }
+
+    // Handle autobuy FIRST
+    if (action === "pset_autobuy_screen" || action === "ab_toggle" || action === "ab_amount" || action === "ab_slippage" || action === "ab_gas" || action === "ab_max" || action === "ab_mev") {
+      const s2 = db.getSettings(user.user_id);
+      if (action === "ab_toggle") { const v = s2?.auto_buy_enabled ? 0 : 1; db.updateSettings(user.user_id, { auto_buy_enabled: v }); await ctx.answerCallbackQuery(v ? "🤖 Auto Buy: ON ✅" : "🤖 Auto Buy: OFF ◻️"); }
+      else if (action === "ab_mev") { const v = s2?.auto_buy_mev ? 0 : 1; db.updateSettings(user.user_id, { auto_buy_mev: v }); await ctx.answerCallbackQuery(v ? "🛡 MEV: ON" : "🛡 MEV: OFF"); }
+      else if (action === "ab_amount") { await ctx.answerCallbackQuery(); const p = await sendPrompt(ctx, "🤖 *Auto Buy Amount*\n\nEnter SOL per auto buy (e.g. 0.1):"); db.setSysConfig(`prompt_msg_${user.user_id}`, String(p)); db.setSysConfig(`pending_${user.user_id}`, "ab_set_amount"); return; }
+      else if (action === "ab_slippage") { await ctx.answerCallbackQuery(); const p = await sendPrompt(ctx, "📉 *Auto Buy Slippage*\n\nEnter % (e.g. 10):"); db.setSysConfig(`prompt_msg_${user.user_id}`, String(p)); db.setSysConfig(`pending_${user.user_id}`, "ab_set_slippage"); return; }
+      else if (action === "ab_gas") { await ctx.answerCallbackQuery(); const p = await sendPrompt(ctx, "⛽ *Auto Buy Gas*\n\nEnter SOL gas fee (e.g. 0.005):"); db.setSysConfig(`prompt_msg_${user.user_id}`, String(p)); db.setSysConfig(`pending_${user.user_id}`, "ab_set_gas"); return; }
+      else if (action === "ab_max") { await ctx.answerCallbackQuery(); const p = await sendPrompt(ctx, "🔢 *Max Buys Per Token*\n\nEnter max times (e.g. 1):"); db.setSysConfig(`prompt_msg_${user.user_id}`, String(p)); db.setSysConfig(`pending_${user.user_id}`, "ab_set_max"); return; }
+      else { await ctx.answerCallbackQuery(); }
+      const fresh2 = db.getSettings(user.user_id);
+      const { buildAutoBuyScreen } = require("./keyboards");
+      const abMsg = `🤖 *Auto Buy*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\nWhen ON — any CA you paste in chat\nauto-buys instantly with your settings.\nNo confirm screen needed.\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(abMsg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh2) }); const mid = ctx.callbackQuery?.message?.message_id; if (mid) db.setSysConfig(`autobuy_msg_${user.user_id}`, String(mid)); }
+      catch { const sent = await ctx.reply(abMsg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh2) }); db.setSysConfig(`autobuy_msg_${user.user_id}`, String(sent.message_id)); }
+      return;
+    }
+
+    // Handle delete FIRST before anything else
+    if (action && action.indexOf("ast_delete_") === 0) {
+      const id = parseInt(action.replace("ast_delete_", ""));
+      db.deleteAutoSellTemplate(user.user_id, id);
+      await ctx.answerCallbackQuery("🗑 Deleted!");
+      const { buildAutoSellListScreen } = require("./keyboards");
+      const s2 = db.getSettings(user.user_id);
+      const templates2 = db.getAutoSellTemplates(user.user_id);
+      const listMsg2 = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📋 Templates define when to auto-sell\n✅ Selected = currently in use\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(listMsg2, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates2, s2?.auto_sell_template_id, s2?.auto_sell_enabled) }); }
+      catch { await ctx.reply(listMsg2, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates2, s2?.auto_sell_template_id, s2?.auto_sell_enabled) }); }
+      return;
+    }
+        const settings = db.getSettings(user.user_id) || {};
 
   // ── INSTANT TOGGLES ──────────────────────────────────────────
   if (action === "set_autobuy") {
@@ -290,98 +388,17 @@ async function refreshSettings(ctx, user) {
     await ctx.answerCallbackQuery();
     const { buildAutoSellListScreen } = require("./keyboards");
     const templates = db.getAutoSellTemplates(user.user_id);
-    const msg =
-      `🤖 *Auto Sell Templates*\n\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `📚 *HOW IT WORKS:*\n` +
-      `Create named templates with SL & TP.\n` +
-      `Each template works separately.\n` +
-      `Assign any template to any channel,\n` +
-      `wallet or sniper independently.\n` +
-      `━━━━━━━━━━━━━━━━━━━`;
-    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, db.getSettings(user.user_id)?.auto_sell_template_id, db.getSettings(user.user_id)?.auto_sell_enabled) }); }
-          catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, db.getSettings(user.user_id)?.auto_sell_template_id, db.getSettings(user.user_id)?.auto_sell_enabled) }); }
-            return;
-          }
-
-          if (action.startsWith("ast_back_")) {
-      const id = parseInt(action.replace("ast_back_", ""));
-      await ctx.answerCallbackQuery();
-      const returnTo = db.getSysConfig(`ast_return_to_${user.user_id}`) || "";
-      if (returnTo) {
-        db.setSysConfig(`ast_return_to_${user.user_id}`, "");
-        const { buildChannelAutoSellScreen, buildWalletAutoSellScreen, buildSniperAutoSellScreen } = require("./keyboards");
-        const templates = db.getAutoSellTemplates(user.user_id);
-        if (returnTo.startsWith("cch_autosell_")) {
-          const chId = parseInt(returnTo.replace("cch_autosell_", ""));
-          const ch = db.getCopyChannel(chId, user.user_id);
-          if (ch) {
-            try { await ctx.editMessageText(`📡 *${ch.channel_name || ch.channel_id} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildChannelAutoSellScreen(ch, templates) }); } catch {
-              await ctx.reply(`📡 *${ch.channel_name || ch.channel_id} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildChannelAutoSellScreen(ch, templates) });
-            }
-          }
-        } else if (returnTo.startsWith("cw_autosell_")) {
-          const cwId = parseInt(returnTo.replace("cw_autosell_", ""));
-          const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, user.user_id);
-          if (cw) {
-            try { await ctx.editMessageText(`👛 *${cw.label || cw.wallet_address.slice(0,12)} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildWalletAutoSellScreen(cw, templates) }); } catch {
-              await ctx.reply(`👛 *${cw.label || cw.wallet_address.slice(0,12)} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildWalletAutoSellScreen(cw, templates) });
-            }
-          }
-        } else if (returnTo.startsWith("sniper_autosell_")) {
-          const cfgId = parseInt(returnTo.replace("sniper_autosell_", ""));
-          const cfg = db.getSniperConfig(cfgId, user.user_id);
-          if (cfg) {
-            try { await ctx.editMessageText(`🎯 *${cfg.label} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildSniperAutoSellScreen(cfg, templates) }); } catch {
-              await ctx.reply(`🎯 *${cfg.label} — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: buildSniperAutoSellScreen(cfg, templates) });
-            }
-          }
-        } else if (returnTo === "msnipe_as_back") {
-          const templates3 = db.getAutoSellTemplates(user.user_id);
-          const tplId3 = parseInt(db.getSysConfig(`msnipe_tpl_${user.user_id}`) || "0");
-          const asOn3 = db.getSysConfig(`msnipe_as_${user.user_id}`) === "1";
-          const asKb4 = { inline_keyboard: [
-            [{ text: asOn3 ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: "msnipe_as_toggle" }],
-            [{ text: "━━━ Select Template ━━━", callback_data: "noop" }],
-            ...(templates3.length ? templates3.map(t => ([{ text: `${tplId3 === t.id ? "✅" : "◻️"} ${t.name}`, callback_data: `msnipe_as_tpl_${t.id}` }])) : [[{ text: "No templates yet", callback_data: "noop" }]]),
-            [{ text: "➕ New Template", callback_data: "msnipe_as_new" }],
-            [{ text: "← Back", callback_data: "msnipe_as_back" }],
-          ]};
-          try { await ctx.editMessageText(`🔀 *Migration Sniper — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: asKb4 }); }
-          catch { await ctx.reply(`🔀 *Migration Sniper — Auto Sell*\n\nSelect a template.`, { parse_mode: "Markdown", reply_markup: asKb4 }); }
-        }
-        } else if (returnTo === "cw_setup_autosell_back") {
-          const templates2 = db.getAutoSellTemplates(user.user_id);
-          const tplId2 = parseInt(db.getSysConfig(`cw_pending_autosell_tpl_${user.user_id}`) || "0");
-          const asOn2 = db.getSysConfig(`cw_pending_autosell_${user.user_id}`) === "1";
-          const { buildChannelAutoSellScreen: bcas } = require("./keyboards");
-          const fakeChannel2 = { id: "setup", auto_sell_enabled: asOn2 ? 1 : 0, auto_sell_template_id: tplId2, channel_name: "Copy Wallet Setup" };
-          try { await ctx.editMessageText(
-            `🤖 *Auto Sell — Copy Wallet Setup*\n\nSelect a template to use for this wallet.`,
-            { parse_mode: "Markdown", reply_markup: bcas(fakeChannel2, templates2) }
-          ); } catch {
-            await ctx.reply(
-              `🤖 *Auto Sell — Copy Wallet Setup*\n\nSelect a template to use for this wallet.`,
-              { parse_mode: "Markdown", reply_markup: bcas(fakeChannel2, templates2) }
-            );
-          }
-        } else {
-          // Default — go to settings auto sell
-          const { buildAutoSellListScreen } = require("./keyboards");
-          const s = db.getSettings(user.user_id);
-          try { await ctx.editMessageText(`🤖 *Auto Sell Templates*`, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(db.getAutoSellTemplates(user.user_id), s.auto_sell_template_id, s.auto_sell_enabled) }); } catch {
-            await ctx.reply(`🤖 *Auto Sell Templates*`, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(db.getAutoSellTemplates(user.user_id), s.auto_sell_template_id, s.auto_sell_enabled) });
-          }
-        }
-      } else {
-        // No return — go to settings auto sell
-        const { buildAutoSellListScreen } = require("./keyboards");
-        const s = db.getSettings(user.user_id);
-        try { await ctx.editMessageText(`🤖 *Auto Sell Templates*`, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(db.getAutoSellTemplates(user.user_id), s.auto_sell_template_id, s.auto_sell_enabled) }); } catch {
-          await ctx.reply(`🤖 *Auto Sell Templates*`, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(db.getAutoSellTemplates(user.user_id), s.auto_sell_template_id, s.auto_sell_enabled) });
-  }
+    const s = db.getSettings(user.user_id);
+    const msg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) }); }
+    catch {
+      try { await ctx.deleteMessage(); } catch {}
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) });
+    }
     return;
   }
+
+
   if (action.startsWith("ast_view_")) {
       const id = parseInt(action.replace("ast_view_", ""));
       const t  = db.getAutoSellTemplate(user.user_id, id);
@@ -455,13 +472,19 @@ async function refreshSettings(ctx, user) {
     return;
   }
 
-  if (action.startsWith("ast_delete_") || action?.startsWith("ast_delete_")) {
+  if (action.includes("ast_delete")) {
     const id = parseInt(action.replace("ast_delete_", ""));
     db.deleteAutoSellTemplate(user.user_id, id);
-    await ctx.answerCallbackQuery("🗑 Deleted.");
+    await ctx.answerCallbackQuery("🗑 Deleted!");
     const { buildAutoSellListScreen } = require("./keyboards");
-    const templates = db.getAutoSellTemplates(user.user_id);
-    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates, null, null) }); } catch {}
+    const s2 = db.getSettings(user.user_id);
+    const templates2 = db.getAutoSellTemplates(user.user_id);
+    const listMsg2 = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+    const chatId4 = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
+    const msgId4 = ctx.callbackQuery?.message?.message_id;
+    console.log("[AST] chatId:", chatId4, "msgId:", msgId4);
+    try { if (chatId4 && msgId4) await ctx.api.deleteMessage(chatId4, msgId4); } catch(e) { console.log("[AST] del err:", e.message); }
+    try { await ctx.api.sendMessage(chatId4, listMsg2, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates2, s2?.auto_sell_template_id, s2?.auto_sell_enabled) }); console.log("[AST] sent!"); } catch(e) { console.log("[AST] send err:", e.message); }
     return;
   }
     if (action.startsWith("ast_sl_pct_")) {
@@ -548,36 +571,16 @@ async function refreshSettings(ctx, user) {
     db.setSysConfig(`pending_${user.user_id}`, "ast_set_tp_pct");
     return;
   }
-      if (action.startsWith("ast_select_")) {
-        const id = parseInt(action.replace("ast_select_", ""));
-        const s = db.getSettings(user.user_id);
-        // Toggle — if already selected deselect it
-        const newId = s?.auto_sell_template_id === id ? null : id;
-        db.updateSettings(user.user_id, { auto_sell_template_id: newId });
-        await ctx.answerCallbackQuery(newId ? "✅ Selected!" : "◻️ Deselected!");
-        const { buildAutoSellListScreen } = require("./keyboards");
-        const templates = db.getAutoSellTemplates(user.user_id);
-        const fresh2 = db.getSettings(user.user_id);
-      const msg =
-        `🤖 *Auto Sell Templates*\n\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `📚 *HOW IT WORKS:*\n` +
-        `Create named templates with SL & TP.\n` +
-        `Each template works separately.\n` +
-        `Assign any template to any channel,\n` +
-        `wallet or sniper independently.\n` +
-        `━━━━━━━━━━━━━━━━━━━`;
-    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, fresh2.auto_sell_template_id, fresh2.auto_sell_enabled) }); }
-      catch (e) {
-        if (e?.description?.includes("not modified")) return;
-        await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, fresh2.auto_sell_template_id, fresh2.auto_sell_enabled) });
-      }
-      return;
-    }
 
       if (action.startsWith("ast_save_") || action?.startsWith("ast_save_")) {
-    const id = parseInt(action.replace("ast_save_", ""));
+    db.setSysConfig(`ast_unsaved_${user.user_id}`, "");
     await ctx.answerCallbackQuery("✅ Template saved!");
+    const { buildAutoSellListScreen } = require("./keyboards");
+    const s = db.getSettings(user.user_id);
+    const templates = db.getAutoSellTemplates(user.user_id);
+    const listMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(listMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) }); }
+    catch { await ctx.reply(listMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, s?.auto_sell_template_id, s?.auto_sell_enabled) }); }
     return;
   }
       if (action === "sas_toggle") {
@@ -588,7 +591,9 @@ async function refreshSettings(ctx, user) {
         const { buildAutoSellListScreen } = require("./keyboards");
         const templates = db.getAutoSellTemplates(user.user_id);
         const fresh = db.getSettings(user.user_id);
-        try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates, fresh.auto_sell_template_id, fresh.auto_sell_enabled) }); } catch {}
+        const togMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template here applies to:\n   Manual buys & Auto Buy only\n\n💡 Each Copy Wallet, Copy Channel\n   and Sniper can have its OWN\n   template assigned separately\n━━━━━━━━━━━━━━━━━━━`;
+        try { await ctx.editMessageText(togMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, fresh.auto_sell_template_id, fresh.auto_sell_enabled) }); }
+        catch { try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellListScreen(templates, fresh.auto_sell_template_id, fresh.auto_sell_enabled) }); } catch {} }
         return;
       }
 
@@ -625,6 +630,7 @@ async function refreshSettings(ctx, user) {
       }
       return;
     }
+  console.log("[AUTOBUY] checking:", action);
   if (action === "pset_autobuy_screen" || action === "ab_toggle" || action === "ab_mev") {
     const s = db.getSettings(user.user_id);
     if (action === "ab_toggle") {
@@ -767,7 +773,7 @@ async function handleTextInput(ctx, user, pendingKey) {
         const t = db.getAutoSellTemplate(userId, editId);
         db.setSysConfig(`ast_edit_id_${userId}`, "");
         const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
-        const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+        const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
         try {
           if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
           else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
@@ -776,7 +782,7 @@ async function handleTextInput(ctx, user, pendingKey) {
         const newId = db.createAutoSellTemplate(userId, text);
         const t = db.getAutoSellTemplate(userId, newId);
         db.setSysConfig(`ast_edit_id_${userId}`, "");
-        const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+        const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
         const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
         try {
           if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
@@ -834,7 +840,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const t = db.getAutoSellTemplate(userId, id);
       const { buildAutoSellTemplateScreen } = require("./keyboards");
       const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
-      const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+      const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
         if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
         else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
@@ -854,7 +860,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const t = db.getAutoSellTemplate(userId, id);
       const { buildAutoSellTemplateScreen: bats2 } = require("./keyboards");
       const tplMsgId2 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
-      const msg2 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+      const msg2 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
         if (tplMsgId2) await ctx.api.editMessageText(ctx.chat.id, tplMsgId2, msg2, { parse_mode: "Markdown", reply_markup: bats2(t) });
         else { const s = await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: bats2(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
@@ -874,7 +880,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const t = db.getAutoSellTemplate(userId, id);
       const { buildAutoSellTemplateScreen: bats3 } = require("./keyboards");
       const tplMsgId3 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
-      const msg3 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+      const msg3 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
         if (tplMsgId3) await ctx.api.editMessageText(ctx.chat.id, tplMsgId3, msg3, { parse_mode: "Markdown", reply_markup: bats3(t) });
         else { const s = await ctx.reply(msg3, { parse_mode: "Markdown", reply_markup: bats3(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
@@ -894,7 +900,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const t = db.getAutoSellTemplate(userId, id);
       const { buildAutoSellTemplateScreen: bats4 } = require("./keyboards");
       const tplMsgId4 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
-      const msg4 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
+      const msg4 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
         if (tplMsgId4) await ctx.api.editMessageText(ctx.chat.id, tplMsgId4, msg4, { parse_mode: "Markdown", reply_markup: bats4(t) });
         else { const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: bats4(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }

@@ -728,6 +728,8 @@ function getRealtimeSniperConfig(userId) {
     mev: !!(s.sniper_rt_mev ?? 1),
     raydium: !!(s.sniper_rt_raydium ?? 1),
     migrating: !!(s.sniper_rt_migrating ?? 1),
+    auto_sell_enabled: s.sniper_rt_auto_sell_enabled || 0,
+    auto_sell_template_id: s.sniper_rt_auto_sell_template_id || 0,
   };
 }
 
@@ -740,13 +742,20 @@ function cancelSnipe(userId, id) {
 }
 
 // ── LIMIT ORDERS ──────────────────────────────────────────────
-function getLimitOrders(userId) {
+function getLimitOrders(userId, tokenCa) {
+  if (tokenCa) return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND token_ca = ? AND active = 1 ORDER BY created_at DESC").all(userId, tokenCa);
   return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND active = 1 ORDER BY created_at DESC").all(userId);
+}
+
+function pauseLimitOrder(userId, id) {
+  const o = getDb().prepare("SELECT paused FROM limit_orders WHERE id = ? AND user_id = ?").get(id, userId);
+  if (!o) return;
+  getDb().prepare("UPDATE limit_orders SET paused = ? WHERE id = ? AND user_id = ?").run(o.paused ? 0 : 1, id, userId);
 }
 
 function addLimitOrder(userId, data) {
   getDb().prepare(
-    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)"
+    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)"
   ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100);
 }
 
@@ -896,7 +905,7 @@ module.exports = {
   toggleCopyChannel, getCopyChannel,
   getSniperConfigs, createSniperConfig, updateSniperConfig, deleteSniperConfig,
   getSniperConfig, pauseAllSnipes, getActiveSnipes, addSnipe, getRealtimeSniperConfig, updateRealtimeSniperConfig, cancelSnipe,
-  getLimitOrders, addLimitOrder, cancelLimitOrder,
+  getLimitOrders, addLimitOrder, cancelLimitOrder, pauseLimitOrder,
   getAutoSellTemplates, getAutoSellTemplate, createAutoSellTemplate,
     updateAutoSellTemplate, deleteAutoSellTemplate,
     getAutoSellRules, addAutoSellRule, deleteAutoSellRule,

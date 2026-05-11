@@ -68,24 +68,25 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
 
   if (isProMode) {
     kb.text(" BUY 🟢", "trade_quickbuy")
-    .text("🔴 SELL ", "trade_positions")
-    .row();
-    kb.text("📂 Positions",    "menu_portfolio")
-      .text("💰 Referrals",    "menu_referrals")
+      .text("🔴 SELL ", "trade_positions")
       .row();
-    kb.text("🎯 Sniper",      "menu_sniper")
-      .text("👥 Copy Trade",  "menu_copy_trade")
+    kb.text("📂 Positions",  "menu_portfolio")
+      .text("💼 Wallets",    "menu_wallets")
+      .row();
+    kb.text("💰 Referrals",  "menu_referrals")
+      .text("⚙️ Settings",  "menu_settings")
+      .row();
+    kb.text("🚀 Launch Token","menu_launch").row();
+    kb.text("🎯 Sniper",     "menu_sniper")
+      .text("👥 Copy Trade", "menu_copy_trade")
       .row();
     kb.text("📋 Limit Orders","menu_limit_orders")
-      .text("⭐ Watchlist",   "menu_watchlist")
+      .text("⭐ Watchlist",  "menu_watchlist")
       .row();
-    kb.text("💼 Wallets",     "menu_wallets")
-      .text("⚙️ Settings",   "menu_settings")
+    kb.text("🚰 Faucet",     "devnet_faucet").row();
+    kb.text("❓ Help",        "menu_help")
+      .text("🔄 Refresh",    "menu_main_refresh")
       .row();
-    kb.text("❓ Help",          "menu_help")
-      .text("🔄 Refresh",       "menu_main_refresh")
-      .row();
-    kb.text("🚰 Faucet",        "devnet_faucet").row();
     kb.text("🌱 Beginner Mode →","mode_set_beginner").row();
   } else {
     kb.text(" BUY 🟢", "trade_quickbuy")
@@ -357,22 +358,16 @@ function buildCopyChannelListMenu(copyChannels) {
 
 function buildCopyChannelSettingsMenu(ch) {
   const kb = new InlineKeyboard();
-  const sl = ch.stop_loss_pct   || 0;
-  const tp = ch.take_profit_pct || 0;
-
-  kb.text(`💰 Buy: ${ch.buy_amount||0.1} SOL`,  `cch_buy_${ch.id}`)
-    .text(`📊 Slip: ${ch.slippage||50}%`,         `cch_slip_${ch.id}`)
+  kb.text(`💰 ${ch.buy_amount||0.1}SOL`, `cch_buy_${ch.id}`)
+    .text(`📊 ${ch.slippage||50}%`, `cch_slip_${ch.id}`)
+    .text(`⛽ ${ch.tip||0.005}SOL`, `cch_tip_${ch.id}`)
     .row();
-  kb.text(`⛽ Gas: ${ch.tip||0.005} SOL`,         `cch_tip_${ch.id}`)
-    .text(`💼 Wallet: W${ch.wallet_id||"Active"}`, `cch_wallet_${ch.id}`)
+  kb.text(ch.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", `cch_mev_${ch.id}`)
+    .text(ch.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cch_autosell_${ch.id}`)
     .row();
-  kb.text(`🛑 SL: ${sl===0?"OFF":sl+"%"}`,        `cch_sl_${ch.id}`)
-    .text(`🎯 TP: ${tp===0?"OFF":tp+"%"}`,         `cch_tp_${ch.id}`)
+  kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_pause_${ch.id}`)
+    .text("🗑 Delete", `copy_channel_delete_${ch.id}`)
     .row();
-  kb.text(`🤖 Auto Sell: ${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}`, `cch_autosell_${ch.id}`).row();
-  kb.text(ch.mev_protection    ? "🛡 MEV: ON ✅"       : "🛡 MEV: OFF ❌",       `cch_mev_${ch.id}`).row();
-  kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_toggle_${ch.id}`).row();
-  kb.text("🗑 Delete", `copy_channel_delete_${ch.id}`).row();
   kb.text("← Back", "copy_channel_menu").row();
   return kb;
 }
@@ -590,15 +585,16 @@ function buildSettingsAutoSellScreen(s, templates) {
   return kb;
 }
     function buildAutoSellListScreen(templates, activeTemplateId, autoSellOn) {
-      const kb = new InlineKeyboard();
-      kb.text(autoSellOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
-      if (!templates?.length) {
+  const kb = new InlineKeyboard();
+  kb.text(autoSellOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
+
+  if (!templates?.length) {
     kb.text("No templates yet", "noop").row();
   } else {
-    templates.forEach((t) => {
+    // Show each template with delete button on same row
+    templates.forEach(t => {
       const isActive = t.id === activeTemplateId;
-      kb.text(`${t.active ? "🟢" : "⏸"} ${t.name}`, `ast_view_${t.id}`)
-        .text(isActive ? "✅ Select" : "◻️ Select", `ast_select_${t.id}`)
+      kb.text(`${isActive ? "✅" : t.active ? "🟢" : "⏸"} ${t.name}`, `ast_select_${t.id}`)
         .text("🗑", `ast_delete_${t.id}`)
         .row();
     });
@@ -620,7 +616,7 @@ function buildAutoBuyScreen(s) {
     .text(s?.auto_buy_mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", "ab_mev")
     .row();
   kb.text(`🔢 Max Buys/Token: ${s?.auto_buy_max||1}`, "ab_max").row();
-  kb.text("← Back", "menu_settings")
+  kb.text("✅ Save & Back", "menu_settings")
   .text("🔄 Refresh", "pset_autobuy_screen")
   .row();
   return kb;
@@ -634,7 +630,7 @@ function buildAutoSellTemplateScreen(t) {
 
   // Active/Rename
   const isNewTemplate = t.name === "New Template";
-  kb.text(isNewTemplate ? "📝 Add Name" : "✏️ Rename", `ast_rename_${id}`).row();
+  kb.text(isNewTemplate ? "📝 Add Name" : `✏️ ${t.name}`, `ast_rename_${id}`).row();
 
   // SL Section
   kb.text("━━━ 🛑 Stop Loss ━━━", "noop").row();
@@ -708,14 +704,14 @@ function buildRankUpBanner(user, rankName, fee) {
 
 const GUIDES = {
   main_beginner: "🌱 *Beginner Mode* — Tap Positions to view tokens. Settings to customise.",
-  main_pro:      "⚡ *Pro Mode* — Full access. Tap any feature to start.",
+  main_pro:      "⚡ *Pro Mode* — Full access.\n\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — open trades\n💼 Wallets — manage wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n🚀 Launch — launch your token\n📋 Limit Orders — set price targets\n⭐ Watchlist — track tokens",
   positions:     "📂 Filter by All / Manual / Channel / Copy Wallet. Tap token name to manage.",
   wallets:       "💼 Tap wallet to switch. Deposit · Withdraw · Import · Export all here.",
   settings_beg:  "⚙️ Set buy/sell amounts, slippage, trade speed and security PIN.",
   settings_pro:  "⚙️ Choose a category to configure your trading settings.",
   copy_trade:    "👥 Copy Wallet = follows a trader. Copy Channel = buys signals from Telegram.",
   copy_wallet:   "💼 When followed wallet buys, you auto-buy. Max 5 wallets.",
-  copy_channel:  "📡 When CA posted in channel, bot auto-buys with your settings.",
+  copy_channel:  "📚 *GUIDE:*\n\n➕ *Add* — add a channel to follow\n🟢 *Active* — tap to view/edit settings\n⏸ *Pause* — stop copying from channel\n▶ *Resume* — start copying again\n🗑 *Delete* — remove permanently\n\n💡 *HOW IT WORKS:*\nAdd any Telegram channel.\nWhen a token CA is posted there,\nbot auto-buys using your settings.",
   sniper:        "🎯 Auto Sniper catches new launches. Migration Sniper targets PumpFun→Raydium.",
   limit_orders:  "📋 Set price targets. Bot auto-buys or sells when price is reached.",
   referrals:     "💰 Share your link. Earn % of every trade your referrals make forever.",

@@ -12,7 +12,13 @@ const config     = require("../../config");
 const mockPrices = new Map();
 
 function getMockPrice(ca) {
-  if (!mockPrices.has(ca)) mockPrices.set(ca, Math.random() * 0.001 + 0.0001);
+  if (!mockPrices.has(ca)) {
+    // Stable price based on CA hash — same price every restart
+    let hash = 0;
+    for (let i = 0; i < ca.length; i++) hash = ((hash << 5) - hash) + ca.charCodeAt(i);
+    const stable = Math.abs(hash % 10000) / 10000000 + 0.000001;
+    mockPrices.set(ca, stable);
+  }
   return mockPrices.get(ca);
 }
 
@@ -313,8 +319,14 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
     const pnlKb = { inline_keyboard: [[
       { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
     ]]};
+    const pnlCaption =
+      `🦅 *HAWKX PNL CARD*\n` +
+      `👤 @${user.username||"Trader"} · ${position.token_name||position.token_ca.slice(0,8)}\n` +
+      `${pnlPct >= 0 ? "📈" : "📉"} *${pnlPct >= 0 ? "+" : ""}${Math.abs(pnlPct).toFixed(1)}%*\n` +
+      `💰 ${pnlPct >= 0 ? "+" : ""}${Math.abs(solReceived - position.sol_invested).toFixed(4)} SOL`;
     if (result && result.type === "photo") {
-      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: pnlKb });
+      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"));
+      await ctx.reply(pnlCaption, { parse_mode: "Markdown", reply_markup: pnlKb });
     } else if (result && result.type === "text") {
       await ctx.reply(result.text, { parse_mode: "Markdown", reply_markup: pnlKb });
     }

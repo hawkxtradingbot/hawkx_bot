@@ -166,7 +166,9 @@ async function notify(userId, eventType, data = {}) {
         break;
     // ── FALLBACK — never show raw JSON ───────────────────────
     default:
-      console.log(`[Notify] Unhandled event: ${eventType}`, data);
+    case "limit_order":
+      msg = data.message || `📌 *Limit Order Executed*`;
+      break;
       return; // Silent — don't send unknown events to user
   }
 
