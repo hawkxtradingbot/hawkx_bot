@@ -666,14 +666,14 @@ function setupRouter(bot) {
   bot.api.setMyCommands([
     { command: "start", description: "🏠 Main Menu" },
     { command: "buy", description: "🟢 Buy a token" },
-    { command: "sell", description: "🔴 Sell a token" },
-    { command: "positions", description: "📂 View positions" },
-    { command: "wallet", description: "💼 Manage wallets" },
+    { command: "sell", description: "🔴 Sell positions" },
+    { command: "positions", description: "📂 Open positions" },
+    { command: "wallets", description: "💼 Manage wallets" },
     { command: "settings", description: "⚙️ Settings" },
     { command: "referrals", description: "👥 Referral program" },
-    { command: "help", description: "❓ Help & guide" },
     { command: "faucet", description: "🚰 Get devnet SOL" },
     { command: "mystats", description: "📊 My stats & rank" },
+    { command: "help", description: "❓ Help & commands" },
   ]).catch(() => {});
 
   bot.command("start", async (ctx) => {
@@ -711,7 +711,7 @@ function setupRouter(bot) {
     return getPortfolio(ctx, user);
   });
 
-  bot.command("wallet", async (ctx) => {
+  bot.command("wallets", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
     await ctx.reply("💼 Wallets", { reply_markup: { inline_keyboard: [[{ text: "💼 My Wallets", callback_data: "menu_wallets" }]] }});
@@ -730,8 +730,91 @@ function setupRouter(bot) {
     await ctx.reply("👥 Referrals", { reply_markup: { inline_keyboard: [[{ text: "👥 My Referrals", callback_data: "menu_referrals" }]] }});
   });
 
+
+  bot.command("faucet", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.callbackQuery ? null : (ctx.callbackQuery = {});
+    const { handleFaucet } = require("./faucet");
+    return handleFaucet(ctx, user);
+  });
+
+  bot.command("mystats", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("📊 My Stats", { reply_markup: { inline_keyboard: [[{ text: "📊 View My Stats", callback_data: "menu_stats" }]] }});
+  });
+
   bot.command("help", async (ctx) => {
-    await ctx.reply("❓ *HawkX Help*\n\n/start — Main Menu\n/buy — Buy a token\n/sell — Sell positions\n/positions — View open trades\n/wallet — Manage wallets\n/settings — Configure bot\n/referrals — Earn rewards\n/faucet — Get devnet SOL\n/mystats — Your rank & stats", { parse_mode: "Markdown" });
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply(
+      `❓ *HawkX — All Commands*\n\n` +
+      `━━━ 🌱 Basic ━━━\n` +
+      `/start — Main Menu\n` +
+      `/buy — Buy a token\n` +
+      `/sell — Sell positions\n` +
+      `/positions — Open positions\n` +
+      `/wallets — Manage wallets\n` +
+      `/settings — Configure bot\n` +
+      `/faucet — Get devnet SOL\n` +
+      `/mystats — Your rank & stats\n` +
+      `/referrals — Referral program\n\n` +
+      `━━━ ⚡ Pro ━━━\n` +
+      `/sniper — Token Sniper\n` +
+      `/copytrade — Copy Trade\n` +
+      `/launch — Launch Token\n` +
+      `/limitorders — Limit Orders\n` +
+      `/watchlist — Watchlist\n` +
+      `/autobuy — Auto Buy\n` +
+      `/autosell — Auto Sell\n\n` +
+      `💡 Paste any CA to trade instantly!`,
+      { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "menu_main" }]] }}
+    );
+  });
+
+  bot.command("sniper", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("🎯 Sniper", { reply_markup: { inline_keyboard: [[{ text: "🎯 Open Sniper", callback_data: "menu_sniper" }]] }});
+  });
+
+  bot.command("copytrade", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("👥 Copy Trade", { reply_markup: { inline_keyboard: [[{ text: "👥 Copy Trade", callback_data: "menu_copy" }]] }});
+  });
+
+  bot.command("launch", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("🚀 Launch Token", { reply_markup: { inline_keyboard: [[{ text: "🚀 Launch Token", callback_data: "menu_launch" }]] }});
+  });
+
+  bot.command("limitorders", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    return showLimitOrdersScreen(ctx, ctx.from.id);
+  });
+
+  bot.command("watchlist", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("⭐ Watchlist", { reply_markup: { inline_keyboard: [[{ text: "⭐ My Watchlist", callback_data: "menu_watchlist" }]] }});
+  });
+
+  bot.command("autobuy", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    const { handleSettingCallback } = require("./settings");
+    return handleSettingCallback(ctx, user, "pset_autobuy_screen");
+  });
+
+  bot.command("autosell", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    const { handleSettingCallback } = require("./settings");
+    return handleSettingCallback(ctx, user, "pset_autosell_screen");
   });
 
   bot.command("admin", async (ctx) => {
