@@ -5024,7 +5024,7 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
               { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
               { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
             ],
-            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }],
+            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
             [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
           ],
         },
