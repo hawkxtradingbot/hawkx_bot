@@ -662,6 +662,20 @@ async function showLaunchScreen(ctx, userId) {
 }
 
 function setupRouter(bot) {
+  // Register commands with Telegram
+  bot.api.setMyCommands([
+    { command: "start", description: "🏠 Main Menu" },
+    { command: "buy", description: "🟢 Buy a token" },
+    { command: "sell", description: "🔴 Sell a token" },
+    { command: "positions", description: "📂 View positions" },
+    { command: "wallet", description: "💼 Manage wallets" },
+    { command: "settings", description: "⚙️ Settings" },
+    { command: "referrals", description: "👥 Referral program" },
+    { command: "help", description: "❓ Help & guide" },
+    { command: "faucet", description: "🚰 Get devnet SOL" },
+    { command: "mystats", description: "📊 My stats & rank" },
+  ]).catch(() => {});
+
   bot.command("start", async (ctx) => {
     const param = ctx.match || "";
     if (param.startsWith("pnlcard_")) {
@@ -675,6 +689,51 @@ function setupRouter(bot) {
     }
     return handleStart(ctx, bot);
   });
+  bot.command("buy", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    ctx.callbackQuery = { message: ctx.message };
+    db.setSysConfig(`pending_${ctx.from.id}`, "buy_paste_ca_first");
+    const msg = await ctx.reply("🟢 *Buy Token*\n\nPaste the token CA:", { parse_mode: "Markdown" });
+    db.setSysConfig(`prompt_msg_${ctx.from.id}`, String(msg.message_id));
+  });
+
+  bot.command("sell", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("🔴 *Sell Token*\n\nGo to Positions to sell:", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "📂 Positions", callback_data: "menu_portfolio" }]] }});
+  });
+
+  bot.command("positions", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    const { getPortfolio } = require("./portfolio");
+    return getPortfolio(ctx, user);
+  });
+
+  bot.command("wallet", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("💼 Wallets", { reply_markup: { inline_keyboard: [[{ text: "💼 My Wallets", callback_data: "menu_wallets" }]] }});
+  });
+
+  bot.command("settings", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    const { showSettings } = require("./settings");
+    return showSettings(ctx, user);
+  });
+
+  bot.command("referrals", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    await ctx.reply("👥 Referrals", { reply_markup: { inline_keyboard: [[{ text: "👥 My Referrals", callback_data: "menu_referrals" }]] }});
+  });
+
+  bot.command("help", async (ctx) => {
+    await ctx.reply("❓ *HawkX Help*\n\n/start — Main Menu\n/buy — Buy a token\n/sell — Sell positions\n/positions — View open trades\n/wallet — Manage wallets\n/settings — Configure bot\n/referrals — Earn rewards\n/faucet — Get devnet SOL\n/mystats — Your rank & stats", { parse_mode: "Markdown" });
+  });
+
   bot.command("admin", async (ctx) => {
     if (!isAdmin(ctx.from.id)) return;
     await showAdminPanel(ctx);
@@ -900,9 +959,36 @@ function setupRouter(bot) {
 
     // FIX #3 — trade_cancel (Cancel button)
     if (data === "trade_cancel") {
-      await ctx.answerCallbackQuery("Cancelled.");
+      await ctx.answerCallbackQuery("❌ Cancelled.");
       db.setSysConfig(`pending_ca_${userId}`, "");
       db.setSysConfig(`pending_${userId}`, "");
+      try { await ctx.deleteMessage(); } catch {}
+      return;
+    }
+    
+    if (data === "trade_refresh_ca") {
+      await ctx.answerCallbackQuery("🔄 Refreshed!");
+      const ca2 = db.getSysConfig(`pending_ca_${userId}`) || "";
+      if (!ca2) return;
+      const settings2 = db.getSettings(userId) || {};
+      const b1 = settings2.buy_amt_1 || 0.1;
+      const b2 = settings2.buy_amt_2 || 0.5;
+      const b3 = settings2.buy_amt_3 || 1.0;
+      const tInfo2 = await getTokenInfo(ca2);
+      const dexUrl2 = `https://dexscreener.com/solana/${ca2}`;
+      const tName2 = tInfo2.name ? `<a href="${dexUrl2}"><b>${tInfo2.name}</b></a>` : `<a href="${dexUrl2}"><b>${ca2.slice(0,8)}...</b></a>`;
+      let info2 = `🔍 ${tName2}\n\n<code>${ca2}</code>\n\n`;
+      if (tInfo2.price) info2 += `💲 Price: ${formatPrice(tInfo2.price)}\n`;
+      if (tInfo2.mcap) info2 += `📊 MCap: ${formatNum(tInfo2.mcap)}\n`;
+      if (tInfo2.liquidity) info2 += `💧 Liq: ${formatNum(tInfo2.liquidity)}\n`;
+      if (tInfo2.volume24h) info2 += `📈 Vol 24h: ${formatNum(tInfo2.volume24h)}\n`;
+      if (tInfo2.holders) info2 += `👥 Holders: ${tInfo2.holders.toLocaleString()}\n`;
+      info2 += `🛡 Safety: ✅ Checking...\n\nSelect amount to buy:`;
+      try { await ctx.editMessageText(info2, { parse_mode: "HTML", reply_markup: { inline_keyboard: [
+        [{ text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` }, { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` }, { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` }],
+        [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
+        [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
+      ]}}); } catch {}
       return;
     }
 
@@ -4282,6 +4368,9 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
         );
         return;
       }
+      // Check auto buy first
+      const autoBought = await handleAutoBuy(ctx, user, text);
+      if (autoBought) return;
       const settings = db.getSettings(userId) || {};
       const b1 = settings.buy_amt_1 || 0.1;
       const b2 = settings.buy_amt_2 || 0.5;
@@ -4312,7 +4401,7 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
               { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
               { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
             ],
-            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }],
+            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
             [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
           ],
         },
@@ -4902,6 +4991,9 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
         await ctx.reply("🔴 Trading paused.");
         return;
       }
+      // Check auto buy first!
+      const autoBought = await handleAutoBuy(ctx, user, text);
+      if (autoBought) return;
       const settings = db.getSettings(userId) || {};
       const b1 = settings.buy_amt_1 || 0.1;
       const b2 = settings.buy_amt_2 || 0.5;
@@ -4941,6 +5033,11 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
     }
 
     if (!pending) {
+      // Check if valid Solana CA
+      if (isSolanaAddress(text)) {
+          const autoBought = await handleAutoBuy(ctx, user, text);
+          if (autoBought) return;
+      }
       const rt = db.getRealtimeSniperConfig(userId);
       if ((rt?.sniper_rt_enabled || 0) === 1) {
         const buyDefaults = {

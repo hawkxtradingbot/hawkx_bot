@@ -108,7 +108,7 @@ function getEffectiveFeeRate(user) {
 
 function isAutoBuyEnabled(userId) {
   const s = db.getSettings(userId);
-  return (s?.auto_buy || 0) === 1;
+  return (s?.auto_buy_enabled || s?.auto_buy || 0) === 1;
 }
 
 async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
@@ -117,6 +117,8 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
     return null;
   }
 
+  // Always get fresh user for correct wallet
+  user = db.getUser(user.user_id) || user;
   if (!user.active_wallet_id) {
     await ctx.reply("❌ No active wallet. Go to Wallets to add one first.");
     return null;
@@ -337,6 +339,8 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
 // Only fires when user explicitly has auto_buy ON
 async function handleAutoBuy(ctx, user, ca) {
   if (!isAutoBuyEnabled(user.user_id)) return false;
+  // Get fresh user to ensure correct active wallet
+  user = db.getUser(user.user_id) || user;
   const settings  = db.getSettings(user.user_id) || {};
   const solAmount = settings.max_buy_sol || 0.1;
   await ctx.reply(
