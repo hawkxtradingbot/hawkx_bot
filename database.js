@@ -757,10 +757,11 @@ function addLimitOrder(userId, data) {
   getDb().prepare(
     "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)"
   ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100);
+  // Ensure active=1 for all new orders
 }
 
 function cancelLimitOrder(userId, id) {
-  getDb().prepare("UPDATE limit_orders SET active = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+  getDb().prepare("UPDATE limit_orders SET active = -1 WHERE id = ? AND user_id = ?").run(id, userId);
 }
 // ── AUTO SELL TEMPLATES ───────────────────────────────────────
 function getAutoSellTemplates(userId) {

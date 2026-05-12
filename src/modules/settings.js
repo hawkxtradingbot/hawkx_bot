@@ -89,6 +89,13 @@ async function refreshSettings(ctx, user) {
         db.deleteAutoSellTemplate(user.user_id, unsavedId);
         db.setSysConfig(`ast_unsaved_${user.user_id}`, "");
       }
+      // Return to source screen
+      const source = db.getSysConfig(`ast_source_${user.user_id}`) || "auto_sell";
+      db.setSysConfig(`ast_source_${user.user_id}`, "");
+      if (source !== "auto_sell") {
+        await ctx.answerCallbackQuery();
+        return ctx.editMessageText("✅ Returned", { reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: source }]] } }).catch(() => ctx.reply("← Use back button to return."));
+      }
       const { buildAutoSellListScreen } = require("./keyboards");
       const s = db.getSettings(user.user_id);
       const templates = db.getAutoSellTemplates(user.user_id);
@@ -118,6 +125,8 @@ async function refreshSettings(ctx, user) {
       await ctx.answerCallbackQuery();
       const newId = db.createAutoSellTemplate(user.user_id, "New Template");
       db.setSysConfig(`ast_unsaved_${user.user_id}`, String(newId));
+      const sourceData = ctx.callbackQuery?.data || "auto_sell";
+      db.setSysConfig(`ast_source_${user.user_id}`, "pset_autosell_manual");
       const t = db.getAutoSellTemplate(user.user_id, newId);
       const { buildAutoSellTemplateScreen } = require("./keyboards");
       const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
@@ -574,6 +583,7 @@ async function refreshSettings(ctx, user) {
 
       if (action.startsWith("ast_save_") || action?.startsWith("ast_save_")) {
     db.setSysConfig(`ast_unsaved_${user.user_id}`, "");
+    db.setSysConfig(`ast_source_${user.user_id}`, "");
     await ctx.answerCallbackQuery("✅ Template saved!");
     const { buildAutoSellListScreen } = require("./keyboards");
     const s = db.getSettings(user.user_id);

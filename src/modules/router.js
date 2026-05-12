@@ -485,76 +485,71 @@ async function buildLaunchMsg(userId, expanded) {
   return { msg, kb };
 }
 
-async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded) {
+async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgId) {
   const { getMockPrice } = require("./executor");
   const tokenOrders = db.getLimitOrders(userId, ca);
   const pos2 = db.getAllOpenPositions().find(p => p.user_id === userId && p.token_ca === ca);
   const name = pos2?.token_name || tokenOrders[0]?.token_name || ca.slice(0,8);
   db.setSysConfig(`lo_pending_ca_${userId}`, ca);
   db.setSysConfig(`lo_pending_name_${userId}`, name);
-
-  // Get wallet info
   const user2 = db.getUser(userId);
   const wallets2 = db.getWallets(userId) || [];
   const loWalletId = parseInt(db.getSysConfig(`lo_token_wallet_${userId}_${ca}`) || user2.active_wallet_id);
   const selWal2 = wallets2.find(w => w.wallet_id === loWalletId) || wallets2[0];
   const walletNum2 = wallets2.indexOf(selWal2) + 1;
-
   let priceInfo = "";
-  try {
-    const tInfo = await getTokenInfo(ca);
-    if (tInfo?.price) priceInfo = `💰 *${formatPrice(tInfo.price)}*`;
-    else { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; }
-  } catch { try { const { getMockPrice: gmp } = require("./executor"); priceInfo = `💰 *${gmp(ca).toFixed(8)}* [DEVNET]`; } catch {} }
-
-  const msg = `📋 *Limit Orders*\n` +
-    `🟢 Buy = triggers when price drops\n` +
-    `🔴 Sell = triggers when price rises\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `📊 *${name}*\n` +
-    `${priceInfo}\n` +
-    `💼 Wallet: W${walletNum2}\n\n` +
-    (tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : `No orders yet.`);
-
+  try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
+  const msg = `📋 *${name} — Limit Orders*\n${priceInfo}\n\n━━━ 📚 GUIDE ━━━\n🟢 Active | ⏸ Paused | 🗑 Delete\nClick order = pause/resume\n━━━━━━━━━━━━━━━━━━━\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
-    const icon = o.order_type === "buy" ? "🟢" : "🔴";
-    const si = o.paused ? "⏸" : "🟢";
+    const status = o.paused ? "⏸" : "🟢";
     const det = o.order_type === "buy"
-      ? `${icon} Buy ${o.sol_amount}SOL@${parseFloat(o.target_price||0).toFixed(4)} ${si}`
-      : `${icon} Sell ${o.sell_pct||100}%@${parseFloat(o.target_price||0).toFixed(4)} ${si}`;
-    kb.inline_keyboard.push([{ text: det, callback_data: "noop" }]);
+      ? `${status} Buy ${o.sol_amount||0.1}SOL @ $${parseFloat(o.target_price||0).toFixed(6)}`
+      : `${status} Sell ${o.sell_pct||100}% @ $${parseFloat(o.target_price||0).toFixed(6)}`;
     kb.inline_keyboard.push([
-      { text: o.paused ? "▶️ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
-      { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },
+      { text: det, callback_data: `lo_pause_${o.id}` },
+      { text: "🗑", callback_data: `lo_del_${o.id}` },
     ]);
   });
-  // Wallet selector
   if (walletExpanded) {
     for (let i = 0; i < wallets2.length; i += 4) {
       kb.inline_keyboard.push(wallets2.slice(i, i+4).map((w, idx) => {
         const num = i+idx+1;
         const isSel = w.wallet_id === loWalletId;
-        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_tok_wallet_${ca}_${w.wallet_id}` };
+        const caKey = ca.slice(0,8);
+        db.setSysConfig(`lo_ca_map_${userId}_${caKey}`, ca);
+        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_tok_wallet_${caKey}_${w.wallet_id}` };
       }));
     }
-    kb.inline_keyboard.push([{ text: "▲ Close", callback_data: `lo_token_ca_${ca}` }]);
+    const caKeyClose = ca.slice(0,8);
+    db.setSysConfig(`lo_ca_map_${userId}_${caKeyClose}`, ca);
+    kb.inline_keyboard.push([{ text: "▲ Close", callback_data: `lo_token_ca_${caKeyClose}` }]);
   } else {
-    kb.inline_keyboard.push([{ text: `💼 W${walletNum2} — Change Wallet`, callback_data: `lo_tok_wallet_expand_${ca}` }]);
+    const caKeyExp = ca.slice(0,8);
+    db.setSysConfig(`lo_ca_map_${userId}_${caKeyExp}`, ca);
+    kb.inline_keyboard.push([{ text: `💼 W${walletNum2} ▼`, callback_data: `lo_tok_wallet_expand_${caKeyExp}` }]);
   }
   kb.inline_keyboard.push([
     { text: "➕ Add Buy", callback_data: "lo_add_buy" },
     { text: "➕ Add Sell", callback_data: "lo_add_sell" },
   ]);
-  kb.inline_keyboard.push([{ text: "← Back", callback_data: "limit_orders_refresh" }]);
+  kb.inline_keyboard.push([
+    { text: "← Back", callback_data: "limit_orders_refresh" },
+    { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca.slice(0,8)}` },
+  ]);
+  const curMsgId = forceMsgId || ctx.callbackQuery?.message?.message_id;
+  if (curMsgId) db.setSysConfig(`lo_msg_${userId}`, String(curMsgId));
   const loMsgId = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
-  const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
+  const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id || ctx.message?.chat?.id;
   try {
     if (loMsgId && chatId) await ctx.api.editMessageText(chatId, loMsgId, msg, { parse_mode: "Markdown", reply_markup: kb });
-    else { const msgId = ctx.callbackQuery?.message?.message_id; if (msgId) db.setSysConfig(`lo_msg_${userId}`, String(msgId)); await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
-  } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); db.setSysConfig(`lo_msg_${userId}`, String(s.message_id)); }
+    else throw new Error("no msg");
+  } catch(e) {
+    if (e?.description?.includes("not modified")) return;
+    const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+    db.setSysConfig(`lo_msg_${userId}`, String(s.message_id));
+  }
 }
-
 async function showLimitOrdersScreen(ctx, userId) {
   const orders = db.getLimitOrders(userId);
   const wallets = db.getWallets(userId) || [];
@@ -562,21 +557,9 @@ async function showLimitOrdersScreen(ctx, userId) {
   const activeWallet = wallets.find(w => w.wallet_id === user.active_wallet_id) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
   const balance = activeWallet ? (activeWallet.balance || 0) : 0;
-
-  // Get all positions for active wallet
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === user.active_wallet_id);
-
-  let msg = `📋 *Limit Orders*\n\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
-    `🟢 *Limit Buy* = buy when price drops\n` +
-    `🔴 *Limit Sell* = sell when price rises\n` +
-    `⏸ Pause = stop without deleting\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `*Active Orders: ${orders.length}*`;
-
+  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy = triggers when price drops\n🔴 Sell = triggers when price rises\n💡 Click token to manage orders\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(orders.map(o=>[o.token_ca,1]))}).length}*`;
   const kb = { inline_keyboard: [] };
-
-  // Wallet selector
   const loWalletExpanded = db.getSysConfig(`lo_wallet_expanded_${userId}`) === "1";
   if (loWalletExpanded) {
     for (let i = 0; i < wallets.length; i += 4) {
@@ -590,35 +573,23 @@ async function showLimitOrdersScreen(ctx, userId) {
   } else {
     kb.inline_keyboard.push([{ text: `💼 W${walletNum} — ${balance.toFixed(3)} SOL ▼`, callback_data: "lo_wallet_expand" }]);
   }
-
-  // Group orders by token
   const byToken = {};
-  orders.forEach(o => {
-    if (!byToken[o.token_ca]) byToken[o.token_ca] = [];
-    byToken[o.token_ca].push(o);
-  });
-
-  // Show all wallet positions as token buttons 2 per row with order status icon
+  orders.forEach(o => { if (!byToken[o.token_ca]) byToken[o.token_ca] = []; byToken[o.token_ca].push(o); });
   const tokenMap = {};
   allPos.forEach(p => { tokenMap[p.token_ca] = p; });
-
-  // Also include tokens with orders even if no open position
   orders.forEach(o => { if (!tokenMap[o.token_ca]) tokenMap[o.token_ca] = { token_ca: o.token_ca, token_name: o.token_name }; });
-
   const tokenList = Object.values(tokenMap);
-  for (let i = 0; i < tokenList.length; i += 2) {
-    kb.inline_keyboard.push(
-      tokenList.slice(i, i+2).map(p => {
-        const tOrders = byToken[p.token_ca] || [];
-        const hasActive = tOrders.some(o => !o.paused);
-        const hasPaused = tOrders.some(o => o.paused);
-        const icon = tOrders.length === 0 ? "" : hasActive ? " 🟢" : " ⏸";
-        const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
-        return { text: `📊 ${name}${icon}`, callback_data: `lo_token_ca_${p.token_ca}` };
-      })
-    );
+  for (let i = 0; i < tokenList.length; i += 3) {
+    kb.inline_keyboard.push(tokenList.slice(i, i+3).map(p => {
+      const tOrders = byToken[p.token_ca] || [];
+      const allPaused = tOrders.length > 0 && tOrders.every(o => o.paused);
+      const icon = tOrders.length === 0 ? "" : allPaused ? " ⏸" : " 🟢";
+      const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
+      const caKey2 = p.token_ca.slice(0,8);
+      db.setSysConfig(`lo_ca_map_${userId}_${caKey2}`, p.token_ca);
+      return { text: `📊 ${name}${icon}`, callback_data: `lo_token_ca_${caKey2}` };
+    }));
   }
-
   kb.inline_keyboard.push([
     { text: "➕ New Buy", callback_data: "lo_new_buy" },
     { text: "➕ New Sell", callback_data: "lo_new_sell" }
@@ -627,23 +598,19 @@ async function showLimitOrdersScreen(ctx, userId) {
     { text: "← Back", callback_data: "menu_main" },
     { text: "🔄 Refresh", callback_data: "limit_orders_refresh" }
   ]);
-
+  const curMsgId = ctx.callbackQuery?.message?.message_id;
+  if (curMsgId) db.setSysConfig(`lo_msg_${userId}`, String(curMsgId));
   const loMsgId = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
-  const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
+  const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id || ctx.message?.chat?.id;
   try {
     if (loMsgId && chatId) await ctx.api.editMessageText(chatId, loMsgId, msg, { parse_mode: "Markdown", reply_markup: kb });
-    else {
-      await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb });
-      const msgId2 = ctx.callbackQuery?.message?.message_id;
-      if (msgId2) db.setSysConfig(`lo_msg_${userId}`, String(msgId2));
-    }
-  } catch (e) {
+    else throw new Error("no msg");
+  } catch(e) {
     if (e?.description?.includes("not modified")) return;
     const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
     db.setSysConfig(`lo_msg_${userId}`, String(s.message_id));
   }
 }
-
 async function showLaunchScreen(ctx, userId) {
   const { buildLaunchPlatformScreen } = require("./launch");
   const launchGuideMsg2 = 
@@ -3537,8 +3504,10 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       const id = parseInt(data.replace("lo_pause_", ""));
       db.pauseLimitOrder(userId, id);
       await ctx.answerCallbackQuery("✅ Updated!");
-      const returnCa2 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
-      if (returnCa2) return buildTokenOrdersScreen(ctx, userId, returnCa2);
+      const curMsg = ctx.callbackQuery?.message?.message_id;
+      if (curMsg) db.setSysConfig(`lo_msg_${userId}`, String(curMsg));
+      const returnCa = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      if (returnCa) return buildTokenOrdersScreen(ctx, userId, returnCa);
       return showLimitOrdersScreen(ctx, userId);
     }
 
@@ -3546,8 +3515,10 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       const id = parseInt(data.replace("lo_del_", ""));
       db.cancelLimitOrder(userId, id);
       await ctx.answerCallbackQuery("🗑 Deleted!");
-      const returnCa3 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
-      if (returnCa3) return buildTokenOrdersScreen(ctx, userId, returnCa3);
+      const curMsg2 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg2) db.setSysConfig(`lo_msg_${userId}`, String(curMsg2));
+      const returnCa2 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      if (returnCa2) return buildTokenOrdersScreen(ctx, userId, returnCa2);
       return showLimitOrdersScreen(ctx, userId);
     }
 
@@ -3556,99 +3527,115 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       const pos = db.getPosition(posId, userId);
       if (!pos) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
-      const orders = db.getLimitOrders(userId, pos.token_ca);
-      const { simulatePriceMovement } = require("./executor");
-      const price = simulatePriceMovement(pos.token_ca);
-      let msg = `📋 *Limit Orders — ${pos.token_name||pos.token_ca.slice(0,8)}*\n\n` +
-        `💰 Current Price: *${price.toFixed(8)}*\n\n`;
-      const kb2 = { inline_keyboard: [] };
-      if (orders.length > 0) {
-        msg += `*Active Orders:*\n`;
-        orders.forEach(o => {
-          const icon = o.order_type === "buy" ? "🟢" : "🔴";
-          msg += `${icon} ${o.order_type === "buy" ? `Buy ${o.sol_amount}SOL @ ${o.target_price}` : `Sell ${o.sell_pct||100}% @ ${o.target_price}`} ${o.paused?"⏸":""} \n`;
-          kb2.inline_keyboard.push([
-            { text: o.paused ? "▶️ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
-            { text: "🗑 Delete", callback_data: `lo_delete_${o.id}` },
-          ]);
-        });
-      } else {
-        msg += `No orders yet for this token.`;
-      }
+      const curMsg3 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg3) db.setSysConfig(`lo_msg_${userId}`, String(curMsg3));
       db.setSysConfig(`lo_pending_ca_${userId}`, pos.token_ca);
-      db.setSysConfig(`lo_pending_name_${userId}`, pos.token_name||pos.token_ca.slice(0,8));
-      kb2.inline_keyboard.push([
-        { text: "➕ Add Limit Buy", callback_data: "lo_add_buy" },
-        { text: "➕ Add Limit Sell", callback_data: "lo_add_sell" },
-      ]);
-      kb2.inline_keyboard.push([{ text: "← Back", callback_data: "limit_orders_refresh" }]);
-      const loMsgId2 = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
-      try {
-        if (loMsgId2) await ctx.api.editMessageText(ctx.chat.id, loMsgId2, msg, { parse_mode: "Markdown", reply_markup: kb2 });
-        else { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb2 }); }
-      } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb2 }); db.setSysConfig(`lo_msg_${userId}`, String(s.message_id)); }
-      return;
+      db.setSysConfig(`lo_pending_name_${userId}`, pos.token_name || pos.token_ca.slice(0,8));
+      return buildTokenOrdersScreen(ctx, userId, pos.token_ca, false);
     }
 
     if (data.startsWith("lo_token_ca_")) {
       await ctx.answerCallbackQuery();
-      const ca = data.replace("lo_token_ca_", "");
-      const msgId = ctx.callbackQuery?.message?.message_id;
-      if (msgId) db.setSysConfig(`lo_msg_${userId}`, String(msgId));
+      const caKey3 = data.replace("lo_token_ca_", "");
+      const ca = db.getSysConfig(`lo_ca_map_${userId}_${caKey3}`) || caKey3;
+      const curMsg4 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg4) db.setSysConfig(`lo_msg_${userId}`, String(curMsg4));
       return buildTokenOrdersScreen(ctx, userId, ca);
     }
 
     if (data === "lo_wallet_expand") {
-      await ctx.answerCallbackQuery();
       db.setSysConfig(`lo_wallet_expanded_${userId}`, "1");
-      const msgId = ctx.callbackQuery?.message?.message_id;
-      if (msgId) db.setSysConfig(`lo_msg_${userId}`, String(msgId));
+      await ctx.answerCallbackQuery();
+      const curMsg5 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg5) db.setSysConfig(`lo_msg_${userId}`, String(curMsg5));
       return showLimitOrdersScreen(ctx, userId);
     }
 
     if (data === "lo_wallet_collapse") {
-      await ctx.answerCallbackQuery();
       db.setSysConfig(`lo_wallet_expanded_${userId}`, "0");
+      await ctx.answerCallbackQuery();
+      const curMsg6 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg6) db.setSysConfig(`lo_msg_${userId}`, String(curMsg6));
       return showLimitOrdersScreen(ctx, userId);
     }
 
     if (data.startsWith("lo_setwallet_")) {
       const wId = parseInt(data.replace("lo_setwallet_", ""));
-      db.getDb().prepare("UPDATE users SET active_wallet_id = ? WHERE user_id = ?").run(wId, userId);
+      db.updateUser(userId, { active_wallet_id: wId });
       db.setSysConfig(`lo_wallet_expanded_${userId}`, "0");
-      await ctx.answerCallbackQuery("✅ Wallet switched!");
+      await ctx.answerCallbackQuery("✅ Wallet set!");
+      const curMsg7 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg7) db.setSysConfig(`lo_msg_${userId}`, String(curMsg7));
       return showLimitOrdersScreen(ctx, userId);
     }
 
     if (data.startsWith("lo_tok_wallet_expand_")) {
       await ctx.answerCallbackQuery();
-      const ca = data.replace("lo_tok_wallet_expand_", "");
-      const msgId = ctx.callbackQuery?.message?.message_id;
-      if (msgId) db.setSysConfig(`lo_msg_${userId}`, String(msgId));
+      const caKeyExp = data.replace("lo_tok_wallet_expand_", "");
+      const ca = db.getSysConfig(`lo_ca_map_${userId}_${caKeyExp}`) || caKeyExp;
+      const curMsg8 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg8) db.setSysConfig(`lo_msg_${userId}`, String(curMsg8));
       return buildTokenOrdersScreen(ctx, userId, ca, true);
     }
 
-    if (data.startsWith("lo_tok_wallet_")) {
-      const parts = data.replace("lo_tok_wallet_", "").split("_");
-      const wId = parseInt(parts[parts.length-1]);
-      const ca = parts.slice(0,-1).join("_");
-      db.setSysConfig(`lo_token_wallet_${userId}_${ca}`, String(wId));
+    if (data.startsWith("lo_tok_wallet_") && !data.startsWith("lo_tok_wallet_expand_")) {
       await ctx.answerCallbackQuery("✅ Wallet set!");
-      return buildTokenOrdersScreen(ctx, userId, ca, false);
+      const parts = data.replace("lo_tok_wallet_", "").split("_");
+      const caKey4 = parts[0];
+      const wId2 = parseInt(parts[1]);
+      const ca4 = db.getSysConfig(`lo_ca_map_${userId}_${caKey4}`) || caKey4;
+      db.setSysConfig(`lo_token_wallet_${userId}_${ca4}`, String(wId2));
+      const curMsg9 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg9) db.setSysConfig(`lo_msg_${userId}`, String(curMsg9));
+      return buildTokenOrdersScreen(ctx, userId, ca4, false);
     }
 
     if (data === "lo_new_buy") {
       await ctx.answerCallbackQuery();
+      const existingCa = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
       db.setSysConfig(`lo_type_${userId}`, "buy");
-      const m = await ctx.reply("🟢 New Limit Buy\n\nPaste token CA (Solana address):");
-      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-      db.setSysConfig(`pending_${userId}`, "lo_paste_ca");
+      if (existingCa) {
+        const { getMockPrice: gmp3 } = require("./executor");
+        const mp3 = gmp3(existingCa);
+        const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3.toFixed(8)}\n\nEnter target price:`, { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "lo_set_price");
+      } else {
+        const m = await ctx.reply("🟢 *New Limit Buy*\n\nPaste token CA:", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "lo_paste_ca");
+      }
       return;
     }
 
-    if (data === "lo_new_sell") {
+    if (data === "lo_add_buy") {
       await ctx.answerCallbackQuery();
-      // Show position selector for sell
+      const existingCa = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      db.setSysConfig(`lo_type_${userId}`, "buy");
+      const { getMockPrice: gmp3b } = require("./executor");
+      const mp3b = gmp3b(existingCa);
+      const curMsg10 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg10) db.setSysConfig(`lo_msg_${userId}`, String(curMsg10));
+      const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3b.toFixed(8)}\n\nEnter target price:`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "lo_set_price");
+      return;
+    }
+
+    if (data === "lo_new_sell" || data === "lo_add_sell") {
+      await ctx.answerCallbackQuery();
+      const existingCa2 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      db.setSysConfig(`lo_type_${userId}`, "sell");
+      const curMsg11 = ctx.callbackQuery?.message?.message_id;
+      if (curMsg11) db.setSysConfig(`lo_msg_${userId}`, String(curMsg11));
+      if (existingCa2 && data === "lo_add_sell") {
+        const { getMockPrice: gmp4 } = require("./executor");
+        const mp4 = gmp4(existingCa2);
+        const m2 = await ctx.reply(`🔴 *Add Limit Sell*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa2.slice(0,8)}\nPrice: ${mp4.toFixed(8)}\n\nEnter sell % (e.g. 50):`, { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(m2.message_id));
+        db.setSysConfig(`pending_${userId}`, "lo_set_sell_pct_direct");
+        return;
+      }
       const positions2 = db.getAllOpenPositions().filter(p => p.user_id === userId);
       if (!positions2.length) { await ctx.answerCallbackQuery("No open positions!"); return; }
       const kb3 = { inline_keyboard: [
@@ -3663,7 +3650,6 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       try { await ctx.editMessageText("🔴 *New Limit Sell*\n\nSelect position:", { parse_mode: "Markdown", reply_markup: kb3 }); } catch {}
       return;
     }
-
 
     if (data === "menu_limit_orders" || data === "limit_orders_refresh") {
       await ctx.answerCallbackQuery();
@@ -4363,6 +4349,57 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       return;
     }
 
+    if (pending === "lo_paste_ca") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (text.length < 32 || text.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(text)) {
+        await ctx.reply("❌ Invalid CA."); return;
+      }
+      const loType = db.getSysConfig(`lo_type_${userId}`) || "buy";
+      const tInfo = await getTokenInfo(text);
+      const tName = tInfo?.name || text.slice(0,8);
+      db.setSysConfig(`lo_pending_ca_${userId}`, text);
+      db.setSysConfig(`lo_pending_name_${userId}`, tName);
+      const { getMockPrice: gmp2 } = require("./executor");
+      const mockP = gmp2(text);
+      const priceStr = tInfo?.price ? `${formatPrice(tInfo.price)}` : `${mockP.toFixed(8)} [DEVNET]`;
+      const m = await ctx.reply(`${loType === "buy" ? "🟢 Limit Buy" : "🔴 Limit Sell"} — *${tName}*\n\n💰 Price: ${priceStr}\n\nEnter target price:`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "lo_set_price");
+      return;
+    }
+
+    if (pending === "lo_set_sell_pct_direct") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const pct2 = parseFloat(text);
+      if (isNaN(pct2) || pct2 <= 0 || pct2 > 100) { await ctx.reply("❌ Enter 1-100."); return; }
+      db.setSysConfig(`lo_sell_pct_direct_${userId}`, String(pct2));
+      const ca5 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      const { getMockPrice: gmp5 } = require("./executor");
+      const mp5 = gmp5(ca5);
+      const m5 = await ctx.reply(`🔴 *Limit Sell ${pct2}%*\n\nPrice: ${mp5.toFixed(8)}\n\nEnter target price:`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m5.message_id));
+      db.setSysConfig(`pending_${userId}`, "lo_set_price_from_sell");
+      return;
+    }
+
+    if (pending === "lo_set_price_from_sell") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const price5 = parseFloat(text);
+      if (isNaN(price5) || price5 <= 0) { await ctx.reply("❌ Invalid price."); return; }
+      const ca6 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      const name6 = db.getSysConfig(`lo_pending_name_${userId}`) || "Token";
+      const pct6 = parseFloat(db.getSysConfig(`lo_sell_pct_direct_${userId}`) || "100");
+      db.addLimitOrder(userId, { tokenCa: ca6, tokenName: name6, orderType: "sell", targetPrice: price5, solAmount: 0, sellPct: pct6, targetMcap: 0 });
+      const savedMsgId6 = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
+      return buildTokenOrdersScreen(ctx, userId, ca6, false, savedMsgId6);
+    }
+
     if (pending === "lo_set_price") {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
@@ -4370,58 +4407,34 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
       const price = parseFloat(text);
       if (isNaN(price) || price <= 0) { await ctx.reply("❌ Invalid price."); return; }
       db.setSysConfig(`lo_price_${userId}`, String(price));
-      const loType = db.getSysConfig(`lo_type_${userId}`) || "buy";
-      const m = await ctx.reply(
-        loType === "buy" 
-          ? "💰 Enter buy amount in SOL (e.g. 0.5):" 
-          : "🔴 Enter sell % (e.g. 50):"
-      );
-      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      const loType2 = db.getSysConfig(`lo_type_${userId}`) || "buy";
+      const m3 = await ctx.reply(loType2 === "buy" ? "💰 Enter SOL amount (e.g. 0.5):" : "🔴 Enter sell % (e.g. 50):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m3.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_amount");
       return;
     }
 
     if (pending === "lo_set_amount") {
-      await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      await deleteMsg(ctx, promptId);
       db.setSysConfig(`pending_${userId}`, "");
       const val = parseFloat(text);
       if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid value."); return; }
-      const loType = db.getSysConfig(`lo_type_${userId}`) || "buy";
-      const price = parseFloat(db.getSysConfig(`lo_price_${userId}`) || "0");
-      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
-      const name = db.getSysConfig(`lo_pending_name_${userId}`) || "Token";
+      const loType3 = db.getSysConfig(`lo_type_${userId}`) || "buy";
+      const price3 = parseFloat(db.getSysConfig(`lo_price_${userId}`) || "0");
+      const ca3 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      const name3 = db.getSysConfig(`lo_pending_name_${userId}`) || "Token";
       db.addLimitOrder(userId, {
-        tokenCa: ca,
-        tokenName: name,
-        orderType: loType,
-        targetPrice: price,
-        solAmount: loType === "buy" ? val : 0,
-        sellPct: loType === "sell" ? val : 100,
+        tokenCa: ca3, tokenName: name3, orderType: loType3,
+        targetPrice: price3,
+        solAmount: loType3 === "buy" ? val : 0,
+        sellPct: loType3 === "sell" ? val : 100,
         targetMcap: 0,
       });
-      const returnCaLo = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
-      // Clear prompt message
-      try { if (promptId) await ctx.api.deleteMessage(ctx.chat.id, promptId); } catch {}
-      if (returnCaLo) {
-        const tOrders3 = db.getLimitOrders(userId, returnCaLo);
-        const tPos3 = db.getAllOpenPositions().find(p => p.user_id === userId && p.token_ca === returnCaLo);
-        const tName3 = tPos3?.token_name || tOrders3[0]?.token_name || returnCaLo.slice(0,8);
-        let tMsg3 = `📋 *${tName3} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy = triggers when price drops\n🔴 Sell = triggers when price rises\n━━━━━━━━━━━━━━━━━━━\n\nOrders: ${tOrders3.length}\n`;
-        const tkb3 = { inline_keyboard: [] };
-        tOrders3.forEach(o => {
-          const ic3 = o.order_type === "buy" ? "🟢" : "🔴";
-          const si3 = o.paused ? "⏸" : "🟢";
-          const det3 = o.order_type === "buy" ? `${ic3} Buy ${o.sol_amount}SOL @ $${parseFloat(o.target_price||0).toFixed(6)} ${si3}` : `${ic3} Sell ${o.sell_pct||100}% @ $${parseFloat(o.target_price||0).toFixed(6)} ${si3}`;
-          tkb3.inline_keyboard.push([{ text: det3, callback_data: "noop" }, { text: o.paused?"▶️":"⏸", callback_data:`lo_pause_${o.id}`}, { text:"🗑", callback_data:`lo_delete_${o.id}`}]);
-        });
-        tkb3.inline_keyboard.push([{text:"➕ Add Buy",callback_data:"lo_add_buy"},{text:"➕ Add Sell",callback_data:"lo_add_sell"}]);
-        tkb3.inline_keyboard.push([{text:"← Back",callback_data:"limit_orders_refresh"}]);
-        const loMsgId4 = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
-        try { if (loMsgId4) await ctx.api.editMessageText(ctx.chat.id, loMsgId4, tMsg3, { parse_mode:"Markdown", reply_markup:tkb3 }); else { const s3 = await ctx.reply(tMsg3, {parse_mode:"Markdown",reply_markup:tkb3}); db.setSysConfig(`lo_msg_${userId}`,String(s3.message_id)); } } catch { const s3 = await ctx.reply(tMsg3, {parse_mode:"Markdown",reply_markup:tkb3}); db.setSysConfig(`lo_msg_${userId}`,String(s3.message_id)); }
-      } else { return showLimitOrdersScreen(ctx, userId); }
+      return buildTokenOrdersScreen(ctx, userId, ca3, false);
     }
 
+    
     if (pending === "buy_paste_ca") {
       await deleteMsg(ctx, promptId);
       try {
