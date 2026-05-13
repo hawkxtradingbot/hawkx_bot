@@ -810,14 +810,17 @@ function setupRouter(bot) {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
     const { handleSettingCallback } = require("./settings");
-    return handleSettingCallback(ctx, user, "pset_autobuy_screen");
+    return handleSettingCallback(ctx, user, "pset_autobuy_screen", bot);
   });
 
   bot.command("autosell", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
     const { handleSettingCallback } = require("./settings");
-    return handleSettingCallback(ctx, user, "pset_autosell_screen");
+    return handleSettingCallback(ctx, user, "pset_autosell_screen", bot, async (source) => {
+      if (source === "msnipe_as_back" || source === "msnipe_open_as") return refreshMsnipeScreen(ctx, userId);
+      if (source === "sniper_realtime_menu") { ctx.callbackQuery.data = "sniper_realtime_menu"; await bot.handleUpdate({ callback_query: ctx.callbackQuery }); }
+    });
   });
 
   bot.command("admin", async (ctx) => {
@@ -973,7 +976,22 @@ function setupRouter(bot) {
         await ctx.answerCallbackQuery(`✅ Language updated`);
         return showSettings(ctx, db.getUser(userId));
       }
-      return handleSettingCallback(ctx, user, data);
+      return handleSettingCallback(ctx, user, data, bot, async (source) => {
+        if (source === "msnipe_as_back") return refreshMsnipeScreen(ctx, userId);
+        if (source === "msnipe_open_as") {
+          ctx.callbackQuery.data = "msnipe_open_as";
+          await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+          return;
+        }
+        if (source === "sniper_rt_as_back" || source === "sniper_realtime_menu" || source === "sniper_rt_autosell") {
+          await ctx.answerCallbackQuery().catch(()=>{});
+          ctx.callbackQuery.data = "sniper_rt_autosell";
+          await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+          return;
+        }
+        ctx.callbackQuery.data = source;
+        await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+      });
     }
 
     // ── PORTFOLIO ─────────────────────────────────────────────
@@ -2251,6 +2269,7 @@ function setupRouter(bot) {
         db.setSysConfig(`ast_return_to_${userId}`, `cw_autosell_${id}`);
         await ctx.answerCallbackQuery();
         const newId2 = db.createAutoSellTemplate(userId, "New Template");
+        db.setSysConfig(`ast_unsaved_${userId}`, String(newId2));
         const t2 = db.getAutoSellTemplate(userId, newId2);
         const { buildAutoSellTemplateScreen: bats } = require("./keyboards");
         const msg2 =
@@ -2687,6 +2706,7 @@ ${getGuide("copy_channel")}`;
         db.setSysConfig(`ast_return_to_${userId}`, "cw_setup_autosell_back");
         await ctx.answerCallbackQuery();
         const newId = db.createAutoSellTemplate(userId, "New Template");
+        db.setSysConfig(`ast_unsaved_${userId}`, String(newId));
         const t = db.getAutoSellTemplate(userId, newId);
         const { buildAutoSellTemplateScreen } = require("./keyboards");
         const msg =
@@ -2796,6 +2816,7 @@ ${getGuide("copy_channel")}`;
         db.setSysConfig(`ast_return_to_${userId}`, `cch_autosell_${id}`);
         await ctx.answerCallbackQuery();
         const newId = db.createAutoSellTemplate(userId, "New Template");
+        db.setSysConfig(`ast_unsaved_${userId}`, String(newId));
         const t = db.getAutoSellTemplate(userId, newId);
         const { buildAutoSellTemplateScreen } = require("./keyboards");
         const msg =
@@ -3055,7 +3076,7 @@ ${getGuide("copy_channel")}`;
         const templates = db.getAutoSellTemplates(userId);
         const tplId = parseInt(db.getSysConfig(`msnipe_tpl_${userId}`) || "0");
         const asOn = db.getSysConfig(`msnipe_as_${userId}`) === "1";
-        db.setSysConfig(`ast_return_to_${userId}`, "msnipe_as_back");
+        db.setSysConfig(`ast_return_to_${userId}`, "msnipe_open_as");
         const asKb = { inline_keyboard: [
           [{ text: asOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: "msnipe_as_toggle" }],
           [{ text: "━━━ Select Template ━━━", callback_data: "noop" }],
@@ -3063,8 +3084,10 @@ ${getGuide("copy_channel")}`;
           [{ text: "➕ New Template", callback_data: "msnipe_as_new" }],
           [{ text: "← Back", callback_data: "msnipe_as_back" }],
         ]};
+      const curMsgMs = ctx.callbackQuery?.message?.message_id;
+        if (curMsgMs) db.setSysConfig(`msnipe_msg_${userId}`, String(curMsgMs));
         try { await ctx.editMessageText(`🔀 *Migration Sniper — Auto Sell*\n\nSelect a template for migration snipes.`, { parse_mode: "Markdown", reply_markup: asKb }); }
-        catch { await ctx.reply(`🔀 *Migration Sniper — Auto Sell*\n\nSelect a template for migration snipes.`, { parse_mode: "Markdown", reply_markup: asKb }); }
+        catch { const s = await ctx.reply(`🔀 *Migration Sniper — Auto Sell*\n\nSelect a template for migration snipes.`, { parse_mode: "Markdown", reply_markup: asKb }); db.setSysConfig(`msnipe_msg_${userId}`, String(s.message_id)); }
         return;
       }
       if (data === "msnipe_as_toggle") {
@@ -3103,9 +3126,10 @@ ${getGuide("copy_channel")}`;
         return;
       }
       if (data === "msnipe_as_new") {
-        db.setSysConfig(`ast_return_to_${userId}`, "msnipe_as_back");
+        db.setSysConfig(`ast_return_to_${userId}`, "msnipe_open_as");
         await ctx.answerCallbackQuery();
         const newId = db.createAutoSellTemplate(userId, "New Template");
+        db.setSysConfig(`ast_unsaved_${userId}`, String(newId));
         const t = db.getAutoSellTemplate(userId, newId);
         const { buildAutoSellTemplateScreen } = require("./keyboards");
         const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
@@ -3114,7 +3138,7 @@ ${getGuide("copy_channel")}`;
         return;
       }
       if (data === "msnipe_as_back") {
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch(()=>{});
         await refreshMsnipeScreen(ctx, userId);
         return;
       }
@@ -3219,6 +3243,7 @@ ${getGuide("copy_channel")}`;
         db.setSysConfig(`ast_return_to_${userId}`, `sniper_autosell_${id}`);
         await ctx.answerCallbackQuery();
         const newId3 = db.createAutoSellTemplate(userId, "New Template");
+        db.setSysConfig(`ast_unsaved_${userId}`, String(newId3));
         const t3 = db.getAutoSellTemplate(userId, newId3);
         const { buildAutoSellTemplateScreen: bats3 } = require("./keyboards");
         const msg3 =
@@ -3405,9 +3430,10 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
     }
 
     if (data === "sniper_rt_as_new") {
-      db.setSysConfig(`ast_return_to_${userId}`, "sniper_rt_as_back");
+      db.setSysConfig(`ast_return_to_${userId}`, "sniper_rt_autosell");
       await ctx.answerCallbackQuery();
       const newId = db.createAutoSellTemplate(userId, "New Template");
+      db.setSysConfig(`ast_unsaved_${userId}`, String(newId));
       const t = db.getAutoSellTemplate(userId, newId);
       const { buildAutoSellTemplateScreen } = require("./keyboards");
       const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;

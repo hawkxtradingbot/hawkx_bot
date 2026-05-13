@@ -58,7 +58,7 @@ async function refreshSettings(ctx, user) {
 }
 
     // ── Main callback handler ─────────────────────────────────────
-    async function handleSettingCallback(ctx, user, action) {
+      async function handleSettingCallback(ctx, user, action, bot, onSourceBack) {
     console.log("[SETTINGS CB]:", action?.slice(0,25));
     // Handle select FIRST
     if (action && action.indexOf("ast_select_") === 0) {
@@ -90,11 +90,15 @@ async function refreshSettings(ctx, user) {
         db.setSysConfig(`ast_unsaved_${user.user_id}`, "");
       }
       // Return to source screen
-      const source = db.getSysConfig(`ast_source_${user.user_id}`) || "auto_sell";
+      const source = db.getSysConfig(`ast_return_to_${user.user_id}`) || db.getSysConfig(`ast_source_${user.user_id}`) || "pset_autosell_manual";
+      db.setSysConfig(`ast_return_to_${user.user_id}`, "");
       db.setSysConfig(`ast_source_${user.user_id}`, "");
-      if (source !== "auto_sell") {
-        await ctx.answerCallbackQuery();
-        return ctx.editMessageText("✅ Returned", { reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: source }]] } }).catch(() => ctx.reply("← Use back button to return."));
+        if (source !== "pset_autosell_manual") {
+          console.log("[AST BACK] source:", source, "onSourceBack:", !!onSourceBack);
+          if (onSourceBack) return onSourceBack(source);
+        ctx.callbackQuery.data = source;
+        await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+        return;
       }
       const { buildAutoSellListScreen } = require("./keyboards");
       const s = db.getSettings(user.user_id);
