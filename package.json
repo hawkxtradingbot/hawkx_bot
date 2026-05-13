@@ -21,6 +21,7 @@
     "node-html-to-image": "^5.0.0",
     "rpc-websockets": "7.5.1",
     "sharp": "^0.34.5",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "better-sqlite3": "^12.9.0"
   }
 }
