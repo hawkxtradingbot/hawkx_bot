@@ -712,31 +712,67 @@ function setupRouter(bot) {
     await ctx.reply("📊 My Stats", { reply_markup: { inline_keyboard: [[{ text: "📊 View My Stats", callback_data: "menu_stats" }]] }});
   });
 
-  bot.command("help", async (ctx) => {
+  bot.command("security", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
     await ctx.reply(
-      `❓ *HawkX — All Commands*\n\n` +
-      `━━━ 🌱 Basic ━━━\n` +
-      `/start — Main Menu\n` +
-      `/buy — Buy a token\n` +
-      `/sell — Sell positions\n` +
-      `/positions — Open positions\n` +
-      `/wallets — Manage wallets\n` +
-      `/settings — Configure bot\n` +
-      `/faucet — Get devnet SOL\n` +
-      `/mystats — Your rank & stats\n` +
-      `/referrals — Referral program\n\n` +
-      `━━━ ⚡ Pro ━━━\n` +
-      `/sniper — Token Sniper\n` +
-      `/copytrade — Copy Trade\n` +
-      `/launch — Launch Token\n` +
-      `/limitorders — Limit Orders\n` +
-      `/watchlist — Watchlist\n` +
-      `/autobuy — Auto Buy\n` +
-      `/autosell — Auto Sell\n\n` +
-      `💡 Paste any CA to trade instantly!`,
+      `🔐 *HawkX Security*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `🛡️ *HOW WE PROTECT YOU*\n` +
+      `━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🔑 *Private Keys*\n` +
+      `Your wallet private key is encrypted\n` +
+      `with AES-256-GCM military grade\n` +
+      `encryption before storing.\n\n` +
+      `👁️ *Zero Knowledge*\n` +
+      `HawkX team CANNOT see your\n` +
+      `private key. Ever.\n\n` +
+      `💾 *Storage*\n` +
+      `Encrypted keys stored in secure\n` +
+      `database. Never in plain text.\n\n` +
+      `🌐 *Open Source*\n` +
+      `Our code is public. Verify our\n` +
+      `security yourself:\n` +
+      `github.com/hawkxtradingbot/hawkx_bot\n\n` +
+      `⚠️ *Your Responsibility*\n` +
+      `• Never share your seed phrase\n` +
+      `• Never share bot access\n` +
+      `• Use strong Telegram password\n` +
+      `• Enable 2FA on Telegram\n\n` +
+      `━━━━━━━━━━━━━━━━━━━`,
       { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "menu_main" }]] }}
+    );
+  });
+  
+  bot.command("help", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+      await ctx.reply(
+        `❓ *HawkX — All Commands*\n\n` +
+        `━━━ 🌱 Basic ━━━\n` +
+        `/start — Main Menu\n` +
+        `/buy — Buy a token\n` +
+        `/sell — Sell positions\n` +
+        `/positions — Open positions\n` +
+        `/wallets — Manage wallets\n` +
+        `/settings — Configure bot\n` +
+        `/faucet — Get devnet SOL\n` +
+        `/mystats — Your rank & stats\n` +
+        `/referrals — Referral program\n\n` +
+        `━━━ ⚡ Pro ━━━\n` +
+        `/sniper — Token Sniper\n` +
+        `/copytrade — Copy Trade\n` +
+        `/launch — Launch Token\n` +
+        `/limitorders — Limit Orders\n` +
+        `/autobuy — Auto Buy\n` +
+        `/autosell — Auto Sell\n\n` +
+        `━━━ 🔐 Security ━━━\n` +
+        `• AES-256-GCM encrypted wallets\n` +
+        `• Zero knowledge — we can't see keys\n` +
+        `• Open source code on GitHub\n` +
+        `• github.com/hawkxtradingbot/hawkx_bot\n\n` +
+        `💡 Paste any CA to trade instantly!`,
+        { reply_markup: { inline_keyboard: [[{ text: "🏠 Main Menu", callback_data: "menu_main" }]] }}
     );
   });
 
