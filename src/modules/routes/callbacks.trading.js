@@ -1,0 +1,154 @@
+const db = require("../../../database");
+const { safeEdit } = require("./helpers.routes");
+const { getPortfolio, getTokenPosition } = require("../portfolio");
+const { mockBuy, mockSell, simulatePriceMovement } = require("../executor");
+const { getTokenInfo, formatNum, formatPrice } = require("../tokenInfo");
+
+async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
+
+    // ── PORTFOLIO ─────────────────────────────────────────────
+    if (data === "pos_wallet_expand") {
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user, "all", 0, false, null, true);
+    }
+    if (data.startsWith("pos_setwallet_")) {
+      const wId = parseInt(data.replace("pos_setwallet_", ""));
+      db.getDb().prepare("UPDATE users SET active_wallet_id = ? WHERE user_id = ?").run(wId, userId);
+      await ctx.answerCallbackQuery("✅ Wallet switched!");
+      return getPortfolio(ctx, db.getUser(userId));
+    }
+    if (data === "menu_portfolio") {
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user, "all", 0, false, null);
+    }
+    if (data.startsWith("pos_filter_")) {
+      const parts = data.split("_");
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user, parts[2], parseInt(parts[3]||"0"), false, parseInt(parts[4]||"0")||null);
+    }
+    if (data.startsWith("pos_expand_")) {
+      const parts = data.split("_");
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user, parts[2], parseInt(parts[3]||"0"), true, null);
+    }
+    if (data.startsWith("pos_select_")) {
+      const parts = data.split("_");
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user, parts[3]||"all", parseInt(parts[4]||"0"), false, parseInt(parts[2]));
+    }
+    if (data.startsWith("pos_token_")) {
+      const posId = parseInt(data.replace("pos_token_", ""));
+      await ctx.answerCallbackQuery();
+      const pos = db.getPosition(posId, userId);
+      if (!pos || pos.status !== "open") return getPortfolio(ctx, db.getUser(userId), "all", 0, false, null);
+      return getTokenPosition(ctx, user, posId);
+    }
+
+    // ── TRADE ─────────────────────────────────────────────────
+    if (data === "trade_positions") {
+      await ctx.answerCallbackQuery();
+      return getPortfolio(ctx, user);
+    }
+    if (data === "trade_cancel") {
+      await ctx.answerCallbackQuery("❌ Cancelled.");
+      db.setSysConfig(`pending_ca_${userId}`, "");
+      db.setSysConfig(`pending_${userId}`, "");
+      try { await ctx.deleteMessage(); } catch {}
+      return true;
+    }
+    if (data === "trade_refresh_ca") {
+      await ctx.answerCallbackQuery("🔄 Refreshed!");
+      const ca2 = db.getSysConfig(`pending_ca_${userId}`) || "";
+      if (!ca2) return true;
+      const settings2 = db.getSettings(userId) || {};
+      const b1 = settings2.buy_amt_1 || 0.1;
+      const b2 = settings2.buy_amt_2 || 0.5;
+      const b3 = settings2.buy_amt_3 || 1.0;
+      const tInfo2 = await getTokenInfo(ca2);
+      const dexUrl2 = `https://dexscreener.com/solana/${ca2}`;
+      const tName2 = tInfo2.name ? `<a href="${dexUrl2}"><b>${tInfo2.name}</b></a>` : `<a href="${dexUrl2}"><b>${ca2.slice(0,8)}...</b></a>`;
+      let info2 = `🔍 ${tName2}\n\n<code>${ca2}</code>\n\n`;
+      if (tInfo2.price) info2 += `💲 Price: ${formatPrice(tInfo2.price)}\n`;
+      if (tInfo2.mcap) info2 += `📊 MCap: ${formatNum(tInfo2.mcap)}\n`;
+      if (tInfo2.liquidity) info2 += `💧 Liq: ${formatNum(tInfo2.liquidity)}\n`;
+      if (tInfo2.volume24h) info2 += `📈 Vol 24h: ${formatNum(tInfo2.volume24h)}\n`;
+      if (tInfo2.holders) info2 += `👥 Holders: ${tInfo2.holders.toLocaleString()}\n`;
+      info2 += `🛡 Safety: ✅ Checking...\n\nSelect amount to buy:`;
+      try { await ctx.editMessageText(info2, { parse_mode: "HTML", reply_markup: { inline_keyboard: [
+        [{ text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` }, { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` }, { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` }],
+        [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
+        [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
+      ]}}); } catch {}
+      return true;
+    }
+    if (data === "trade_quickbuy") {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("▶▶ *Send Token CA*\n\nPaste the contract address:", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "buy_paste_ca_first");
+      return true;
+    }
+    if (data.startsWith("buy_ca_amt_")) {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      const amt = parseFloat(data.replace("buy_ca_amt_", ""));
+      const ca = db.getSysConfig(`pending_ca_${userId}`);
+      if (!ca) { await ctx.answerCallbackQuery("❌ Please paste a token CA first."); return true; }
+      await ctx.answerCallbackQuery();
+      await mockBuy(ctx, user, ca, amt, "manual", "");
+      return true;
+    }
+    if (data === "buy_ca_custom") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("✏️ Enter custom SOL amount (e.g. 0.25):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "buy_ca_custom_amt");
+      return true;
+    }
+
+    // ── SELL ─────────────────────────────────────────────────
+    if (data.startsWith("sell_pct_")) {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      const parts = data.split("_");
+      await ctx.answerCallbackQuery();
+      const position = db.getPosition(parseInt(parts[3]), userId);
+      if (!position) { await ctx.reply("❌ Position not found."); return true; }
+      await mockSell(ctx, user, position, parseInt(parts[2]));
+      return true;
+    }
+    if (data.startsWith("sell_quick_")) {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      const pct = parseInt(data.replace("sell_quick_", ""));
+      const positions = db.getOpenPositions(userId);
+      if (!positions.length) { await ctx.answerCallbackQuery("No open positions."); return true; }
+      await ctx.answerCallbackQuery();
+      await mockSell(ctx, user, positions[0], pct);
+      return true;
+    }
+    if (data === "sell_initial" || data.startsWith("sell_initial_")) {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      await ctx.answerCallbackQuery();
+      const posId = data.includes("_") && data !== "sell_initial" ? parseInt(data.split("_")[2]) : null;
+      const positions = posId ? [db.getPosition(posId, userId)] : db.getOpenPositions(userId);
+      const pos = positions[0];
+      if (!pos) { await ctx.reply("No open positions."); return true; }
+      const currentPrice = simulatePriceMovement(pos.token_ca);
+      const pnlPct = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price) * 100 : 0;
+      const currentValue = pos.sol_invested * (1 + pnlPct / 100);
+      const initialPct = currentValue > 0 ? Math.min(100, (pos.sol_invested / currentValue) * 100) : 100;
+      await mockSell(ctx, user, pos, initialPct);
+      return true;
+    }
+    if (data.startsWith("sell_limit_")) {
+      const posId = data.replace("sell_limit_", "");
+      db.setSysConfig(`pending_${userId}`, `set_limit_sell_${posId}`);
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply("📌 *Set Limit Sell*\n\nEnter target price in SOL:", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      return true;
+    }
+
+    return false;
+}
+
+module.exports = { handleTradingCallbacks };

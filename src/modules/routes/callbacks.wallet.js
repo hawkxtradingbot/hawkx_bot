@@ -1,0 +1,650 @@
+const db = require("../../../database");
+const { safeEdit, stripMd, deleteMsg } = require("./helpers.routes");
+const { addWallet, deleteWallet, decryptWallet, isSolanaAddress } = require("../walletVault");
+const { getActiveWallet, setActiveWallet, getBalance } = require("../walletSwitcher");
+const { doExportKey } = require("../settings/index");
+const { buildWalletMenu, buildWalletDeleteSelect, buildWalletExportSelect } = require("../keyboards");
+const { simulatePriceMovement } = require("../executor");
+const config = require("../../../config");
+
+async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
+    // ── WALLETS ───────────────────────────────────────────────
+    if (data === "menu_wallets") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const wallets = db.getWallets(userId) || [];
+      const active = db.getWallet(freshUser.active_wallet_id);
+      const address = active?.public_key || "No wallet";
+      const balance = await getBalance(address);
+      // Show positions PnL filtered by active wallet only
+      const allPos = db.getOpenPositions(userId);
+      const openPos = allPos.filter(
+        (p) => p.wallet_id === freshUser.active_wallet_id,
+      );
+      const { simulatePriceMovement } = require("../executor");
+      let totalInv = 0,
+        totalCur = 0;
+      openPos.forEach((p) => {
+        const cp = simulatePriceMovement(p.token_ca);
+        const pnlPct =
+          p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
+        totalInv += p.sol_invested;
+        totalCur += p.sol_invested * (1 + pnlPct / 100);
+      });
+      const totalPnlSol = totalCur - totalInv;
+      const totalPnlUsd = totalPnlSol * 150;
+      const sign = totalPnlSol >= 0 ? "+" : "";
+      const pnlLine =
+        openPos.length > 0
+          ? `\n📈 Positions P&L: *${sign}${totalPnlSol.toFixed(4)} SOL* / $${totalPnlUsd.toFixed(2)}`
+          : `\n📈 Positions P&L: *0.0000 SOL*`;
+      const walletIdx =
+        wallets.findIndex((w) => w.wallet_id === freshUser.active_wallet_id) +
+        1;
+      return safeEdit(
+        ctx,
+        `💼 *Wallet Management*\n\n` +
+          `Active: *W${walletIdx}*\n` +
+          `📋 Address:\n\`${address}\`\n` +
+          `💰 Balance: *${balance.toFixed(4)} SOL*` +
+          pnlLine +
+          `\n\n` +
+          `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[freshUser.rank] || 5} wallets_`,
+        buildWalletMenu(wallets, freshUser.active_wallet_id),
+      );
+    }
+
+    if (data.startsWith("wallet_select_")) {
+      const walletId = parseInt(data.replace("wallet_select_", ""));
+      setActiveWallet(userId, walletId);
+      await ctx.answerCallbackQuery("✅ Wallet switched!");
+      // Refresh same wallet screen
+      const freshUser = db.getUser(userId);
+      const wallets = db.getWallets(userId) || [];
+      const active = db.getWallet(walletId);
+      const address = active?.public_key || "No wallet";
+      const balance = await getBalance(address);
+      // Filter positions by selected wallet only
+      const allPos2 = db.getOpenPositions(userId);
+      const openPos2 = allPos2.filter((p) => p.wallet_id === walletId);
+      const { simulatePriceMovement: simPrice2 } = require("../executor");
+      let totalInv2 = 0,
+        totalCur2 = 0;
+      openPos2.forEach((p) => {
+        const cp = simPrice2(p.token_ca);
+        const pnlPct =
+          p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
+        totalInv2 += p.sol_invested;
+        totalCur2 += p.sol_invested * (1 + pnlPct / 100);
+      });
+      const totalPnlSol2 = totalCur2 - totalInv2;
+      const totalPnlUsd2 = totalPnlSol2 * 150;
+      const sign2 = totalPnlSol2 >= 0 ? "+" : "";
+      const pnlLine2 =
+        openPos2.length > 0
+          ? `\n📈 Positions P&L: *${sign2}${totalPnlSol2.toFixed(4)} SOL* / $${totalPnlUsd2.toFixed(2)}`
+          : `\n📈 Positions P&L: *0.0000 SOL*`;
+      const walletIdx2 = wallets.findIndex((w) => w.wallet_id === walletId) + 1;
+      return safeEdit(
+        ctx,
+        `💼 *Wallet Management*\n\n` +
+          `Active: *W${walletIdx2}*\n` +
+          `📋 Address:\n\`${address}\`\n` +
+          `💰 Balance: *${balance.toFixed(4)} SOL*` +
+          pnlLine2 +
+          `\n\n` +
+          `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[freshUser.rank] || 5} wallets_`,
+        buildWalletMenu(wallets, walletId),
+      );
+    }
+
+    if (data === "wallet_delete_select") {
+      await ctx.answerCallbackQuery();
+      const wallets = db.getWallets(userId) || [];
+      if (wallets.length <= 1) {
+        await ctx.answerCallbackQuery("❌ Cannot delete only wallet.", {
+          show_alert: true,
+        });
+        return;
+      }
+      const freshUser = db.getUser(userId);
+      return safeEdit(
+        ctx,
+        "🗑 *Delete Wallet*\n\nSelect which wallet to delete:",
+        buildWalletDeleteSelect(wallets, freshUser.active_wallet_id),
+      );
+    }
+
+    if (data.startsWith("wallet_delete_confirm_")) {
+      const walletId = parseInt(data.replace("wallet_delete_confirm_", ""));
+      const wallet = db.getWallet(walletId);
+      if (!wallet) {
+        await ctx.answerCallbackQuery("Not found.");
+        return;
+      }
+      await ctx.answerCallbackQuery();
+      return ctx.reply(
+        `🗑 *Confirm Delete*\n\n*${stripMd(wallet.label || "")}*\n\`${wallet.public_key.slice(0, 12)}...\`\n\n⚠️ Cannot be undone. Back up key first.`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ Delete",
+                  callback_data: `wallet_delete_do_${walletId}`,
+                },
+                { text: "❌ Cancel", callback_data: "menu_wallets" },
+              ],
+            ],
+          },
+        },
+      );
+    }
+
+    if (data.startsWith("wallet_delete_do_")) {
+      const walletId = parseInt(data.replace("wallet_delete_do_", ""));
+      const freshUser = db.getUser(userId);
+      await deleteWallet(ctx, freshUser, walletId);
+      await ctx.answerCallbackQuery("✅ Deleted.");
+      const wallets = db.getWallets(userId) || [];
+      const updated = db.getUser(userId);
+      const active = db.getWallet(updated.active_wallet_id);
+      const address = active?.public_key || "No wallet";
+      const balance = await getBalance(address);
+      const idx =
+        wallets.findIndex((w) => w.wallet_id === updated.active_wallet_id) + 1;
+      const allPos = db.getOpenPositions(userId);
+      const openPos = allPos.filter(
+        (p) => p.wallet_id === updated.active_wallet_id,
+      );
+      const { simulatePriceMovement } = require("../executor");
+      let totalInv = 0,
+        totalCur = 0;
+      openPos.forEach((p) => {
+        const cp = simulatePriceMovement(p.token_ca);
+        const pnlPct =
+          p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
+        totalInv += p.sol_invested;
+        totalCur += p.sol_invested * (1 + pnlPct / 100);
+      });
+      const pnlSol = totalCur - totalInv;
+      const sign = pnlSol >= 0 ? "+" : "";
+      const pnlLine =
+        openPos.length > 0
+          ? `\n📈 Positions P&L: *${sign}${pnlSol.toFixed(4)} SOL*`
+          : `\n📈 Positions P&L: *0.0000 SOL*`;
+      return safeEdit(
+        ctx,
+        `💼 *Wallet Management*\n\n` +
+          `Active: *W${idx}*\n` +
+          `📋 Address:\n\`${address}\`\n` +
+          `💰 Balance: *${balance.toFixed(4)} SOL*` +
+          pnlLine +
+          `\n\n` +
+          `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[updated.rank] || 5} wallets_`,
+        buildWalletMenu(wallets, updated.active_wallet_id),
+      );
+    }
+
+    if (data === "wallet_generate") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const limit = config.WALLET_LIMITS[freshUser.rank] || 5;
+      const count = db.countWallets(userId);
+      if (count >= limit) {
+        return ctx.reply(
+          `❌ Wallet limit reached (${limit}). Delete one first to add more.`,
+        );
+      }
+      await addWallet(ctx, freshUser, "generate");
+      const wallets = db.getWallets(userId) || [];
+      const updated = db.getUser(userId);
+      return safeEdit(
+        ctx,
+        `💼 *Wallet Management*`,
+        buildWalletMenu(wallets, updated.active_wallet_id),
+      );
+    }
+
+    if (data === "wallet_import") {
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply(
+        "📥 *Import Wallet*\n\nSend me your Solana wallet private key:",
+        { parse_mode: "Markdown" },
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, "wallet_import_key");
+      return;
+    }
+
+    if (data === "wallet_export_select") {
+      await ctx.answerCallbackQuery();
+      const wallets = db.getWallets(userId) || [];
+      const freshUser = db.getUser(userId);
+      const walletRows = [];
+      for (let i = 0; i < wallets.length; i += 3) {
+        walletRows.push(
+          wallets.slice(i, i + 3).map((w, idx) => {
+            const num = i + idx + 1;
+            const isActive = w.wallet_id === freshUser.active_wallet_id;
+            return {
+              text: isActive ? `W${num} ✅` : `W${num}`,
+              callback_data: `wallet_export_prompt_${w.wallet_id}`,
+            };
+          }),
+        );
+      }
+      const hasPIN = freshUser.sap_enabled && freshUser.sap_hash;
+      return safeEdit(
+        ctx,
+        `🔑 *Export Private Key*\n\n` +
+          `${hasPIN ? "🔐 PIN required to export." : "⚠️ No PIN set — we recommend setting a PIN before exporting."}\n\n` +
+          `Select wallet to export:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              ...walletRows,
+              hasPIN
+                ? []
+                : [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+              [{ text: "← Back", callback_data: "menu_wallets" }],
+            ].filter((r) => r.length > 0),
+          },
+        },
+      );
+    }
+
+    if (data.startsWith("wallet_export_prompt_")) {
+      const walletId = parseInt(data.replace("wallet_export_prompt_", ""));
+      const freshUser = db.getUser(userId);
+      await ctx.answerCallbackQuery();
+      if (freshUser.sap_enabled && freshUser.sap_hash) {
+        db.setSysConfig(`sap_next_wallet_${userId}`, String(walletId));
+        const msg = await ctx.reply(
+          "🔐 Enter your Security PIN to export key:",
+        );
+        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+        db.setSysConfig(`pending_${userId}`, "sap_verify_export");
+      } else {
+        // No PIN — show export anyway option
+        const wallets = db.getWallets(userId) || [];
+        const num = wallets.findIndex((w) => w.wallet_id === walletId) + 1;
+        return safeEdit(
+          ctx,
+          `🔑 *Export W${num} Private Key*\n\n` +
+            `⚠️ *No Security PIN set.*\n\n` +
+            `For your safety, set a PIN before exporting. Anyone with your private key can access your funds.\n\n` +
+            `Tap Export Anyway to show key for 20 seconds.`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+                [
+                  {
+                    text: "⚠️ Export Anyway",
+                    callback_data: `wallet_export_do_${walletId}`,
+                  },
+                ],
+                [{ text: "← Cancel", callback_data: "wallet_export_select" }],
+              ],
+            },
+          },
+        );
+      }
+      return;
+    }
+
+    if (data.startsWith("wallet_export_do_")) {
+      const walletId = parseInt(data.replace("wallet_export_do_", ""));
+      await ctx.answerCallbackQuery();
+      await doExportKey(ctx, userId, walletId);
+      return;
+    }
+
+    // ── DEPOSIT ───────────────────────────────────────────────
+    if (data === "wallet_deposit") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const wallets = db.getWallets(userId) || [];
+      const activeWallet = db.getWallet(freshUser.active_wallet_id);
+      const activeAddr = activeWallet?.public_key || "No wallet";
+      const activeBal = await getBalance(activeAddr);
+      const activeIdx =
+        wallets.findIndex((w) => w.wallet_id === freshUser.active_wallet_id) +
+        1;
+      const walletRows = [];
+      for (let i = 0; i < wallets.length; i += 3) {
+        walletRows.push(
+          wallets.slice(i, i + 3).map((w, idx) => {
+            const num = i + idx + 1;
+            const isActive = w.wallet_id === freshUser.active_wallet_id;
+            return {
+              text: isActive ? `W${num} ✅` : `W${num}`,
+              callback_data: `deposit_select_${w.wallet_id}`,
+            };
+          }),
+        );
+      }
+      const depMsg =
+        `💰 *Deposit*\n\n` +
+        `Active: *W${activeIdx}* ✅\n` +
+        `📋 Address:\n\`${activeAddr}\`\n\n` +
+        `💰 Balance: *${activeBal.toFixed(4)} SOL*\n\n` +
+        `_Select the deposit wallet._`;
+      try {
+        await ctx.editMessageText(depMsg, {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              ...walletRows,
+              [
+                { text: "← Back", callback_data: "menu_wallets" },
+                { text: "🔄 Refresh", callback_data: "wallet_deposit" },
+              ],
+            ],
+          },
+        });
+      } catch {
+        await ctx.reply(depMsg, {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              ...walletRows,
+              [
+                { text: "← Back", callback_data: "menu_wallets" },
+                { text: "🔄 Refresh", callback_data: "wallet_deposit" },
+              ],
+            ],
+          },
+        });
+      }
+      return;
+    }
+
+    if (data.startsWith("deposit_select_")) {
+      const walletId = parseInt(data.replace("deposit_select_", ""));
+      const wallet = db.getWallet(walletId);
+      if (!wallet) {
+        await ctx.answerCallbackQuery("Not found.");
+        return;
+      }
+      const balance = await getBalance(wallet.public_key);
+      const wallets = db.getWallets(userId) || [];
+      const num = wallets.findIndex((w) => w.wallet_id === walletId) + 1;
+      await ctx.answerCallbackQuery(`W${num} selected`);
+      const walletRows = [];
+      for (let i = 0; i < wallets.length; i += 3) {
+        walletRows.push(
+          wallets.slice(i, i + 3).map((w, idx) => {
+            const n2 = i + idx + 1;
+            const isActive = w.wallet_id === walletId;
+            return {
+              text: isActive ? `W${n2} ✅` : `W${n2}`,
+              callback_data: `deposit_select_${w.wallet_id}`,
+            };
+          }),
+        );
+      }
+      const depMsg =
+        `💰 *Deposit*\n\n` +
+        `Active: *W${num}* ✅\n` +
+        `📋 Address:\n\`${wallet.public_key}\`\n\n` +
+        `💰 Balance: *${balance.toFixed(4)} SOL*\n\n` +
+        `_Tap address to copy. Select a different wallet above if needed._`;
+      try {
+        await ctx.editMessageText(depMsg, {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              ...walletRows,
+              [
+                { text: "← Back", callback_data: "menu_wallets" },
+                { text: "🔄 Refresh", callback_data: "wallet_deposit" },
+              ],
+            ],
+          },
+        });
+      } catch {
+        await ctx.reply(depMsg, {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              ...walletRows,
+              [
+                { text: "← Back", callback_data: "menu_wallets" },
+                {
+                  text: "🔄 Refresh",
+                  callback_data: `deposit_select_${walletId}`,
+                },
+              ],
+            ],
+          },
+        });
+      }
+      return;
+    }
+
+    if (data.startsWith("deposit_show_")) {
+      // Legacy — redirect to new deposit
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    // ── WITHDRAW ──────────────────────────────────────────────
+    if (data === "wallet_withdraw") {
+      await ctx.answerCallbackQuery();
+      const wallets = db.getWallets(userId) || [];
+      const freshUser = db.getUser(userId);
+      const walletRows = [];
+      for (let i = 0; i < wallets.length; i += 3) {
+        walletRows.push(
+          wallets.slice(i, i + 3).map((w, idx) => {
+            const num = i + idx + 1;
+            const isActive = w.wallet_id === freshUser.active_wallet_id;
+            return {
+              text: isActive ? `W${num} ✅` : `W${num}`,
+              callback_data: `withdraw_from_${w.wallet_id}`,
+            };
+          }),
+        );
+      }
+      try {
+        await ctx.editMessageText(
+          `💸 *Withdraw*\n\nSelect the wallet you want to withdraw from:`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                ...walletRows,
+                [
+                  { text: "← Back", callback_data: "menu_wallets" },
+                  { text: "🔄 Refresh", callback_data: "wallet_withdraw" },
+                ],
+              ],
+            },
+          },
+        );
+      } catch {
+        await ctx.reply(
+          `💸 *Withdraw*\n\nSelect the wallet you want to withdraw from:`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                ...walletRows,
+                [
+                  { text: "← Back", callback_data: "menu_wallets" },
+                  { text: "🔄 Refresh", callback_data: "wallet_withdraw" },
+                ],
+              ],
+            },
+          },
+        );
+      }
+      return;
+    }
+
+    if (data.startsWith("withdraw_from_")) {
+      const walletId = parseInt(data.replace("withdraw_from_", ""));
+      const wallet = db.getWallet(walletId);
+      if (!wallet) {
+        await ctx.answerCallbackQuery("Not found.");
+        return;
+      }
+      const balance = await getBalance(wallet.public_key);
+      const wallets = db.getWallets(userId) || [];
+      const num = wallets.findIndex((w) => w.wallet_id === walletId) + 1;
+      await ctx.answerCallbackQuery(`W${num} selected`);
+
+      // Fetch SPL tokens from Helius
+      let splTokens = [];
+      try {
+        const axios = require("axios");
+        const config = require("../../../config");
+        if (config.HELIUS_API_KEY) {
+          const res = await axios.post(
+            `https://mainnet.helius-rpc.com/?api-key=${config.HELIUS_API_KEY}`,
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "getTokenAccountsByOwner",
+              params: [
+                wallet.public_key,
+                { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+                { encoding: "jsonParsed" },
+              ],
+            },
+            { timeout: 5000 },
+          );
+          const accounts = res.data?.result?.value || [];
+          splTokens = accounts
+            .map((a) => ({
+              mint: a.account.data.parsed.info.mint,
+              amount: a.account.data.parsed.info.tokenAmount.uiAmount || 0,
+              symbol: a.account.data.parsed.info.mint.slice(0, 6),
+            }))
+            .filter((t) => t.amount > 0);
+        }
+      } catch {}
+
+      // Build token buttons
+      const tokenButtons = [
+        [
+          {
+            text: `💎 SOL (${balance.toFixed(4)})`,
+            callback_data: `withdraw_token_SOL_${walletId}`,
+          },
+        ],
+        ...splTokens.map((t) => [
+          {
+            text: `🪙 ${t.symbol} (${t.amount.toFixed(4)})`,
+            callback_data: `withdraw_token_${t.mint}_${walletId}`,
+          },
+        ]),
+        [{ text: "← Back", callback_data: "wallet_withdraw" }],
+      ];
+
+      const withdrawMsg =
+        `💸 *Withdraw from W${num}*\n\n` +
+        `📋 \`${wallet.public_key}\`\n` +
+        `💰 SOL Balance: *${balance.toFixed(4)} SOL*\n\n` +
+        `Select token to withdraw:` +
+        (splTokens.length === 0
+          ? `\n\n_No other tokens found in this wallet._`
+          : "");
+
+      try {
+        await ctx.editMessageText(withdrawMsg, {
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: tokenButtons },
+        });
+      } catch {
+        await ctx.reply(withdrawMsg, {
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: tokenButtons },
+        });
+      }
+      return;
+    }
+
+    if (data.startsWith("withdraw_token_")) {
+      // Format: withdraw_token_MINTADDRESS_WALLETID
+      const withoutPrefix = data.replace("withdraw_token_", "");
+      const lastUnderscore = withoutPrefix.lastIndexOf("_");
+      const token = withoutPrefix.slice(0, lastUnderscore);
+      const walletId = parseInt(withoutPrefix.slice(lastUnderscore + 1));
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      if (freshUser.sap_enabled && freshUser.sap_hash) {
+        db.setSysConfig(
+          `sap_next_${userId}`,
+          `withdraw_address_${token}_${walletId}`,
+        );
+        const msg = await ctx.reply("🔐 Enter your Security PIN to continue:");
+        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+        db.setSysConfig(`pending_${userId}`, "sap_verify_withdraw");
+      } else {
+        // No PIN — prompt to set one or continue
+        return safeEdit(
+          ctx,
+          `💸 *Withdraw ${token}*\n\n⚠️ *No Security PIN set.*\n\nFor your safety we recommend setting a PIN before withdrawing.\n\nPaste your destination Solana address to continue:`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+                [
+                  {
+                    text: "Continue Without PIN",
+                    callback_data: `withdraw_nopinsend_${token}_${walletId}`,
+                  },
+                ],
+                [{ text: "← Cancel", callback_data: "wallet_withdraw" }],
+              ],
+            },
+          },
+        );
+      }
+      return;
+    }
+
+    if (data.startsWith("withdraw_nopinsend_")) {
+      const parts = data.split("_");
+      const withoutPrefix2 = data.replace("withdraw_nopinsend_", "");
+      const lastIdx2 = withoutPrefix2.lastIndexOf("_");
+      const token = withoutPrefix2.slice(0, lastIdx2);
+      const walletId = parseInt(withoutPrefix2.slice(lastIdx2 + 1));
+      await ctx.answerCallbackQuery();
+      const msg = await ctx.reply(
+        `💸 *Withdraw ${token}*\n\nPaste destination Solana address:\n\n⚠️ Cannot be reversed.`,
+        { parse_mode: "Markdown" },
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(
+        `pending_${userId}`,
+        `withdraw_address_${token}_${walletId}`,
+      );
+      return;
+    }
+
+    if (data.startsWith("withdraw_send_")) {
+      const parts = data.split("_");
+      const pct = parseInt(parts[2]);
+      const token = parts[3];
+      const walletId = parseInt(parts[4]);
+      await ctx.answerCallbackQuery(`Sending ${pct}% ${token}...`);
+      await ctx.reply(
+        `✅ *Withdraw Initiated* [DEVNET]\n\nSending *${pct}%* of ${token}.\n\n_Devnet simulation — no real funds moved._`,
+        { parse_mode: "Markdown" },
+      );
+      return;
+    }
+
+
+    return false;
+}
+
+module.exports = { handleWalletCallbacks };

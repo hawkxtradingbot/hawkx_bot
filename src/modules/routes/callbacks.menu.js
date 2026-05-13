@@ -1,0 +1,115 @@
+const db = require("../../../database");
+const { safeEdit, refreshMsnipeScreen } = require("./helpers.routes");
+const { showSettings, handleSettingCallback } = require("../settings/index");
+const { handleAutoBuy, executeRealtimeSnipe, mockBuy, mockSell } = require("../executor");
+const { buildMainMenu, getModeLabel, getGuide, buildRankInfoMessage, RANKS } = require("../keyboards");
+
+async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
+    // ── NOOP ──────────────────────────────────────────────────
+    if (data === "noop") {
+      await ctx.answerCallbackQuery();
+      return true;
+    }
+
+    // ── MAIN MENU ─────────────────────────────────────────────
+    if (data === "menu_main" || data === "menu_main_refresh") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const todayStats = db.getTodayStats(userId, db.getUser(userId).active_wallet_id);
+      const mode = getModeLabel(freshUser);
+      const rank = freshUser.rank || 1;
+      const rankNames = ["","Degen","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite"];
+      const fees = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
+      const menuMsg = 
+        `🦅 *HawkX* [DEVNET] — ${mode} Mode\n\n` +
+        `🏅 Rank: *${rankNames[rank]||"Degen"}* (${rank}/7)\n` +
+        `💸 Fee: *${fees[rank]||1.00}%*\n\n` +
+        `${getGuide(freshUser.mode === "pro" ? "main_pro" : "main_beginner")}`;
+      return safeEdit(ctx, menuMsg, buildMainMenu(freshUser, todayStats, ks));
+    }
+
+    // ── MODE SWITCH ───────────────────────────────────────────
+    if (data === "mode_set_pro") {
+      db.setUserMode(userId, "pro");
+      await ctx.answerCallbackQuery("⚡ Pro Mode activated!");
+      const freshUser = db.getUser(userId);
+      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — ⚡ Pro Mode\n\n${getGuide("main_pro")}`, buildMainMenu(freshUser, db.getTodayStats(userId, db.getUser(userId).active_wallet_id), ks));
+    }
+
+    if (data === "mode_set_beginner") {
+      db.setUserMode(userId, "beginner");
+      await ctx.answerCallbackQuery("🌱 Beginner Mode activated!");
+      const freshUser = db.getUser(userId);
+      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — 🌱 Beginner Mode\n\n${getGuide("main_beginner")}`, buildMainMenu(freshUser, db.getTodayStats(userId, db.getUser(userId).active_wallet_id), ks));
+    }
+
+    // ── RANK INFO ─────────────────────────────────────────────
+    if (data === "menu_rank_info") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const { buildRankInfoMessage } = require("../keyboards");
+      return ctx.reply(buildRankInfoMessage(freshUser), { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] } });
+    }
+
+    // ── STATS ─────────────────────────────────────────────────
+    if (data === "menu_stats") {
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const today = db.getTodayStats(userId, freshUser.active_wallet_id);
+      const allTime = db.getUserStats(userId);
+      const weekly = db.getWeeklyPnl(userId);
+      const monthly = db.getMonthlyPnl(userId);
+      const vol = freshUser.cumulative_volume_sol || 0;
+      const { RANKS } = require("../keyboards");
+      const rank = RANKS[freshUser.rank] || RANKS[1];
+      let msg = `📊 *Your Stats* [DEVNET]\n\n`;
+      msg += `🏅 Rank: *${rank.name}* (${freshUser.rank}/7)\n`;
+      msg += `💎 Fee: *${rank.fee.toFixed(2)}%*\n`;
+      msg += `📈 Total Volume: *${vol.toFixed(4)} SOL*\n\n`;
+      const ts = (today.pnl || 0) >= 0 ? "+" : "";
+      msg += `*Today:* P&L: *${ts}${(today.pnl || 0).toFixed(4)} SOL* · ${today.trades || 0} trades · ${today.winRate || 0}% win\n`;
+      const ws = weekly >= 0 ? "+" : "";
+      const ms = monthly >= 0 ? "+" : "";
+      msg += `*Weekly:* *${ws}${weekly.toFixed(4)} SOL*\n`;
+      msg += `*Monthly:* *${ms}${monthly.toFixed(4)} SOL*\n`;
+      msg += `*Win Rate:* ${allTime.winRate || 0}% · *Loss Rate:* ${allTime.lossRate || 0}%\n`;
+      return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🏅 My Rank Card", callback_data: "gen_rank_card" }],[{ text: "🔄 Refresh", callback_data: "menu_stats" }],[{ text: "← Back", callback_data: "menu_main" }]] } });
+    }
+
+    // ── SETTINGS ──────────────────────────────────────────────
+    if (data === "menu_settings") {
+      await ctx.answerCallbackQuery();
+      return showSettings(ctx, user);
+    }
+
+    if (
+      data.startsWith("set_") || data.startsWith("bset_") || data.startsWith("pset_") ||
+      data.startsWith("sap_") || data.startsWith("alert_") || data.startsWith("ast_") ||
+      data.startsWith("ast_select_") || data.startsWith("ast_view_") || data.startsWith("ast_back_") ||
+      data.startsWith("ab_") || data.startsWith("sas_") ||
+      data === "pset_autosell_manual" || data === "pset_autosell_screen" || data === "pset_autobuy_screen"
+    ) {
+      if (data.startsWith("lang_")) {
+        const lang = data.replace("lang_", "");
+        db.updateUser(userId, { language: lang });
+        await ctx.answerCallbackQuery(`✅ Language updated`);
+        return showSettings(ctx, db.getUser(userId));
+      }
+      return handleSettingCallback(ctx, user, data, bot, async (source) => {
+        if (source === "msnipe_as_back") return refreshMsnipeScreen(ctx, userId);
+        if (source === "msnipe_open_as") { ctx.callbackQuery.data = "msnipe_open_as"; await bot.handleUpdate({ callback_query: ctx.callbackQuery }); return; }
+        if (source === "sniper_rt_as_back" || source === "sniper_realtime_menu" || source === "sniper_rt_autosell") {
+          await ctx.answerCallbackQuery().catch(()=>{});
+          ctx.callbackQuery.data = "sniper_rt_autosell";
+          await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+          return;
+        }
+        ctx.callbackQuery.data = source;
+        await bot.handleUpdate({ callback_query: ctx.callbackQuery });
+      });
+    }
+
+    return false;
+}
+
+module.exports = { handleMenuCallbacks };

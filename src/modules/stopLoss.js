@@ -218,7 +218,7 @@ async function checkLimitOrders(notifyFn) {
       if (!order.target_price || order.target_price <= 0) continue;
       // Don't trigger orders created less than 30 seconds ago
       const createdAt = new Date(order.created_at).getTime();
-      if (Date.now() - createdAt < 30000) continue;
+      if (Date.now() - createdAt < 5000) continue;
       const currentPrice = getMockPrice(order.token_ca);
       if (!currentPrice) continue;
 
@@ -228,6 +228,23 @@ async function checkLimitOrders(notifyFn) {
 
       if (!triggered) continue;
 
+
+      // Execute BUY limit order
+      if (order.order_type === 'buy') {
+        const user = db.getUser(order.user_id);
+        if (user) {
+          const { mockBuy } = require('./executor');
+          if (notifyFn) {
+            notifyFn(order.user_id, 'limit_order', {
+              message:
+                `📌 *Limit Buy Executed*\n\n` +
+                `Token: *${order.token_name || order.token_ca.slice(0,8)}*\n` +
+                `Amount: *${order.sol_amount} SOL*\n` +
+                `Price: *${currentPrice.toFixed(8)}*`,
+            });
+          }
+        }
+      }
       // Cancel the limit order
       db.cancelLimitOrder(order.user_id, order.id);
 

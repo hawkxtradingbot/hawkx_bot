@@ -55,54 +55,31 @@ function buildRankInfoMessage(user) {
 // MAIN MENU
 // ════════════════════════════════════════════════════════════
 function buildMainMenu(user, todayStats, killSwitchActive) {
-  const isProMode = user && user.mode === "pro";
-  const kb        = new InlineKeyboard();
+  const isProMode = user && user.mode === 'pro';
+  const kb = new InlineKeyboard();
 
   if (killSwitchActive) {
-    kb.text("🔴 Trading Paused — Admin Notice", "noop").row();
+    kb.text('🔴 Trading Paused — Admin Notice', 'noop').row();
   }
 
-  // Fee + stats — always show on both modes
-  kb.text(getFeeDisplay(user), "menu_rank_info").row();
-  if (todayStats) kb.text(buildQuickStats(todayStats), "menu_stats").row();
+  kb.text(getFeeDisplay(user), 'menu_rank_info').row();
+  if (todayStats) kb.text(buildQuickStats(todayStats), 'menu_stats').row();
+
+  kb.text('BUY 🟢', 'trade_quickbuy').text('🔴 SELL', 'trade_positions').row();
+  kb.text('📂 Positions', 'menu_portfolio').text('💼 Wallets', 'menu_wallets').row();
 
   if (isProMode) {
-    kb.text(" BUY 🟢", "trade_quickbuy")
-      .text("🔴 SELL ", "trade_positions")
-      .row();
-    kb.text("📂 Positions",  "menu_portfolio")
-      .text("💼 Wallets",    "menu_wallets")
-      .row();
-    kb.text("💰 Referrals",  "menu_referrals")
-      .text("⚙️ Settings",  "menu_settings")
-      .row();
-    kb.text("🚀 Launch Token","menu_launch").row();
-    kb.text("🎯 Sniper",     "menu_sniper")
-      .text("👥 Copy Trade", "menu_copy_trade")
-      .row();
-    kb.text("📋 Limit Orders","menu_limit_orders")
-      .text("⭐ Watchlist",  "menu_watchlist")
-      .row();
-    kb.text("🚰 Faucet",     "devnet_faucet").row();
-    kb.text("❓ Help",        "menu_help")
-      .text("🔄 Refresh",    "menu_main_refresh")
-      .row();
-    kb.text("🌱 Beginner Mode →","mode_set_beginner").row();
+    kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
+    kb.text('📋 Limit Orders', 'menu_limit_orders').text('⭐ Watchlist', 'menu_watchlist').row();
+    kb.text('🚀 Launch Token', 'menu_launch').row();
+    kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
+    kb.text('❓ Help', 'menu_help').row();
+    kb.text('🌱 Beginner Mode →', 'mode_set_beginner').row();
   } else {
-    kb.text(" BUY 🟢", "trade_quickbuy")
-    .text("🔴 SELL ", "trade_positions")
-    .row();
-    kb.text("📂 Positions", "menu_portfolio")
-      .text("💼 Wallets",   "menu_wallets")
-      .row();
-    kb.text("💰 Referrals", "menu_referrals")
-      .text("⚙️ Settings",  "menu_settings")
-      .row();
-    kb.text("❓ Help",       "menu_help")
-      .text("🔄 Refresh",   "menu_main_refresh")
-      .row();
-    kb.text("🚰 Get Test SOL","devnet_faucet").row();
-    kb.text("⚡ Pro Mode →",  "mode_set_pro").row();
+    kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
+    kb.text('❓ Help', 'menu_help').row();
+    kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
+    kb.text('⚡ Pro Mode →', 'mode_set_pro').row();
   }
   return kb;
 }
