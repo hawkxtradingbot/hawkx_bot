@@ -3,6 +3,30 @@ const { buildTokenOrdersScreen, showLimitOrdersScreen } = require("./helpers.rou
 const { buildLimitOrdersMenu, buildLimitOrderSetupMenu } = require("../keyboards");
 
 async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
+
+    if (data.startsWith("lo_switch_wallet_")) {
+      const wId = parseInt(data.replace("lo_switch_wallet_", ""));
+      db.setSysConfig(`lo_sel_wallet_${userId}`, String(wId));
+      await ctx.answerCallbackQuery("✅ Wallet switched!");
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
+
+    if (data.startsWith("lo_select_")) {
+      const id = parseInt(data.replace("lo_select_", ""));
+      const current = db.getSysConfig(`lo_selected_${userId}`) || "";
+      // Toggle — click again to deselect
+      if (current === String(id)) {
+        db.setSysConfig(`lo_selected_${userId}`, "");
+      } else {
+        db.setSysConfig(`lo_selected_${userId}`, String(id));
+      }
+      await ctx.answerCallbackQuery();
+      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      if (ca) return buildTokenOrdersScreen(ctx, userId, ca, false);
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
     // ── LIMIT ORDERS ──────────────────────────────────────────
     if (data.startsWith("lo_pause_")) {
       const id = parseInt(data.replace("lo_pause_", ""));
@@ -102,7 +126,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       if (existingCa) {
         const { getMockPrice: gmp3 } = require("../executor");
         const mp3 = gmp3(existingCa);
-        const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3.toFixed(8)}\n\nEnter target price:`, { parse_mode: "Markdown" });
+        const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3.toFixed(8)}\n\nEnter price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
         db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
         db.setSysConfig(`pending_${userId}`, "lo_set_price");
       } else {
@@ -121,13 +145,13 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       const mp3b = gmp3b(existingCa);
       const curMsg10 = ctx.callbackQuery?.message?.message_id;
       if (curMsg10) db.setSysConfig(`lo_msg_${userId}`, String(curMsg10));
-      const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3b.toFixed(8)}\n\nEnter target price:`, { parse_mode: "Markdown" });
+      const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3b.toFixed(8)}\n\nEnter price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_price");
       return true;
     }
 
-    if (data === "lo_new_sell" || data === "lo_add_sell") {
+    if (data === "lo_add_sell") {
       await ctx.answerCallbackQuery();
       const existingCa2 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
       db.setSysConfig(`lo_type_${userId}`, "sell");
@@ -136,7 +160,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       if (existingCa2 && data === "lo_add_sell") {
         const { getMockPrice: gmp4 } = require("../executor");
         const mp4 = gmp4(existingCa2);
-        const m2 = await ctx.reply(`🔴 *Add Limit Sell*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa2.slice(0,8)}\nPrice: ${mp4.toFixed(8)}\n\nEnter sell % (e.g. 50):`, { parse_mode: "Markdown" });
+        const m2 = await ctx.reply(`🔴 *Add Limit Sell*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa2.slice(0,8)}\nPrice: ${mp4.toFixed(8)}\n\nEnter sell % (e.g. 50 for 50%):`, { parse_mode: "Markdown" });
         db.setSysConfig(`prompt_msg_${userId}`, String(m2.message_id));
         db.setSysConfig(`pending_${userId}`, "lo_set_sell_pct_direct");
         return true;

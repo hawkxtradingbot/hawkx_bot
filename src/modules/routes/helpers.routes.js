@@ -499,17 +499,27 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   const walletNum2 = wallets2.indexOf(selWal2) + 1;
   let priceInfo = "";
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
-  const msg = `📋 *${name} — Limit Orders*\n${priceInfo}\n\n━━━ 📚 GUIDE ━━━\n🟢 Active | ⏸ Paused | 🗑 Delete\nClick order = pause/resume\n━━━━━━━━━━━━━━━━━━━\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+  const msg = `📋 *${name} — Limit Orders*\n\n━━━ 📚 GUIDE ━━━\n🟢 Buy triggers at or below target\n🔴 Sell triggers at or above target
+Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
+    const mcapLabel = o.target_mcap > 0
+      ? `MC:${o.target_mcap >= 1000000 ? (o.target_mcap/1000000).toFixed(1)+"M" : (o.target_mcap/1000).toFixed(0)+"K"}`
+      : `${parseFloat(o.target_price||0).toFixed(4)}`;
     const det = o.order_type === "buy"
-      ? `${status} Buy ${o.sol_amount||0.1}SOL @ $${parseFloat(o.target_price||0).toFixed(6)}`
-      : `${status} Sell ${o.sell_pct||100}% @ $${parseFloat(o.target_price||0).toFixed(6)}`;
+      ? `${status} Buy ${o.sol_amount||0.1}◎ @${mcapLabel}`
+      : `${status} Sell ${o.sell_pct||100}% @${mcapLabel}`;
+    const isSelected = db.getSysConfig(`lo_selected_${userId}`) === String(o.id);
     kb.inline_keyboard.push([
-      { text: det, callback_data: `lo_pause_${o.id}` },
-      { text: "🗑", callback_data: `lo_del_${o.id}` },
+      { text: det, callback_data: `lo_select_${o.id}` },
     ]);
+    if (isSelected) {
+      kb.inline_keyboard.push([
+        { text: o.paused ? "▶ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
+        { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },
+      ]);
+    }
   });
   if (walletExpanded) {
     for (let i = 0; i < wallets2.length; i += 4) {
@@ -554,30 +564,36 @@ async function showLimitOrdersScreen(ctx, userId) {
   const orders = db.getLimitOrders(userId);
   const wallets = db.getWallets(userId) || [];
   const user = db.getUser(userId);
-  const activeWallet = wallets.find(w => w.wallet_id === user.active_wallet_id) || wallets[0];
+  // Use lo_selected_wallet if set, otherwise use active wallet
+  const selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
+  const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
   const balance = activeWallet ? (activeWallet.balance || 0) : 0;
-  const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === user.active_wallet_id);
-  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy = triggers when price drops\n🔴 Sell = triggers when price rises\n💡 Click token to manage orders\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(orders.map(o=>[o.token_ca,1]))}).length}*`;
+  // Filter positions by SELECTED wallet
+  const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
+  // Filter orders by selected wallet
+  const walletOrders = orders.filter(o => o.wallet_id === selWalletId || (!o.wallet_id && selWalletId === parseInt(db.getUser(userId).active_wallet_id)));
+  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy — triggers when price/MC drops to target\n🔴 Sell — triggers when price/MC rises to target\n💡 Switch wallet to see its tokens & orders
+💼 Each wallet executes its own orders\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
   const kb = { inline_keyboard: [] };
   const loWalletExpanded = db.getSysConfig(`lo_wallet_expanded_${userId}`) === "1";
   if (loWalletExpanded) {
     for (let i = 0; i < wallets.length; i += 4) {
       kb.inline_keyboard.push(wallets.slice(i, i+4).map((w, idx) => {
         const num = i+idx+1;
-        const isSel = w.wallet_id === user.active_wallet_id;
-        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_setwallet_${w.wallet_id}` };
+        const isSel = w.wallet_id === selWalletId;
+        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_switch_wallet_${w.wallet_id}` };
       }));
     }
     kb.inline_keyboard.push([{ text: "▲ Close", callback_data: "lo_wallet_collapse" }]);
   } else {
-    kb.inline_keyboard.push([{ text: `💼 W${walletNum} — ${balance.toFixed(3)} SOL ▼`, callback_data: "lo_wallet_expand" }]);
+    kb.inline_keyboard.push([{ text: `💼 W${walletNum} ✅ — ${balance.toFixed(3)} SOL ▼`, callback_data: "lo_wallet_expand" }]);
   }
   const byToken = {};
-  orders.forEach(o => { if (!byToken[o.token_ca]) byToken[o.token_ca] = []; byToken[o.token_ca].push(o); });
+  walletOrders.forEach(o => { if (!byToken[o.token_ca]) byToken[o.token_ca] = []; byToken[o.token_ca].push(o); });
   const tokenMap = {};
   allPos.forEach(p => { tokenMap[p.token_ca] = p; });
-  orders.forEach(o => { if (!tokenMap[o.token_ca]) tokenMap[o.token_ca] = { token_ca: o.token_ca, token_name: o.token_name }; });
+  walletOrders.forEach(o => { if (!tokenMap[o.token_ca]) tokenMap[o.token_ca] = { token_ca: o.token_ca, token_name: o.token_name }; });
   const tokenList = Object.values(tokenMap);
   for (let i = 0; i < tokenList.length; i += 3) {
     kb.inline_keyboard.push(tokenList.slice(i, i+3).map(p => {
@@ -591,8 +607,7 @@ async function showLimitOrdersScreen(ctx, userId) {
     }));
   }
   kb.inline_keyboard.push([
-    { text: "➕ New Buy", callback_data: "lo_new_buy" },
-    { text: "➕ New Sell", callback_data: "lo_new_sell" }
+    { text: "➕ New Buy", callback_data: "lo_new_buy" }
   ]);
   kb.inline_keyboard.push([
     { text: "← Back", callback_data: "menu_main" },

@@ -755,8 +755,8 @@ function pauseLimitOrder(userId, id) {
 
 function addLimitOrder(userId, data) {
   getDb().prepare(
-    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)"
-  ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100);
+    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused, wallet_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)"
+  ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100, data.walletId || null);
   // Ensure active=1 for all new orders
 }
 

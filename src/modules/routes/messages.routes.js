@@ -208,7 +208,7 @@ function setupMessages(bot) {
       const m = await ctx.reply(
         `${loType === "buy" ? "🟢 Limit Buy" : "🔴 Limit Sell"} — *${tName}*\n\n` +
         `💰 Current Price: ${priceStr}\n\n` +
-        `Enter target price:`,
+        `Enter price or MC (e.g. 0.0005 / 50K / 1M):`,
         { parse_mode: "Markdown" }
       );
       db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
@@ -257,12 +257,16 @@ function setupMessages(bot) {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       db.setSysConfig(`pending_${userId}`, "");
-      const price5 = parseFloat(text);
-      if (isNaN(price5) || price5 <= 0) { await ctx.reply("❌ Invalid price."); return; }
+      const clean5 = text.trim().replace(/[$]/,"").toUpperCase();
+      let price5 = 0, mcap5 = 0;
+      if (clean5.endsWith("K")) { mcap5 = parseFloat(clean5) * 1000; }
+      else if (clean5.endsWith("M")) { mcap5 = parseFloat(clean5) * 1000000; }
+      else { const n5 = parseFloat(clean5); if (n5 >= 1000) mcap5 = n5; else price5 = n5; }
+      if (price5 <= 0 && mcap5 <= 0) { await ctx.reply("Invalid value"); return; }
       const ca6 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
       const name6 = db.getSysConfig(`lo_pending_name_${userId}`) || "Token";
       const pct6 = parseFloat(db.getSysConfig(`lo_sell_pct_direct_${userId}`) || "100");
-      db.addLimitOrder(userId, { tokenCa: ca6, tokenName: name6, orderType: "sell", targetPrice: price5, solAmount: 0, sellPct: pct6, targetMcap: 0 });
+      db.addLimitOrder(userId, { tokenCa: ca6, tokenName: name6, orderType: "sell", targetPrice: price5, solAmount: 0, sellPct: pct6, targetMcap: mcap5, walletId: parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || db.getUser(userId).active_wallet_id) });
       const savedMsgId6 = parseInt(db.getSysConfig(`lo_msg_${userId}`) || "0");
       return buildTokenOrdersScreen(ctx, userId, ca6, false, savedMsgId6);
     }
@@ -271,11 +275,34 @@ function setupMessages(bot) {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       db.setSysConfig(`pending_${userId}`, "");
-      const price = parseFloat(text);
-      if (isNaN(price) || price <= 0) { await ctx.reply("❌ Invalid price."); return; }
-      db.setSysConfig(`lo_price_${userId}`, String(price));
+
+      // Detect price vs mcap
+      // MCap formats: 50000, 0K, 50K, 1M, .5M
+      let targetPrice = 0;
+      let targetMcap = 0;
+      const clean = text.trim().replace(/$/, "").toUpperCase();
+
+      if (clean.endsWith("K")) {
+        targetMcap = parseFloat(clean) * 1000;
+      } else if (clean.endsWith("M")) {
+        targetMcap = parseFloat(clean) * 1000000;
+      } else {
+        const num = parseFloat(clean);
+        if (num >= 1000) {
+          targetMcap = num; // Large number = mcap
+        } else {
+          targetPrice = num; // Small number = price
+        }
+      }
+
+      if (targetPrice <= 0 && targetMcap <= 0) { await ctx.reply("❌ Invalid value. Enter price (e.g. 0.0005) or mcap (e.g. 50K, 1M, 500000)"); return; }
+
+      db.setSysConfig(`lo_price_${userId}`, String(targetPrice));
+      db.setSysConfig(`lo_mcap_${userId}`, String(targetMcap));
+
       const loType2 = db.getSysConfig(`lo_type_${userId}`) || "buy";
-      const m3 = await ctx.reply(loType2 === "buy" ? "💰 Enter SOL amount (e.g. 0.5):" : "🔴 Enter sell % (e.g. 50):");
+      const label = targetMcap > 0 ? `MCap: ${targetMcap >= 1000000 ? (targetMcap/1000000).toFixed(1)+"M" : (targetMcap/1000).toFixed(0)+"K"}` : `Price: ${targetPrice}`;
+      const m3 = await ctx.reply(`✅ Target set: *${label}*\n\n${loType2 === "buy" ? "💰 Enter SOL amount (e.g. 0.5):" : "🔴 Enter sell % (e.g. 50):"}`, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(m3.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_amount");
       return;
@@ -296,7 +323,8 @@ function setupMessages(bot) {
         targetPrice: price3,
         solAmount: loType3 === "buy" ? val : 0,
         sellPct: loType3 === "sell" ? val : 100,
-        targetMcap: 0,
+        targetMcap: parseFloat(db.getSysConfig(`lo_mcap_${userId}`) || "0"),
+        walletId: parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || db.getUser(userId).active_wallet_id),
       });
       return buildTokenOrdersScreen(ctx, userId, ca3, false);
     }
