@@ -190,10 +190,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
     const b1 = settings.buy_amt_1 || 0.1;
     const b2 = settings.buy_amt_2 || 0.5;
-    kb.text(`🟢 ${b1} SOL`, `buy_ca_amt_${b1}`)
-      .text(`🟢 ${b2} SOL`, `buy_ca_amt_${b2}`)
-      .text("✏️ Custom",    "buy_ca_custom")
-      .row();
+    const b3 = settings.buy_amt_3 || 1.0;
+    kb.text(`🟢 ${b1}`, `buy_ca_amt_${b1}`).text(`🟢 ${b2}`, `buy_ca_amt_${b2}`).text(`🟢 ${b3}`, `buy_ca_amt_${b3}`).text("✏️", "buy_ca_custom").row();
 
     if (isProMode) {
       kb.text("🔴 25%",  `sell_pct_25_${selPos.position_id}`)

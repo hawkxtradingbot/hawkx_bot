@@ -1,6 +1,6 @@
 const db = require("../../../database");
 const bcrypt = require("bcryptjs");
-const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu } = require("../keyboards");
+const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildExecutionSettingsMenu, buildRiskSettingsMenu } = require("../keyboards");
 const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./settings.helpers");
 
 async function handleTextInput(ctx, user, pendingKey) {
@@ -203,6 +203,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       }
       db.updateSettings(userId, { slippage_pct: v });
       await ctx.reply(`✅ Buy slippage: *${v}%*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
     case "set_sell_slippage": {
@@ -212,33 +213,15 @@ async function handleTextInput(ctx, user, pendingKey) {
       }
       db.updateSettings(userId, { sell_slippage_pct: v });
       await ctx.reply(`✅ Sell slippage: *${v}%*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
-    case "set_stoploss": {
-      const v = parseFloat(text);
-      if (isNaN(v) || v > 0) {
-        await ctx.reply("❌ Enter negative number (e.g. -25) or 0 to disable."); handled = false; break;
-      }
-      db.updateSettings(userId, { stop_loss_pct: v });
-      await ctx.reply(v === 0 ? "✅ Stop Loss *disabled*." : `✅ Stop Loss: *${v}%*`, { parse_mode: "Markdown" });
-      break;
-    }
-    case "set_takeprofit": {
-      const v = parseFloat(text);
-      if (isNaN(v) || v < 0) {
-        await ctx.reply("❌ Enter positive number (e.g. 100) or 0 to disable."); handled = false; break;
-      }
-      db.updateSettings(userId, { take_profit_pct: v });
-      await ctx.reply(v === 0 ? "✅ Take Profit *disabled*." : `✅ Take Profit: *${v}%*`, { parse_mode: "Markdown" });
-      break;
-    }
-    case "set_maxbuy": {
-      const v = parseFloat(text);
-      if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
-      db.updateSettings(userId, { max_buy_sol: v });
-      await ctx.reply(`✅ Max buy: *${v} SOL*`, { parse_mode: "Markdown" });
-      break;
-    }
+
+
+
+
+
+
     case "set_session": {
       const v = parseInt(text);
       if (isNaN(v) || v < 0 || v > 24) { await ctx.reply("❌ Enter 1–24 or 0 to disable."); handled = false; break; }
@@ -251,6 +234,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
       db.updateSettings(userId, { jito_tip: v });
       await ctx.reply(`✅ Jito Tip: *${v} SOL*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
     case "set_custom_speed": {
@@ -260,12 +244,20 @@ async function handleTextInput(ctx, user, pendingKey) {
       await ctx.reply(`✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
       break;
     }
+    case "buy_custom_amount": {
+      const v = parseFloat(text);
+      if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
+      db.setSysConfig(`custom_buy_amt_${userId}`, String(v));
+      await ctx.reply(`✅ Custom buy: *${v} SOL*`, { parse_mode: "Markdown" });
+      break;
+    }
     case "set_buy_amt_1": case "set_buy_amt_2": case "set_buy_amt_3": {
       const n = parseInt(pendingKey.slice(-1));
       const v = parseFloat(text);
       if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
       db.updateSettings(userId, { [`buy_amt_${n}`]: v });
       await ctx.reply(`✅ Buy Amount ${n}: *${v} SOL*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
     case "set_sell_pct_1": case "set_sell_pct_2": case "set_sell_pct_3": {
@@ -274,6 +266,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       if (isNaN(v) || v <= 0 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
       db.updateSettings(userId, { [`sell_pct_${n}`]: v });
       await ctx.reply(`✅ Sell ${n}: *${v}%*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
       case "sap_set_new": {
@@ -337,6 +330,25 @@ async function handleTextInput(ctx, user, pendingKey) {
         if (handled) {
           db.setSysConfig(`pending_${userId}`, "");
           try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
+
+          // Refresh execution screen for execution-related settings
+          const execKeys = ["set_slippage","set_sell_slippage","set_buy_amt_1","set_buy_amt_2","set_buy_amt_3","set_sell_pct_1","set_sell_pct_2","set_sell_pct_3","set_jito","set_custom_speed"];
+          const riskKeys = ["set_stoploss","set_takeprofit","set_maxbuy"];
+          if (execKeys.includes(pendingKey)) {
+            const freshS = db.getSettings(userId);
+            const execMsgId = parseInt(db.getSysConfig(`exec_msg_${userId}`) || "0");
+            if (execMsgId) {
+              try { await ctx.api.editMessageReplyMarkup(ctx.chat.id, execMsgId, { reply_markup: buildExecutionSettingsMenu(freshS) }); } catch {}
+            }
+          }
+          if (riskKeys.includes(pendingKey)) {
+            const freshS = db.getSettings(userId);
+            const riskMsgId = parseInt(db.getSysConfig(`risk_msg_${userId}`) || "0");
+            if (riskMsgId) {
+              try { await ctx.api.editMessageReplyMarkup(ctx.chat.id, riskMsgId, { reply_markup: buildRiskSettingsMenu(freshS) }); } catch {}
+            }
+          }
+
           const abKeys = ["ab_set_amount","ab_set_slippage","ab_set_gas","ab_set_max"];
         if (abKeys.includes(pendingKey)) {
           const { buildAutoBuyScreen } = require("../keyboards");

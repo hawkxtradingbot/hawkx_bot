@@ -28,7 +28,7 @@ async function showSettings(ctx, user) {
       "⚡ *Speed* — Trade execution priority\n" +
       "🔐 *PIN* — Security for key export/withdraw";
   const kb = isProMode
-    ? buildProSettingsMenu()
+    ? buildProSettingsMenu(userWithSettings)
     : buildBeginnerSettingsMenu(userWithSettings);
 
   try { await ctx.editMessageText(guide, { parse_mode: "Markdown", reply_markup: kb }); }
@@ -52,7 +52,7 @@ async function refreshSettings(ctx, user) {
   const userWithSettings = { ...user, settings };
   const isProMode     = user.mode === "pro";
   const kb = isProMode
-    ? buildProSettingsMenu()
+    ? buildProSettingsMenu(userWithSettings)
     : buildBeginnerSettingsMenu(userWithSettings);
   try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
 }

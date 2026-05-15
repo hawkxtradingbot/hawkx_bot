@@ -1,6 +1,6 @@
 const db = require("../../../database");
 const bcrypt = require("bcryptjs");
-const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildChannelAutoSellScreen, buildWalletAutoSellScreen } = require("../keyboards");
+const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildChannelAutoSellScreen, buildWalletAutoSellScreen, buildExecutionSettingsMenu, buildMevSettingsMenu, buildAlertsSettingsMenu } = require("../keyboards");
 const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./settings.helpers");
 
     // ── Main callback handler ─────────────────────────────────────
@@ -138,16 +138,36 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   if (action === "set_mev") {
     const v = (settings.mev_protect ?? 1) ? 0 : 1;
     db.updateSettings(user.user_id, { mev_protect: v });
-    await ctx.answerCallbackQuery(`MEV Protection: ${v ? "✅ ON" : "◻️ OFF"}`);
-    await refreshSettings(ctx, user);
+    await ctx.answerCallbackQuery(`MEV Protection: ${v ? "✅ ON" : "⬜ OFF"}`);
+    const fresh = db.getUser(user.user_id);
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS) }); } catch {}
     return;
   }
 
   if (action === "pset_confirm") {
     const v = settings.confirm_trades ? 0 : 1;
     db.updateSettings(user.user_id, { confirm_trades: v });
-    await ctx.answerCallbackQuery(`Confirm Trades: ${v ? "✅ ON" : "◻️ OFF"}`);
-    await refreshSettings(ctx, user);
+    await ctx.answerCallbackQuery(`Confirm Trades: ${v ? "✅ ON" : "⬜ OFF"}`);
+    const freshS = db.getSettings(user.user_id);
+    const execG = `⚡ *Execution Settings*
+
+🟢 *Buy* — SOL per trade (B1/B2/B3)
+🔴 *Sell* — % of position (S1/S2/S3)
+📉 *Slippage* — Max price movement
+✅ *Confirm* — Ask before each trade
+🛡 *MEV* — Sandwich protection
+
+⚡ *Priority Fee (Speed):*
+▸ Std: ~0.001 SOL
+▸ Fast 🐎: ~0.003 SOL
+▸ Turbo 🚀: ~0.0075 SOL
+▸ Boost 🔥: ~0.01 SOL
+▸ Custom ✏️: set your own
+
+⚡ *Jito Tip* — Bundle priority
+▸ Min: 0.0001 | Std: 0.005 | Fast: 0.01 | Pri: 0.05`;
+    try { await ctx.editMessageText(execG, { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(freshS) }); } catch {}
     return;
   }
 
@@ -164,7 +184,8 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     const speed = action === "bset_speed_fast" ? "fast" : "turbo";
     db.updateSettings(user.user_id, { speed_mode: speed });
     await ctx.answerCallbackQuery(`✅ Speed: ${speed}`);
-    await refreshSettings(ctx, user);
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, false) }); } catch {}
     return;
   }
 
@@ -182,13 +203,6 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   }
 
   // Pro speed
-  if (action === "bset_speed_fast" || action === "bset_speed_turbo") {
-    const speed = action.includes("fast") ? "fast" : "turbo";
-    db.updateSettings(user.user_id, { speed_mode: speed });
-    await ctx.answerCallbackQuery(`✅ ${speed}`);
-    await refreshSettings(ctx, user);
-    return;
-  }
 
   // ── TEXT INPUT PROMPTS ────────────────────────────────────────
   if (action === "set_slippage") {
@@ -207,33 +221,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     return;
   }
 
-  if (action === "set_stoploss") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx,
-      "🛑 *Stop Loss*\n\nEnter negative % (e.g. -25) or 0 to disable.\n\nType *none* to cancel:"
-    );
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "set_stoploss");
-    return;
-  }
 
-  if (action === "set_takeprofit") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx,
-      "🎯 *Take Profit*\n\nEnter positive % (e.g. 100) or 0 to disable.\n\nType *none* to cancel:"
-    );
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "set_takeprofit");
-    return;
-  }
-
-  if (action === "set_maxbuy") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx, "💰 *Max Buy SOL*\n\nEnter max SOL per trade (e.g. 0.5):");
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "set_maxbuy");
-    return;
-  }
 
   if (action === "set_session") {
     await ctx.answerCallbackQuery();
@@ -243,11 +231,35 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     return;
   }
 
+  if (action.startsWith("pset_jito_preset_")) {
+    const val = action.replace("pset_jito_preset_", "");
+    db.updateSettings(user.user_id, { jito_tip: parseFloat(val) });
+    await ctx.answerCallbackQuery(`✅ Jito: ${val} SOL`);
+    const freshS2 = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS2, false) }); } catch {}
+    return;
+  }
+
   if (action === "pset_jito") {
     await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx, "⛽ *Jito Tip*\n\nEnter tip SOL amount (e.g. 0.005):");
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, true) }); } catch {}
+    return;
+  }
+
+  if (action === "pset_jito_custom") {
+    await ctx.answerCallbackQuery();
+    const p = await sendPrompt(ctx, "⚡ *Custom Jito Tip*\n\nEnter SOL (e.g. 0.005):");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(p));
     db.setSysConfig(`pending_${user.user_id}`, "set_jito");
+    return;
+  }
+
+  if (action === "pset_b_custom") {
+    await ctx.answerCallbackQuery();
+    const p = await sendPrompt(ctx, "🟢 *Custom Buy Amount*\n\nEnter SOL amount (e.g. 0.15):\n_One-time custom buy._");
+    db.setSysConfig(`prompt_msg_${user.user_id}`, String(p));
+    db.setSysConfig(`pending_${user.user_id}`, "buy_custom_amount");
     return;
   }
 
@@ -270,10 +282,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   }
 
   if (action === "bset_sell_info") {
-    await ctx.answerCallbackQuery(
-      "Initial sell = sells your original buy amount worth of tokens. E.g. Bought 1 SOL, now 5 SOL — sells 1 SOL worth.",
-      { show_alert: true }
-    );
+    await ctx.answerCallbackQuery({ text: "Initial = sells your original invested SOL worth. e.g. bought 1 SOL → sells 1 SOL worth of tokens", show_alert: true });
     return;
   }
 
@@ -672,8 +681,43 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   if (action === "pset_execution") {
     await ctx.answerCallbackQuery();
     const s = db.getSettings(user.user_id);
-    try { await ctx.editMessageText("⚡ *Execution Settings*", { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) }); }
-    catch { await ctx.reply("⚡ *Execution Settings*", { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) }); }
+    const execGuide = `⚡ *Execution Settings*
+
+` +
+      `🟢 *Buy* — SOL per trade (B1/B2/B3)
+` +
+      `🔴 *Sell* — % of position (S1/S2/S3)
+` +
+      `📉 *Slippage* — Max price movement
+` +
+      `✅ *Confirm* — Ask before each trade
+` +
+      `🛡 *MEV* — Sandwich protection
+
+` +
+      `⚡ *Priority Fee (Speed):*
+` +
+      `▸ Std: ~0.001 SOL
+` +
+      `▸ Fast 🐎: ~0.003 SOL
+` +
+      `▸ Turbo 🚀: ~0.0075 SOL
+` +
+      `▸ Boost 🔥: ~0.01 SOL
+` +
+      `▸ Custom ✏️: set your own
+
+` +
+      `⚡ *Jito Tip* — Extra fee for bundle priority
+` +
+      `▸ Min: 0.0001 | Std: 0.005 | Fast: 0.01 | Pri: 0.05`;
+    try {
+      await ctx.editMessageText(execGuide, { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) });
+      db.setSysConfig(`exec_msg_${user.user_id}`, String(ctx.callbackQuery?.message?.message_id || 0));
+    } catch {
+      const sent = await ctx.reply("⚡ *Execution Settings*", { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) });
+      db.setSysConfig(`exec_msg_${user.user_id}`, String(sent.message_id));
+    }
     return;
   }
 
@@ -685,24 +729,66 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     return;
   }
 
-  if (action === "pset_risk") {
-    await ctx.answerCallbackQuery();
-    const s = db.getSettings(user.user_id);
-    try { await ctx.editMessageText("🔒 *Risk Controls*", { parse_mode: "Markdown", reply_markup: buildRiskSettingsMenu(s) }); }
-    catch { await ctx.reply("🔒 *Risk Controls*", { parse_mode: "Markdown", reply_markup: buildRiskSettingsMenu(s) }); }
-    return;
-  }
+
 
   if (action === "pset_alerts") {
     await ctx.answerCallbackQuery();
-    try { await ctx.editMessageText("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu() }); }
-    catch { await ctx.reply("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu() }); }
+    try { await ctx.editMessageText("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(s) }); }
+    catch { await ctx.reply("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(s) }); }
     return;
   }
+
+
+  // ── Speed expand/presets ─────────────────────────────────────
+  if (action === "pset_speed_expand") {
+    await ctx.answerCallbackQuery();
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, true, false) }); } catch {}
+    return;
+  }
+  if (action === "pset_speed_standard") {
+    db.updateSettings(user.user_id, { speed_mode: "standard" });
+    await ctx.answerCallbackQuery("✅ Standard speed");
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, false) }); } catch {}
+    return;
+  }
+  if (action === "pset_speed_boost") {
+    db.updateSettings(user.user_id, { speed_mode: "boost" });
+    await ctx.answerCallbackQuery("✅ Boost speed 🔥");
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, false) }); } catch {}
+    return;
+  }
+  // ── Slippage expand/presets ───────────────────────────────────
+  if (action === "pset_slippage_expand") {
+    await ctx.answerCallbackQuery();
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, true) }); } catch {}
+    return;
+  }
+  if (action.startsWith("pset_slip_buy_")) {
+    const val = parseInt(action.replace("pset_slip_buy_", ""));
+    db.updateSettings(user.user_id, { slippage_pct: val });
+    await ctx.answerCallbackQuery(`✅ Buy slippage: ${val}%`);
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, true) }); } catch {}
+    return;
+  }
+  if (action.startsWith("pset_slip_sell_")) {
+    const val = parseInt(action.replace("pset_slip_sell_", ""));
+    db.updateSettings(user.user_id, { sell_slippage_pct: val });
+    await ctx.answerCallbackQuery(`✅ Sell slippage: ${val}%`);
+    const freshS = db.getSettings(user.user_id);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, true) }); } catch {}
+    return;
+  }
+
+
+
 
   await ctx.answerCallbackQuery("Unknown setting.");
 }
 
 // ── Text input handler ────────────────────────────────────────
-
 module.exports = { handleSettingCallback };

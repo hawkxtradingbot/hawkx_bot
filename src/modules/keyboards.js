@@ -130,22 +130,19 @@ function buildBeginnerSettingsMenu(user) {
 // ════════════════════════════════════════════════════════════
 // SETTINGS — PRO (category menu)
 // ════════════════════════════════════════════════════════════
-function buildProSettingsMenu() {
+function buildProSettingsMenu(user) {
+  const s = user?.settings || {};
   const kb = new InlineKeyboard();
   kb.text("🤖 Auto Buy",  "pset_autobuy_screen")
   .text("🤖 Auto Sell","pset_autosell_screen")
   .row();
-  kb.text("⚡ Execution", "pset_execution")
-    .text("🛡 MEV",       "pset_mev")
-    .row();
-  kb.text("🔒 Risk",      "pset_risk")
-    .text("🔔 Alerts",    "pset_alerts")
-    .row();
+  kb.text("⚡ Execution", "pset_execution").row();
+  kb.text("🔔 Alerts", "pset_alerts").row();
   kb.text("🔐 PIN",       "set_sap")
     .text("⏱ Session",   "set_session")
     .text("🌐 Language",  "set_language")
     .row();
-  kb.text(`📊 Weekly PnL: ${true?"✅":"◻️"}`, "set_weekly").row();
+  kb.text(`📊 Weekly PnL: ${s.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
   kb.text("🧪 +1 SOL Vol",      "devnet_add_volume").row();
   kb.text("🌱 Beginner Mode →", "mode_set_beginner").row();
   kb.text("← Back",    "menu_main")
@@ -154,25 +151,47 @@ function buildProSettingsMenu() {
   return kb;
 }
 
-function buildExecutionSettingsMenu(s) {
+function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false, slipExpanded = false) {
   const kb = new InlineKeyboard();
-  kb.text(`B1:${s?.buy_amt_1||0.1}`, "pset_b1")
-    .text(`B2:${s?.buy_amt_2||0.5}`, "pset_b2")
-    .text(`B3:${s?.buy_amt_3||1.0}`, "pset_b3")
-    .row();
-  kb.text(`S1:${s?.sell_pct_1||25}%`, "pset_s1")
-    .text(`S2:${s?.sell_pct_2||50}%`, "pset_s2")
-    .text(`S3:${s?.sell_pct_3||100}%`,"pset_s3")
-    .row();
-  kb.text(s?.confirm_trades ? "✅ Confirm Trades" : "◻️ Confirm Trades", "pset_confirm").row();
-  kb.text(`Buy Slip:${s?.slippage_pct||10}%`,      "set_slippage")
-    .text(`Sell Slip:${s?.sell_slippage_pct||10}%`, "set_sell_slippage")
-    .row();
   const spd = s?.speed_mode || "standard";
-  kb.text(spd==="fast"  ? "✅ Fast 🐎"  : "Fast 🐎",  "bset_speed_fast")
-    .text(spd==="turbo" ? "✅ Turbo 🚀" : "Turbo 🚀", "bset_speed_turbo")
-    .row();
-  kb.text(`Jito Tip: ${s?.jito_tip||0.0075} SOL`, "pset_jito").row();
+  const mev = s?.mev_protect ?? 1;
+  const cur = s?.jito_tip || 0.0075;
+  const buySl = s?.slippage_pct || 10;
+  const sellSl = s?.sell_slippage_pct || 10;
+
+  // Buy/Sell amounts
+  kb.text(`🟢 ${s?.buy_amt_1||0.1}`, "pset_b1").text(`🟢 ${s?.buy_amt_2||0.5}`, "pset_b2").text(`🟢 ${s?.buy_amt_3||1.0}`, "pset_b3").text("✏️", "pset_b_custom").row();
+  kb.text(`🔴 ${s?.sell_pct_1||25}%`, "pset_s1").text(`🔴 ${s?.sell_pct_2||50}%`, "pset_s2").text(`🔴 ${s?.sell_pct_3||100}%`, "pset_s3").text("Init", "bset_sell_info").row();
+
+  // Slippage
+  if (slipExpanded) {
+    kb.text("📉 BUY SLIPPAGE:", "noop").row();
+    kb.text(buySl===5?"✅ 5%":"5%", "pset_slip_buy_5").text(buySl===10?"✅ 10%":"10%", "pset_slip_buy_10").text(buySl===20?"✅ 20%":"20%", "pset_slip_buy_20").text("✏️", "set_slippage").row();
+    kb.text("📉 SELL SLIPPAGE:", "noop").row();
+    kb.text(sellSl===5?"✅ 5%":"5%", "pset_slip_sell_5").text(sellSl===10?"✅ 10%":"10%", "pset_slip_sell_10").text(sellSl===20?"✅ 20%":"20%", "pset_slip_sell_20").text("✏️", "set_sell_slippage").row();
+  } else {
+    kb.text(`📉 Buy: ${buySl}% | Sell: ${sellSl}%`, "pset_slippage_expand").row();
+  }
+
+  // Speed
+  if (spdExpanded) {
+    kb.text(spd==="standard"?"✅ Std":"Std", "pset_speed_standard").text(spd==="fast"?"✅ Fast 🐎":"Fast 🐎", "bset_speed_fast").text(spd==="turbo"?"✅ Turbo 🚀":"Turbo 🚀", "bset_speed_turbo").row();
+    kb.text(spd==="boost"?"✅ Boost 🔥":"Boost 🔥", "pset_speed_boost").text(spd==="custom"?"✅ Custom ✏️":"Custom ✏️", "bset_speed_custom").row();
+  } else {
+    const spdLabel = spd==="standard"?"Std ⬜":spd==="fast"?"Fast 🐎 ✅":spd==="turbo"?"Turbo 🚀 ✅":spd==="boost"?"Boost 🔥 ✅":"Custom ✅";
+    kb.text(`⚡ Speed: ${spdLabel}`, "pset_speed_expand").row();
+  }
+
+  kb.text(s?.confirm_trades ? "✅ Confirm" : "⬜ Confirm", "pset_confirm").text(mev ? "✅ MEV" : "⬜ MEV", "set_mev").row();
+
+  // Jito
+  if (jitoExpanded) {
+    kb.text(cur===0.0001?"✅ Min":"Min", "pset_jito_preset_0.0001").text(cur===0.005?"✅ Std":"Std", "pset_jito_preset_0.005").text(cur===0.0075?"✅ Def":"Def", "pset_jito_preset_0.0075").row();
+    kb.text(cur===0.01?"✅ Fast":"Fast", "pset_jito_preset_0.01").text(cur===0.05?"✅ Pri":"Pri", "pset_jito_preset_0.05").text("✏️", "pset_jito_custom").row();
+  } else {
+    kb.text(`⚡ Jito: ${cur} SOL`, "pset_jito").row();
+  }
+
   kb.text("← Back", "menu_settings").row();
   return kb;
 }
@@ -180,38 +199,18 @@ function buildExecutionSettingsMenu(s) {
 function buildMevSettingsMenu(s) {
   const kb  = new InlineKeyboard();
   const mev = s?.mev_protect ?? 1;
-  kb.text(mev ? "✅ MEV Protection" : "◻️ MEV Protection", "set_mev").row();
-  kb.text("✅ Jito Bundle", "noop").text("✅ Anti-Sandwich", "noop").row();
-  kb.text("✅ Frontrun Guard", "noop").text("✅ Sim Check", "noop").row();
+  kb.text(mev ? "✅ MEV Protection" : "⬜ MEV Protection", "set_mev").row();
+  kb.text(`⚡ Jito Tip: ${s?.jito_tip||0.0075} SOL`, "pset_jito").row();
   kb.text("← Back", "menu_settings").row();
   return kb;
 }
 
-function buildRiskSettingsMenu(s) {
-  const kb = new InlineKeyboard();
-  const sl = s?.stop_loss_pct   || 0;
-  const tp = s?.take_profit_pct || 0;
-  kb.text(`🛑 SL: ${sl===0?"OFF":sl+"%"}`, "set_stoploss")
-    .text(`🎯 TP: ${tp===0?"OFF":tp+"%"}`, "set_takeprofit")
-    .row();
-  kb.text(`Max Trade:${s?.max_buy_sol||0}SOL`,    "set_maxbuy")
-    .text(`Daily Loss:${s?.daily_loss_limit||0}`, "pset_daily_loss")
-    .row();
-  kb.text(`Max Pos:${s?.max_open_positions||10}`, "pset_max_pos")
-    .text(`Daily Trades:${s?.daily_trade_limit||0}`,"pset_daily_trades")
-    .row();
-  kb.text("✅ Rug Protection", "noop").text("✅ Honeypot Check", "noop").row();
-  kb.text("← Back", "menu_settings").row();
-  return kb;
-}
-
-function buildAlertsSettingsMenu() {
+function buildAlertsSettingsMenu(s) {
   const kb = new InlineKeyboard();
   kb.text("➕ Price Alert",    "alert_add_price")
     .text("➕ Wallet Tracker", "alert_add_wallet")
     .row();
-  kb.text("✅ New Position Alert", "noop").text("✅ TP/SL Alert", "noop").row();
-  kb.text("✅ Daily PnL Report",   "set_weekly").row();
+  kb.text(`📊 Daily PnL Report: ${s?.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
   kb.text("← Back", "menu_settings").row();
   return kb;
 }
@@ -699,7 +698,7 @@ function getGuide(screen) { return GUIDES[screen] || ""; }
 
 module.exports = {
   buildMainMenu, buildBeginnerSettingsMenu, buildProSettingsMenu,
-  buildExecutionSettingsMenu, buildMevSettingsMenu, buildRiskSettingsMenu,
+  buildExecutionSettingsMenu, buildMevSettingsMenu,
   buildAlertsSettingsMenu, buildWalletMenu, buildWalletDeleteSelect,
   buildWalletExportSelect, buildCopyTradeMenu, buildCopyWalletListMenu,
   buildCopyChannelListMenu, buildCopyChannelSettingsMenu,

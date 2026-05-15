@@ -99,6 +99,8 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data === "buy_ca_custom") {
+      const customAmt = parseFloat(db.getSysConfig(`custom_buy_amt_${userId}`) || "0");
+      if (customAmt > 0) { await mockBuy(ctx, user, db.getSysConfig(`pending_ca_${userId}`) || "", customAmt, "manual", ""); return true; }
       await ctx.answerCallbackQuery();
       const msg = await ctx.reply("✏️ Enter custom SOL amount (e.g. 0.25):");
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
@@ -125,10 +127,10 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       await mockSell(ctx, user, positions[0], pct);
       return true;
     }
-    if (data === "sell_initial" || data.startsWith("sell_initial_")) {
+    if (data === "sell_initial" || data.startsWith("sell_initial_") || data.startsWith("sell_initial_pos_")) {
       if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
       await ctx.answerCallbackQuery();
-      const posId = data.includes("_") && data !== "sell_initial" ? parseInt(data.split("_")[2]) : null;
+      const posId = data.startsWith("sell_initial_pos_") ? parseInt(data.replace("sell_initial_pos_", "")) : (data.includes("_") && data !== "sell_initial" ? parseInt(data.split("_")[2]) : null);
       const positions = posId ? [db.getPosition(posId, userId)] : db.getOpenPositions(userId);
       const pos = positions[0];
       if (!pos) { await ctx.reply("No open positions."); return true; }
