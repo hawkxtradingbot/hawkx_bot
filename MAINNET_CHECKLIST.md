@@ -104,12 +104,12 @@
 
 ## 📋 PENDING LIST (from development)
 
-- [ ] Limit order MCap trigger in stopLoss.js
+- [x] Limit order MCap trigger in stopLoss.js ✅
 - [ ] Alpha/trending indicators
 - [ ] Hits feed
 - [ ] Helius IP restriction
-- [ ] Stats screen rank info update
-- [ ] Rank screen progress bar
+- [x] Stats screen rank info update ✅
+- [x] Rank screen progress bar ✅
 
 ---
 

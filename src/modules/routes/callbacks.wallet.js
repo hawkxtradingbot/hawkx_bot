@@ -9,96 +9,87 @@ const config = require("../../../config");
 
 async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
     // ── WALLETS ───────────────────────────────────────────────
-    if (data === "menu_wallets") {
-      await ctx.answerCallbackQuery();
-      const freshUser = db.getUser(userId);
-      const wallets = db.getWallets(userId) || [];
-      const active = db.getWallet(freshUser.active_wallet_id);
-      const address = active?.public_key || "No wallet";
-      const balance = await getBalance(address);
-      // Show positions PnL filtered by active wallet only
-      const allPos = db.getOpenPositions(userId);
-      const openPos = allPos.filter(
-        (p) => p.wallet_id === freshUser.active_wallet_id,
-      );
-      const { simulatePriceMovement } = require("../executor");
-      let totalInv = 0,
-        totalCur = 0;
-      openPos.forEach((p) => {
-        const cp = simulatePriceMovement(p.token_ca);
-        const pnlPct =
-          p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
-        totalInv += p.sol_invested;
-        totalCur += p.sol_invested * (1 + pnlPct / 100);
-      });
-      const totalPnlSol = totalCur - totalInv;
-      const totalPnlUsd = totalPnlSol * 150;
-      const sign = totalPnlSol >= 0 ? "+" : "";
-      const pnlLine =
-        openPos.length > 0
-          ? `\n📈 Positions P&L: *${sign}${totalPnlSol.toFixed(4)} SOL* / $${totalPnlUsd.toFixed(2)}`
-          : `\n📈 Positions P&L: *0.0000 SOL*`;
-      const walletIdx =
-        wallets.findIndex((w) => w.wallet_id === freshUser.active_wallet_id) +
-        1;
-      return safeEdit(
-        ctx,
-        `💼 *Wallet Management*\n\n` +
-          `Active: *W${walletIdx}*\n` +
-          `📋 Address:\n\`${address}\`\n` +
-          `💰 Balance: *${balance.toFixed(4)} SOL*` +
-          pnlLine +
-          `\n\n` +
-          `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[freshUser.rank] || 5} wallets_`,
-        buildWalletMenu(wallets, freshUser.active_wallet_id),
-      );
-    }
+    // ── Helper: build wallet screen ──────────────────────────────
+  async function showWalletScreen(ctx, userId, activeWalletId, msg) {
+    const freshUser = db.getUser(userId);
+    const wallets = db.getWallets(userId) || [];
+    const walletId = activeWalletId || freshUser.active_wallet_id;
+    const active = db.getWallet(walletId);
+    const address = active?.public_key || "No wallet";
+    const balance = await getBalance(address);
+    const label = active?.label || "Wallet";
+    
+    // P&L for active wallet
+    const allPos = db.getOpenPositions(userId);
+    const openPos = allPos.filter(p => p.wallet_id === walletId);
+    let totalInv = 0, totalCur = 0;
+    openPos.forEach(p => {
+      const cp = simulatePriceMovement(p.token_ca);
+      const pnlPct = p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
+      totalInv += p.sol_invested;
+      totalCur += p.sol_invested * (1 + pnlPct / 100);
+    });
+    const totalPnlSol = totalCur - totalInv;
+    const totalPnlUsd = totalPnlSol * 150;
+    const sign = totalPnlSol >= 0 ? "+" : "";
+    const walletIdx = wallets.findIndex(w => w.wallet_id === walletId) + 1;
+    const walletLimit = config.WALLET_LIMITS[freshUser.rank] || 5;
 
-    if (data.startsWith("wallet_select_")) {
-      const walletId = parseInt(data.replace("wallet_select_", ""));
-      setActiveWallet(userId, walletId);
-      await ctx.answerCallbackQuery("✅ Wallet switched!");
-      // Refresh same wallet screen
-      const freshUser = db.getUser(userId);
-      const wallets = db.getWallets(userId) || [];
-      const active = db.getWallet(walletId);
-      const address = active?.public_key || "No wallet";
-      const balance = await getBalance(address);
-      // Filter positions by selected wallet only
-      const allPos2 = db.getOpenPositions(userId);
-      const openPos2 = allPos2.filter((p) => p.wallet_id === walletId);
-      const { simulatePriceMovement: simPrice2 } = require("../executor");
-      let totalInv2 = 0,
-        totalCur2 = 0;
-      openPos2.forEach((p) => {
-        const cp = simPrice2(p.token_ca);
-        const pnlPct =
-          p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
-        totalInv2 += p.sol_invested;
-        totalCur2 += p.sol_invested * (1 + pnlPct / 100);
-      });
-      const totalPnlSol2 = totalCur2 - totalInv2;
-      const totalPnlUsd2 = totalPnlSol2 * 150;
-      const sign2 = totalPnlSol2 >= 0 ? "+" : "";
-      const pnlLine2 =
-        openPos2.length > 0
-          ? `\n📈 Positions P&L: *${sign2}${totalPnlSol2.toFixed(4)} SOL* / $${totalPnlUsd2.toFixed(2)}`
-          : `\n📈 Positions P&L: *0.0000 SOL*`;
-      const walletIdx2 = wallets.findIndex((w) => w.wallet_id === walletId) + 1;
-      return safeEdit(
-        ctx,
-        `💼 *Wallet Management*\n\n` +
-          `Active: *W${walletIdx2}*\n` +
-          `📋 Address:\n\`${address}\`\n` +
-          `💰 Balance: *${balance.toFixed(4)} SOL*` +
-          pnlLine2 +
-          `\n\n` +
-          `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[freshUser.rank] || 5} wallets_`,
-        buildWalletMenu(wallets, walletId),
-      );
-    }
+    const text = 
+      `💼 *Wallet Management*
 
-    if (data === "wallet_delete_select") {
+` +
+      `Active: *W${walletIdx} — ${label}*
+` +
+      `💰 Balance: *${balance.toFixed(4)} SOL*
+` +
+      `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / $${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
+` +
+      `📋 Address:
+\`${address}\`
+
+` +
+      `_${wallets.length}/${walletLimit} wallets_`;
+
+    return safeEdit(ctx, text, buildWalletMenu(wallets, walletId));
+  }
+
+  if (data === "menu_wallets") {
+    await ctx.answerCallbackQuery();
+    return showWalletScreen(ctx, userId, null);
+  }
+
+  if (data.startsWith("wallet_select_")) {
+    const walletId = parseInt(data.replace("wallet_select_", ""));
+    setActiveWallet(userId, walletId);
+    await ctx.answerCallbackQuery("✅ Wallet switched!");
+    return showWalletScreen(ctx, userId, walletId);
+  }
+
+  if (data === "wallet_copy_address") {
+    await ctx.answerCallbackQuery();
+    const freshUser = db.getUser(userId);
+    const active = db.getWallet(freshUser.active_wallet_id);
+    const address = active?.public_key || "No wallet";
+    await ctx.reply(`📋 *Your Wallet Address:*
+\`${address}\``, { parse_mode: "Markdown" });
+    return true;
+  }
+
+  if (data === "wallet_rename") {
+    await ctx.answerCallbackQuery();
+    const freshUser = db.getUser(userId);
+    const wallets = db.getWallets(userId) || [];
+    const walletIdx = wallets.findIndex(w => w.wallet_id === freshUser.active_wallet_id) + 1;
+    db.setSysConfig(`pending_${userId}`, "wallet_rename");
+    const sent = await ctx.reply(`✏️ *Rename W${walletIdx}*
+
+Enter new wallet name:`, { parse_mode: "Markdown" });
+    db.setSysConfig(`pending_msg_${userId}`, String(sent.message_id));
+    return true;
+  }
+
+  if (data === "wallet_delete_select") {
       await ctx.answerCallbackQuery();
       const wallets = db.getWallets(userId) || [];
       if (wallets.length <= 1) {
@@ -229,7 +220,7 @@ async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
             const num = i + idx + 1;
             const isActive = w.wallet_id === freshUser.active_wallet_id;
             return {
-              text: isActive ? `W${num} ✅` : `W${num}`,
+              text: isActive ? `W${num} ${w.label||""} ✅`.slice(0,20) : `W${num} ${w.label||""}`.slice(0,20),
               callback_data: `wallet_export_prompt_${w.wallet_id}`,
             };
           }),
@@ -242,16 +233,11 @@ async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
           `${hasPIN ? "🔐 PIN required to export." : "⚠️ No PIN set — we recommend setting a PIN before exporting."}\n\n` +
           `Select wallet to export:`,
         {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              ...walletRows,
-              hasPIN
-                ? []
-                : [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
-              [{ text: "← Back", callback_data: "menu_wallets" }],
-            ].filter((r) => r.length > 0),
-          },
+          inline_keyboard: [
+            ...walletRows,
+            hasPIN ? [] : [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+            [{ text: "← Back", callback_data: "menu_wallets" }],
+          ].filter(r => r.length > 0),
         },
       );
     }

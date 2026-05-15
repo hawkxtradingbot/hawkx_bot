@@ -234,6 +234,7 @@ function buildWalletMenu(wallets, activeWalletId) {
   }
 
   if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
+  kb.text("📋 Copy Address", "wallet_copy_address").text("✏️ Rename", "wallet_rename").row();
 
   kb.text(" Deposit 🟢",  "wallet_deposit")
     .text("🔴 Withdraw ", "wallet_withdraw")

@@ -266,16 +266,34 @@ async function checkLimitOrders(notifyFn) {
   for (const order of orders) {
     try {
       if (order.paused) continue;
-      if (!order.target_price || order.target_price <= 0) continue;
-      // Don't trigger orders created less than 30 seconds ago
+      // Don't trigger orders created less than 5 seconds ago
       const createdAt = new Date(order.created_at).getTime();
       if (Date.now() - createdAt < 5000) continue;
       const currentPrice = getMockPrice(order.token_ca);
       if (!currentPrice) continue;
 
+      // Get current MCap (devnet: mock, mainnet: DexScreener)
+      let currentMcap = 0;
+      try {
+        // On mainnet: fetch from DexScreener
+        // const res = await require('axios').get('https://api.dexscreener.com/latest/dex/tokens/'+order.token_ca, { timeout: 3000 });
+        // currentMcap = res.data?.pairs?.[0]?.fdv || 0;
+        currentMcap = currentPrice * 1000000000; // devnet mock mcap
+      } catch {}
+
       let triggered = false;
-      if (order.order_type === "buy"  && currentPrice <= order.target_price) triggered = true;
-      if (order.order_type === "sell" && currentPrice >= order.target_price) triggered = true;
+
+      // Price-based trigger
+      if (order.target_price && order.target_price > 0) {
+        if (order.order_type === "buy"  && currentPrice <= order.target_price) triggered = true;
+        if (order.order_type === "sell" && currentPrice >= order.target_price) triggered = true;
+      }
+
+      // MCap-based trigger
+      if (order.target_mcap && order.target_mcap > 0 && currentMcap > 0) {
+        if (order.order_type === "buy"  && currentMcap <= order.target_mcap) triggered = true;
+        if (order.order_type === "sell" && currentMcap >= order.target_mcap) triggered = true;
+      }
 
       if (!triggered) continue;
 
@@ -338,6 +356,38 @@ async function checkLimitOrders(notifyFn) {
                   `P&L: *${sign}${pnlPct.toFixed(1)}%*\n` +
                   `Received: *${solRec.toFixed(4)} SOL*`,
               });
+              // Generate PnL card
+              try {
+                const { generateTradeCard } = require("./statsCard");
+                const { RANKS } = require("./keyboards");
+                const rank = RANKS[user.rank] || RANKS[1];
+                const soldInvested = pos.sol_invested * (sellPct / 100);
+                const pnlSolVal = solRec - soldInvested;
+                const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
+                const feeSaved = Math.max(0, (solRec * 0.01) - feeSol);
+                const cardResult = await generateTradeCard({
+                  username: user.username || "Trader",
+                  rankName: rank.name, rankNum: user.rank || 1,
+                  tokenName: pos.token_name || pos.token_ca.slice(0,8),
+                  pnlSol: hideAmounts ? 0 : pnlSolVal,
+                  pnlPct, sellPct,
+                  pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * 150),
+                  entryMcap: pos.entry_mcap || 0, exitMcap: currentMcap,
+                  invested: hideAmounts ? 0 : soldInvested,
+                  returned: hideAmounts ? 0 : solRec,
+                  feeSaved: hideAmounts ? 0 : feeSaved,
+                  feeRate: rank.fee,
+                  dailyFeeSaved: hideAmounts ? 0 : db.getDailyFeeSaved(user.user_id),
+                  weeklyFeeSaved: hideAmounts ? 0 : db.getWeeklyFeeSaved(user.user_id),
+                  hideAmounts,
+                });
+                if (cardResult?.type === "photo") {
+                  const pnlKb = { inline_keyboard: [[
+                    { text: hideAmounts ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${user.user_id}` }
+                  ]]};
+                  notifyFn(order.user_id, "pnl_card", { buffer: cardResult.buffer, kb: pnlKb });
+                }
+              } catch(e) { console.error('[LimitCard]', e.message); }
             }
           }
         }

@@ -1,9 +1,4 @@
-// M26 — Portfolio V12 Final
-// Dropdown filter buttons — tap All to expand/collapse
-// Token name buttons stay on same screen — show selected icon
-// Buy/Sell applies to selected token only
-// Live token data from DexScreener
-
+// M26 — Portfolio V13
 const db  = require("../../database");
 const { simulatePriceMovement } = require("./executor");
 const { getTokenInfo, formatNum, formatPrice } = require("./tokenInfo");
@@ -32,17 +27,38 @@ function getSourceLabel(pos) {
   return SOURCE_LABELS[pos.source] || "🏷 Manual";
 }
 
+function formatHoldTime(createdAt) {
+  const ms = Date.now() - new Date(createdAt).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  return `${Math.floor(h/24)}d ${h%24}h`;
+}
+
+function formatPnl(pnlPct) {
+  // Cap display at reasonable values
+  if (Math.abs(pnlPct) > 99999) return pnlPct > 0 ? "+99999%" : "-99999%";
+  return `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%`;
+}
+
+function formatSol(val) {
+  if (Math.abs(val) > 9999) return val > 0 ? "+9999 SOL" : "-9999 SOL";
+  if (Math.abs(val) < 0.001) return `${val >= 0 ? "+" : ""}${val.toFixed(6)}`;
+  return `${val >= 0 ? "+" : ""}${val.toFixed(4)}`;
+}
+
 // ── Main portfolio screen ─────────────────────────────────────
 async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
   const allPositions = db.getPositionsBySource(user.user_id, filter === "launch" ? "all" : filter);
-  const db2 = require("../../database");
-  const launchCa = db2.getSysConfig(`launch_ca_${user.user_id}`) || "";
-  const positions    = allPositions.filter((p) => {
+  const launchCa = db.getSysConfig(`launch_ca_${user.user_id}`) || "";
+  const positions = allPositions.filter((p) => {
     if (p.wallet_id !== user.active_wallet_id) return false;
     if (filter === "launch") return p.source === "launch" || p.token_ca === launchCa;
     if (filter === "manual") return p.source === "manual" && p.token_ca !== launchCa;
     return true;
   });
+
   const isProMode    = user.mode === "pro";
   const settings     = db.getSettings(user.user_id) || {};
   const activeWallet = db.getWallet(user.active_wallet_id);
@@ -53,7 +69,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   const kb = new InlineKeyboard();
 
-  // ── Wallet + Filter side by side ────────────────────────────
+  // ── Wallet + Filter dropdowns ────────────────────────────────
   if (walletExpanded) {
     const wallets4 = db.getWallets(user.user_id) || [];
     for (let i = 0; i < wallets4.length; i += 4) {
@@ -66,36 +82,34 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     }
     kb.text("▲ Close", `pos_filter_${filter}_${page}_0`).row();
   } else if (expanded) {
-    // Show all filter options
     FILTERS.forEach((f) => {
       kb.text(filter === f ? `${FILTER_LABELS[f]} ✅` : FILTER_LABELS[f], `pos_filter_${f}_0_0`);
     });
     kb.row();
   } else {
-    // Show wallet + filter side by side
-    kb.text(`💼 W${walletIdx} ▼`, `pos_wallet_expand`)
+    kb.text(`💼 ${walletLabel} ▼`, `pos_wallet_expand`)
       .text(`${FILTER_LABELS[filter] || FILTER_LABELS.all} ▼`, `pos_expand_${filter}_${page}`)
       .row();
   }
 
+  // ── Empty state ──────────────────────────────────────────────
   if (!positions.length) {
     kb.text("🧪 Mock Buy",  "devnet_mock_buy")
       .text("🔄 Refresh",  `pos_filter_${filter}_0_0`)
       .row();
     kb.text("← Back", "menu_main").row();
-
-    const msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>This wallet has no open positions.</i>\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
+    const msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions.</i>\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
     try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
     catch { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
     return;
   }
 
-  // Pagination
+  // ── Pagination ───────────────────────────────────────────────
   const perPage    = 3;
   const totalPages = Math.ceil(positions.length / perPage);
   const paginated  = positions.slice(page * perPage, (page + 1) * perPage);
 
-  // Determine selected position
+  // ── Selected position ────────────────────────────────────────
   let selPos = null;
   if (selectedPosId) {
     selPos = paginated.find((p) => p.position_id === selectedPosId) || paginated[0];
@@ -103,9 +117,10 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     selPos = paginated[0];
   }
 
-  // Build message
+  // ── Build message ────────────────────────────────────────────
   let msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n`;
-  msg += `${page * perPage + 1}–${Math.min((page+1)*perPage, positions.length)} of ${positions.length}\n\n`;
+  msg += `💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
   let totalInvested = 0, totalCurrent = 0;
 
@@ -115,46 +130,52 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const currentValue = pos.sol_invested * (1 + pnlPct / 100);
     totalInvested += pos.sol_invested;
     totalCurrent  += currentValue;
-    const icon   = pnlPct >= 0 ? "🟢" : "🔴";
-    const sign   = pnlPct >= 0 ? "+" : "";
-    const name   = (pos.token_name || pos.token_ca.slice(0, 8)).slice(0, 10);
-    const srcTag = getSourceLabel(pos);
-    const pnlSol = currentValue - pos.sol_invested;
-    const isSel  = selPos && pos.position_id === selPos.position_id;
-    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}\n`;
-    const pnlUsd2 = (Math.abs(pnlSol) * 150).toFixed(2);
-    msg += `  P&L: <b>${sign}${pnlPct.toFixed(1)}%</b> (${sign}${pnlSol.toFixed(4)} SOL)($${pnlUsd2}) <a href="https://t.me/hawkx_devnet_fazle_bot?start=pnlcard_${pos.position_id}">📊</a>\n\n`;
+    const pnlSol   = currentValue - pos.sol_invested;
+    const icon     = pnlPct >= 0 ? "🟢" : "🔴";
+    const name     = (pos.token_name || pos.token_ca.slice(0, 8)).slice(0, 12);
+    const srcTag   = getSourceLabel(pos);
+    const isSel    = selPos && pos.position_id === selPos.position_id;
+    const holdTime = formatHoldTime(pos.created_at || Date.now());
+
+    // Auto sell status
+    let autoTag = "";
+    if (pos.auto_sell_template_id) {
+      const t = db.getAutoSellTemplate(pos.user_id, pos.auto_sell_template_id);
+      if (t) autoTag = ` 🤖 ${t.name}`;
+    }
+
+    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}\n`;
+    msg += `${formatPnl(pnlPct)} | ${formatSol(pnlSol)} SOL\n`;
+    msg += `🛒 ${pos.sol_invested.toFixed(4)} SOL → 📈 ${currentValue.toFixed(4)} SOL\n`;
+    msg += `💰 ${(pos.token_amount||0).toLocaleString()} ${name} | ⏱ ${holdTime}\n`;
+
+    // MCap
+    if (pos.entry_mcap && pos.entry_mcap > 0) {
+      const entryMcap = pos.entry_mcap >= 1000000
+        ? `$${(pos.entry_mcap/1000000).toFixed(1)}M`
+        : `$${(pos.entry_mcap/1000).toFixed(0)}K`;
+      msg += `📊 Entry: ${entryMcap}\n`;
+    }
+    msg += `━━━━━━━━━━━━━━━━━━━\n`;
   }
 
+  // Portfolio summary
   const totalPnl  = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested * 100) : 0;
   const totalSign = totalPnl >= 0 ? "+" : "";
-  msg += `━━━━━━━━━━\n`;
-  msg += `💼 <b>${walletLabel}</b>: ${walletBal.toFixed(4)} SOL\n`;
-  msg += `📊 Total P&L: <b>${totalSign}${totalPnl.toFixed(2)}%</b>`;
+  const totalPnlSol = totalCurrent - totalInvested;
+  msg += `📊 Total P&L: <b>${totalSign}${totalPnl.toFixed(2)}%</b> | ${totalSign}${totalPnlSol.toFixed(4)} SOL\n`;
 
-  // Selected token detail
-  if (selPos) {
-    const cp      = simulatePriceMovement(selPos.token_ca);
-    const pnlPct  = selPos.buy_price > 0 ? ((cp - selPos.buy_price) / selPos.buy_price * 100) : 0;
-    const pnlSol  = selPos.sol_invested * (pnlPct / 100);
-    const sign    = pnlPct >= 0 ? "+" : "";
-    const dexUrl  = `https://dexscreener.com/solana/${selPos.token_ca}`;
-    const tName   = selPos.token_name || selPos.token_ca.slice(0,8);
-    msg += `\n\n━━━━━━━━━━\n`;
-    msg += `Selected: <a href="${dexUrl}"><b>${tName}</b></a>\n`;
-    msg += `P&L: <b>${sign}${pnlPct.toFixed(1)}%</b> (${sign}${pnlSol.toFixed(4)} SOL)\n`;
-    msg += `Invested: <b>${selPos.sol_invested.toFixed(4)} SOL</b>`;
-  }
-
-  // Token name buttons — side by side, ✅ on selected
+  // ── Token selector buttons ───────────────────────────────────
   paginated.forEach((pos) => {
     const name  = (pos.token_name || pos.token_ca.slice(0,6)).slice(0,6);
     const isSel = selPos && pos.position_id === selPos.position_id;
-    kb.text(isSel ? `${name} ✅` : name, `pos_select_${pos.position_id}_${filter}_${page}`);
+    const pnlPct = pos.buy_price > 0 ? ((simulatePriceMovement(pos.token_ca) - pos.buy_price) / pos.buy_price * 100) : 0;
+    const icon  = pnlPct >= 0 ? "🟢" : "🔴";
+    kb.text(isSel ? `${icon} ${name} ✅` : `${icon} ${name}`, `pos_select_${pos.position_id}_${filter}_${page}`);
   });
   kb.row();
 
-  // Prev/Next
+  // ── Pagination ───────────────────────────────────────────────
   if (totalPages > 1) {
     if (page > 0) kb.text("◀", `pos_filter_${filter}_${page-1}_0`);
     kb.text(`${page+1}/${totalPages}`, "noop");
@@ -162,9 +183,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     kb.row();
   }
 
-  // Buy buttons — 2 presets + custom
+  // ── Buy/Sell buttons for selected token ──────────────────────
   if (selPos) {
-    // Set CA for buy buttons
     db.setSysConfig(`pending_ca_${user.user_id}`, selPos.token_ca);
     db.setSysConfig(`pending_ca_time_${user.user_id}`, String(Date.now()));
 
@@ -175,11 +195,14 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       .text("✏️ Custom",    "buy_ca_custom")
       .row();
 
-    // Sell buttons
     if (isProMode) {
       kb.text("🔴 25%",  `sell_pct_25_${selPos.position_id}`)
         .text("🔴 50%",  `sell_pct_50_${selPos.position_id}`)
+        .text("🔴 75%",  `sell_pct_75_${selPos.position_id}`)
         .text("🔴 100%", `sell_pct_100_${selPos.position_id}`)
+        .row();
+      kb.text("📋 Limit Orders", "menu_limit_orders")
+        .text("📌 Auto Sell", `menu_autosell_${selPos.position_id}`)
         .row();
     } else {
       const s1 = settings.sell_pct_1 || 25;
@@ -188,11 +211,10 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .text(`🔴 ${s2}%`,  `sell_pct_${s2}_${selPos.position_id}`)
         .text("🔴 Initial", `sell_initial_${selPos.position_id}`)
         .row();
+      kb.text("📋 Limit Orders", "menu_limit_orders").row();
     }
   }
-  if (selPos && isProMode) {
-    kb.text("📋 Limit Orders", "menu_limit_orders").row();
-  }
+
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", `pos_filter_${filter}_${page}_${selPos?.position_id||0}`)
     .row();
@@ -201,7 +223,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   catch { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
 }
 
-// ── Single token position view (from direct tap) ──────────────
+// ── Single token position view (shown after buy) ──────────────
 async function getTokenPosition(ctx, user, positionId) {
   const pos       = db.getPosition(positionId, user.user_id);
   const isProMode = user.mode === "pro";
@@ -214,7 +236,6 @@ async function getTokenPosition(ctx, user, positionId) {
     return;
   }
 
-  // Save CA for buy buttons
   db.setSysConfig(`last_position_${user.user_id}`, String(positionId));
   db.setSysConfig(`pending_ca_${user.user_id}`, pos.token_ca);
   db.setSysConfig(`pending_ca_time_${user.user_id}`, String(Date.now()));
@@ -223,16 +244,15 @@ async function getTokenPosition(ctx, user, positionId) {
   const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
   const currentValue = pos.sol_invested * (1 + pnlPct / 100);
   const pnlSol       = currentValue - pos.sol_invested;
-  const pnlUsd       = pnlSol * 150;
+  const pnlUsd       = Math.abs(pnlSol * 150);
   const icon         = pnlPct >= 0 ? "🟢" : "🔴";
   const sign         = pnlPct >= 0 ? "+" : "";
+  const holdTime     = formatHoldTime(pos.created_at || Date.now());
 
-  // Fetch live token data
   const tokenData = await getTokenInfo(pos.token_ca);
   const dexUrl    = `https://dexscreener.com/solana/${pos.token_ca}`;
   const tokenName = tokenData.name || pos.token_name || pos.token_ca.slice(0,8);
 
-  // Market info — side by side
   let marketLine = "";
   const parts = [];
   if (tokenData.mcap)      parts.push(`📊 ${formatNum(tokenData.mcap)}`);
@@ -240,7 +260,6 @@ async function getTokenPosition(ctx, user, positionId) {
   if (tokenData.price)     parts.push(`💲 ${formatPrice(tokenData.price)}`);
   if (parts.length > 0)    marketLine = parts.join(" | ") + "\n";
 
-  // Auto sell template status
   let autoSellLine = "";
   if (pos.auto_sell_template_id) {
     const t = db.getAutoSellTemplate(pos.user_id, pos.auto_sell_template_id);
@@ -249,7 +268,6 @@ async function getTokenPosition(ctx, user, positionId) {
       const tpHit = state.tp_hit || 0;
       const slHit = state.sl_triggered || 0;
       autoSellLine = `\n🤖 Auto Sell: <b>${t.name}</b>\n`;
-      // Show active SL
       for (let i = 1; i <= 3; i++) {
         const sl = t[`sl_${i}`] || 0;
         if (sl !== 0) {
@@ -257,7 +275,6 @@ async function getTokenPosition(ctx, user, positionId) {
           autoSellLine += `🛑 SL${i}: ${sl}% ${hit ? "✅ Active" : "⏳ Waiting"}\n`;
         }
       }
-      // Show TPs
       for (let i = 1; i <= 5; i++) {
         const tp = t[`tp_${i}`] || 0;
         if (tp !== 0) {
@@ -269,28 +286,27 @@ async function getTokenPosition(ctx, user, positionId) {
   }
 
   const msg =
-    `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a>\n` +
-    `${getSourceLabel(pos)}\n\n` +
-    `📋 CA:\n<code>${pos.token_ca}</code>\n\n` +
-    `💰 Invested: <b>${pos.sol_invested.toFixed(4)} SOL</b>\n` +
-    `📈 P&L: <b>${sign}${pnlPct.toFixed(1)}%</b> (${sign}${pnlSol.toFixed(4)} SOL / $${pnlUsd.toFixed(2)})\n` +
-    `🏦 Balance: <b>${(pos.token_amount||0).toLocaleString()}</b> tokens\n` +
+    `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `📋 <code>${pos.token_ca}</code>\n\n` +
+    `🛒 Bought: <b>${pos.sol_invested.toFixed(4)} SOL</b>\n` +
+    `💰 Holdings: <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
+    `📈 Current: <b>${currentValue.toFixed(4)} SOL</b>\n` +
+    `P&L: <b>${sign}${formatPnl(pnlPct)}</b> | ${sign}${formatSol(pnlSol)} SOL | $${pnlUsd.toFixed(2)}\n` +
+    `⏱ Hold: <b>${holdTime}</b>\n` +
     (marketLine ? `\n${marketLine}` : "") +
-    (autoSellLine ? `\n${autoSellLine}` : "") +
-    `💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
+    (autoSellLine || "") +
+    `\n💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>`;
 
   const b1 = settings.buy_amt_1 || 0.1;
   const b2 = settings.buy_amt_2 || 0.5;
 
   const kb = new InlineKeyboard();
-
-  // Buy buttons
   kb.text(`🟢 ${b1} SOL`, `buy_ca_amt_${b1}`)
     .text(`🟢 ${b2} SOL`, `buy_ca_amt_${b2}`)
     .text("✏️ Custom",    "buy_ca_custom")
     .row();
 
-  // Sell buttons
   if (isProMode) {
     kb.text("🔴 25%",  `sell_pct_25_${positionId}`)
       .text("🔴 50%",  `sell_pct_50_${positionId}`)

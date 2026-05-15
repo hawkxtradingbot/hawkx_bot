@@ -106,6 +106,17 @@ function setupMessages(bot) {
       return handleTextInput(ctx, freshUser, pending);
     }
 
+    if (pending === "wallet_rename") {
+      await deleteMsg(ctx, promptId);
+      const freshUser2 = db.getUser(userId);
+      const newName = text.trim().slice(0, 20);
+      if (!newName) { await ctx.reply("❌ Name cannot be empty."); return; }
+      db.getDb().prepare("UPDATE wallets SET label = ? WHERE wallet_id = ? AND user_id = ?").run(newName, freshUser2.active_wallet_id, userId);
+      await ctx.reply(`✅ Wallet renamed to *${newName}*`, { parse_mode: "Markdown" });
+      db.setSysConfig(`pending_${userId}`, "");
+      return;
+    }
+
     if (pending === "wallet_import_key") {
       db.setSysConfig(`pending_${userId}`, "");
       await deleteMsg(ctx, promptId);

@@ -20,7 +20,7 @@ const bcrypt = require("bcryptjs");
 const { setupCommands } = require("./routes/commands.routes");
 const { setupMessages } = require("./routes/messages.routes");
 const { handleMenuCallbacks } = require("./routes/callbacks.menu");
-const { handleTradingCallbacks, handlePnlCardToggle } = require("./routes/callbacks.trading");
+const { handleTradingCallbacks, handlePnlCardToggle, handlePositionAutoSell } = require("./routes/callbacks.trading");
 const { handleWalletCallbacks } = require("./routes/callbacks.wallet");
 const { handleCopyTradeCallbacks } = require("./routes/callbacks.copytrade");
 const { handleSniperCallbacks } = require("./routes/callbacks.sniper");
@@ -63,6 +63,7 @@ function setupRouter(bot) {
 
     if (await handleTradingCallbacks(ctx, data, userId, user, bot, ks)) return;
     if (await handlePnlCardToggle(ctx, data, userId)) return;
+    if (await handlePositionAutoSell(ctx, data, userId, user)) return;
 
     if (await handleWalletCallbacks(ctx, data, userId, user, bot, ks)) return;
 

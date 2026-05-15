@@ -199,4 +199,59 @@ async function handlePnlCardToggle(ctx, data, userId) {
   return true;
 }
 
-module.exports = { handleTradingCallbacks, handlePnlCardToggle };
+module.exports = { handleTradingCallbacks, handlePnlCardToggle, handlePositionAutoSell };
+
+// ── Position Auto Sell ────────────────────────────────────────
+async function handlePositionAutoSell(ctx, data, userId, user) {
+  // Show template list for position
+  if (data.startsWith("pos_autosell_")) {
+    const posId = parseInt(data.replace("pos_autosell_", ""));
+    const pos = db.getPosition(posId, userId);
+    if (!pos) { await ctx.answerCallbackQuery("Position not found!"); return true; }
+    await ctx.answerCallbackQuery();
+    const templates = db.getAutoSellTemplates(userId);
+    const current = pos.auto_sell_template_id;
+    const tokenName = pos.token_name || pos.token_ca.slice(0,8);
+    const { InlineKeyboard } = require("grammy");
+    const kb = new InlineKeyboard();
+    if (!templates.length) {
+      kb.text("➕ Create Template", "pset_autosell_screen").row();
+    } else {
+      templates.forEach(t => {
+        const isSel = current === t.id;
+        kb.text(isSel ? `✅ ${t.name}` : t.name, `pos_ast_use_${posId}_${t.id}`).row();
+      });
+      if (current) kb.text("❌ Remove Auto Sell", `pos_ast_remove_${posId}`).row();
+      kb.text("➕ New Template", "pset_autosell_screen").row();
+    }
+    kb.text("← Back", `pos_filter_all_0_${posId}`).row();
+    const msg = `📌 *Auto Sell — ${tokenName}*\n\n` +
+      `${current ? `✅ Active: *${templates.find(t=>t.id===current)?.name || "Template"}*` : "❌ No template attached"}\n\n` +
+      `Select a template to attach:`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+    catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+    return true;
+  }
+
+  // Attach template to position
+  if (data.startsWith("pos_ast_use_")) {
+    const parts = data.replace("pos_ast_use_", "").split("_");
+    const posId = parseInt(parts[0]);
+    const tplId = parseInt(parts[1]);
+    db.getDb().prepare("UPDATE positions SET auto_sell_template_id = ? WHERE position_id = ? AND user_id = ?")
+      .run(tplId, posId, userId);
+    await ctx.answerCallbackQuery("✅ Auto Sell attached!");
+    return getPortfolio(ctx, user, "all", 0, false, posId);
+  }
+
+  // Remove template from position
+  if (data.startsWith("pos_ast_remove_")) {
+    const posId = parseInt(data.replace("pos_ast_remove_", ""));
+    db.getDb().prepare("UPDATE positions SET auto_sell_template_id = NULL WHERE position_id = ? AND user_id = ?")
+      .run(posId, userId);
+    await ctx.answerCallbackQuery("❌ Auto Sell removed!");
+    return getPortfolio(ctx, user, "all", 0, false, posId);
+  }
+
+  return false;
+}
