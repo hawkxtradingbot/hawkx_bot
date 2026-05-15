@@ -164,6 +164,12 @@ async function notify(userId, eventType, data = {}) {
       case "auto_sell":
         msg = data.message || `🤖 *Auto Sell Triggered*`;
         break;
+      case "pnl_card":
+        if (data.buffer && botRef) {
+          const { InputFile } = require("grammy");
+          try { await botRef.api.sendPhoto(userId, new InputFile(Buffer.from(data.buffer), "pnl_card.png"), { reply_markup: data.kb }); } catch(e) { console.error("[PnL Card Notify]", e.message); }
+        }
+        return;
     // ── FALLBACK — never show raw JSON ───────────────────────
     default:
     case "limit_order":

@@ -184,7 +184,7 @@ function setupMessages(bot) {
       const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1").get(userId, ca);
       if (!pos) { await ctx.reply("❌ No position found!"); return; }
       const { mockSell } = require("../executor");
-      await mockSell(ctx, user, pos.position_id, pct);
+      await mockSell(ctx, user, pos, pct);
       return;
     }
 

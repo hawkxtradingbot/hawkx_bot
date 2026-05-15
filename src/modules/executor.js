@@ -296,43 +296,62 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
     { parse_mode: "Markdown" }
   );
   // Auto PnL card on every sell
+  let exitMcap = 0;
+  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 4000 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
   try {
-    const { generatePnlCard } = require("./cardGenerator");
-    let exitMcap = 0;
-    try {
-      const axiosMcap = require("axios");
-      const dexRes = await axiosMcap.get(
-  `https://api.dexscreener.com/latest/dex/tokens/${position.token_ca}`,
-        { timeout: 4000 }
-      );
-      const pairs = dexRes.data?.pairs;
-      if (pairs && pairs.length > 0) exitMcap = pairs[0].fdv || pairs[0].marketCap || 0;
-    } catch {}
-      const result = await generatePnlCard({
-      username:    user.username || "Trader",
-      rankNum:     user.rank || 1,
-      tokenName:   position.token_name || position.token_ca.slice(0,8),
+    console.log("[PnL Card] Generating for user:", user.user_id);
+    const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
+    const { generateTradeCard } = require("./statsCard");
+    const { RANKS } = require("./keyboards");
+    const rank = RANKS[user.rank] || RANKS[1];
+    // pnlSolVal = profit/loss on the portion sold
+    const soldInvested = position.sol_invested * (pctToSell / 100);
+    const pnlSolVal = solReceived - soldInvested;
+    // Fee saved vs 1% base rate
+    const feeSaved = parseFloat(((1.00 - rank.fee) * solReceived).toFixed(4));
+    const result = await generateTradeCard({
+      username: user.username || "Trader",
+      rankName: rank.name,
+      rankNum: user.rank || 1,
+      tokenName: position.token_name || position.token_ca.slice(0,8),
+      pnlSol: hideAmounts ? 0 : pnlSolVal,
       pnlPct,
-        pnlSol: solReceived - position.sol_invested,
-      entryMcap:   position.entry_mcap || 0,
+      pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * 150),
+      entryMcap: position.entry_mcap || 0,
       exitMcap,
-      hideAmounts: false,
+      invested: hideAmounts ? 0 : soldInvested,
+      returned: hideAmounts ? 0 : solReceived,
+      feeSaved: hideAmounts ? 0 : feeSaved,
+      dailyFeeSaved: hideAmounts ? 0 : db.getDailyFeeSaved(user.user_id),
+      weeklyFeeSaved: hideAmounts ? 0 : db.getWeeklyFeeSaved(user.user_id),
+      monthlyFeeSaved: hideAmounts ? 0 : db.getMonthlyFeeSaved(user.user_id),
+      feeRate: rank.fee,
+      sellPct: pctToSell,
+      hideAmounts,
     });
+    // Save card data for hide/show toggle
+    db.setSysConfig(`last_card_data_${user.user_id}`, JSON.stringify({
+      username: user.username || "Trader",
+      rankName: rank.name, rankNum: user.rank || 1,
+      tokenName: position.token_name || position.token_ca.slice(0,8),
+      pnlPct, sellPct: pctToSell,
+      entryMcap: position.entry_mcap || 0, exitMcap,
+      feeRate: rank.fee,
+      _pnlSol: pnlSolVal, _pnlUsd: Math.abs(pnlSolVal * 150),
+      _invested: soldInvested, _returned: solReceived,
+      _feeSaved: feeSaved,
+      _dailyFeeSaved: db.getDailyFeeSaved(user.user_id),
+      _weeklyFeeSaved: db.getWeeklyFeeSaved(user.user_id),
+    }));
     const pnlKb = { inline_keyboard: [[
-      { text: "🙈 Hide Amounts", callback_data: `pnlcard_toggle_${position.position_id}_1` },
+      { text: hideAmounts ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${user.user_id}` },
     ]]};
-    const pnlCaption =
-      `🦅 *HAWKX PNL CARD*\n` +
-      `👤 @${user.username||"Trader"} · ${position.token_name||position.token_ca.slice(0,8)}\n` +
-      `${pnlPct >= 0 ? "📈" : "📉"} *${pnlPct >= 0 ? "+" : ""}${Math.abs(pnlPct).toFixed(1)}%*\n` +
-      `💰 ${pnlPct >= 0 ? "+" : ""}${Math.abs(solReceived - position.sol_invested).toFixed(4)} SOL`;
     if (result && result.type === "photo") {
-      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"));
-      await ctx.reply(pnlCaption, { parse_mode: "Markdown", reply_markup: pnlKb });
+      await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: pnlKb });
     } else if (result && result.type === "text") {
       await ctx.reply(result.text, { parse_mode: "Markdown", reply_markup: pnlKb });
     }
-  } catch {}
+  } catch (cardErr) { console.error("[PnL Card] Error:", cardErr.message); }
   return { tradeId, txHash, pnlPct, solReceived };
 }
 

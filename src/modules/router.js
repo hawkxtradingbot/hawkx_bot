@@ -20,7 +20,7 @@ const bcrypt = require("bcryptjs");
 const { setupCommands } = require("./routes/commands.routes");
 const { setupMessages } = require("./routes/messages.routes");
 const { handleMenuCallbacks } = require("./routes/callbacks.menu");
-const { handleTradingCallbacks } = require("./routes/callbacks.trading");
+const { handleTradingCallbacks, handlePnlCardToggle } = require("./routes/callbacks.trading");
 const { handleWalletCallbacks } = require("./routes/callbacks.wallet");
 const { handleCopyTradeCallbacks } = require("./routes/callbacks.copytrade");
 const { handleSniperCallbacks } = require("./routes/callbacks.sniper");
@@ -62,6 +62,7 @@ function setupRouter(bot) {
     if (await handleMenuCallbacks(ctx, data, userId, user, bot, ks)) return;
 
     if (await handleTradingCallbacks(ctx, data, userId, user, bot, ks)) return;
+    if (await handlePnlCardToggle(ctx, data, userId)) return;
 
     if (await handleWalletCallbacks(ctx, data, userId, user, bot, ks)) return;
 
@@ -74,6 +75,7 @@ function setupRouter(bot) {
     if (await handleLaunchCallbacks(ctx, data, userId, user, bot, ks)) return;
 
     if (await handleWatchlistCallbacks(ctx, data, userId, user, bot, ks)) return;
+    if (await handleReferralCallbacks(ctx, data, userId, user, bot, ks)) return;
 
     if (await handleDevToolCallbacks(ctx, data, userId, user, bot, ks)) return;
     if (await handleAdminCallbacks(ctx, data, userId, user, bot, ks)) return;

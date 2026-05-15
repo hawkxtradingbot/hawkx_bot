@@ -152,3 +152,51 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
 }
 
 module.exports = { handleTradingCallbacks };
+
+// PnL card hide amounts toggle
+async function handlePnlCardToggle(ctx, data, userId) {
+  if (!data.startsWith("pnlcard_toggle_hide_")) return false;
+  const targetUserId = data.replace("pnlcard_toggle_hide_", "");
+  if (String(userId) !== String(targetUserId)) {
+    await ctx.answerCallbackQuery("Not your card!");
+    return true;
+  }
+  const current = db.getSysConfig(`pnlcard_hide_${userId}`) === "1";
+  const newHide = !current;
+  db.setSysConfig(`pnlcard_hide_${userId}`, newHide ? "1" : "0");
+  await ctx.answerCallbackQuery(newHide ? "Amounts hidden!" : "Amounts shown!");
+
+  // Regenerate card with new hide setting
+  try {
+    const lastCardData = db.getSysConfig(`last_card_data_${userId}`);
+    if (lastCardData) {
+      const opts = JSON.parse(lastCardData);
+      opts.hideAmounts = newHide;
+      opts.pnlSol = newHide ? (opts._pnlSol >= 0 ? 0.001 : -0.001) : opts._pnlSol;
+      opts.pnlUsd = newHide ? 0 : opts._pnlUsd;
+      opts.invested = newHide ? 0 : opts._invested;
+      opts.returned = newHide ? 0 : opts._returned;
+      opts.feeSaved = newHide ? 0 : opts._feeSaved;
+      opts.dailyFeeSaved = newHide ? 0 : opts._dailyFeeSaved;
+      opts.weeklyFeeSaved = newHide ? 0 : opts._weeklyFeeSaved;
+
+      const { generateTradeCard } = require("../statsCard");
+      const result = await generateTradeCard(opts);
+      const { InputFile } = require("grammy");
+      const pnlKb = { inline_keyboard: [[
+        { text: newHide ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${userId}` }
+      ]]};
+
+      if (result && result.type === "photo") {
+        await ctx.replyWithPhoto(new InputFile(result.buffer, "pnl_card.png"), { reply_markup: pnlKb });
+        // Delete old card
+        try { await ctx.deleteMessage(); } catch {}
+      }
+    }
+  } catch (e) {
+    console.error('[PnlToggle] Error:', e.message);
+  }
+  return true;
+}
+
+module.exports = { handleTradingCallbacks, handlePnlCardToggle };

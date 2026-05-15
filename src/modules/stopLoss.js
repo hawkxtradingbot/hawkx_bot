@@ -203,6 +203,57 @@ async function executeSell(pos, user, sellPct, currentPrice, pnlPct, reason, not
     });
   }
 
+  // Generate PnL card for auto sells
+  try {
+    const { generateTradeCard } = require("./statsCard");
+    const { RANKS } = require("./keyboards");
+    const rank = RANKS[user.rank] || RANKS[1];
+    const soldInvested = pos.sol_invested * (sellPct / 100);
+    const pnlSolVal = solReceived - soldInvested;
+    const hideAmounts = db.getSysConfig(`pnlcard_hide_${pos.user_id}`) === "1";
+    const feeSaved = Math.max(0, (solReceived * 0.01) - feeSol);
+    const cardResult = await generateTradeCard({
+      username: user.username || "Trader",
+      rankName: rank.name,
+      rankNum: user.rank || 1,
+      tokenName: pos.token_name || pos.token_ca.slice(0,8),
+      pnlSol: hideAmounts ? 0 : pnlSolVal,
+      pnlPct,
+      pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * 150),
+      entryMcap: pos.entry_mcap || 0,
+      exitMcap: 0,
+      invested: hideAmounts ? 0 : soldInvested,
+      returned: hideAmounts ? 0 : solReceived,
+      feeSaved: hideAmounts ? 0 : feeSaved,
+      feeRate: rank.fee,
+      sellPct,
+      dailyFeeSaved: hideAmounts ? 0 : db.getDailyFeeSaved(pos.user_id),
+      weeklyFeeSaved: hideAmounts ? 0 : db.getWeeklyFeeSaved(pos.user_id),
+      hideAmounts,
+    });
+    if (cardResult && cardResult.type === "photo") {
+      const { InputFile } = require("grammy");
+      const pnlKb = { inline_keyboard: [[
+        { text: hideAmounts ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${pos.user_id}` }
+      ]]};
+      db.setSysConfig(`last_card_data_${pos.user_id}`, JSON.stringify({
+        username: user.username || "Trader",
+        rankName: rank.name, rankNum: user.rank || 1,
+        tokenName: pos.token_name || pos.token_ca.slice(0,8),
+        pnlPct, sellPct, entryMcap: pos.entry_mcap || 0, exitMcap: 0,
+        feeRate: rank.fee,
+        _pnlSol: pnlSolVal, _pnlUsd: Math.abs(pnlSolVal * 150),
+        _invested: soldInvested, _returned: solReceived,
+        _feeSaved: feeSaved,
+        _dailyFeeSaved: db.getDailyFeeSaved(pos.user_id),
+        _weeklyFeeSaved: db.getWeeklyFeeSaved(pos.user_id),
+      }));
+      notifyFn(pos.user_id, "pnl_card", { buffer: cardResult.buffer, kb: pnlKb });
+    }
+  } catch(e) {
+    console.error('[AutoSell Card]', e.message);
+  }
+
   console.log(`[StopLoss] ${reason}: ${pos.token_name} P&L ${sign}${pnlPct.toFixed(1)}% sold ${sellPct}%`);
 }
 

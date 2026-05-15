@@ -54,13 +54,23 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
     if (data === "gen_rank_card") {
       await ctx.answerCallbackQuery("⏳ Generating rank card...");
       try {
-        const { generateRankCard } = require("./cardGenerator");
+        const { generateRankCard } = require("../statsCard");
         const freshUser = db.getUser(userId);
+        const { RANKS } = require("../keyboards");
+        const rank = RANKS[freshUser.rank] || RANKS[1];
+        const vol = freshUser.cumulative_volume_sol || 0;
+        const nextRankSol = rank.nextSol || 0;
+        const rankProgress = nextRankSol > 0 ? Math.min(99, (vol / nextRankSol) * 100) : 100;
         const result = await generateRankCard({
           username: freshUser.username || "Trader",
+          rankName: rank.name,
           rankNum: freshUser.rank || 1,
-          volume: freshUser.cumulative_volume_sol || 0,
+          volume: vol,
+          nextRankSol,
+          rankProgress,
+          fee: rank.fee,
         });
+        console.log("[RankCard] Result:", result?.type, result?.buffer?.length);
         if (result && result.type === "photo") {
           await ctx.replyWithPhoto(
             new InputFile(result.buffer, "rank_card.png"),

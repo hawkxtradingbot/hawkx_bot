@@ -62,18 +62,85 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const vol = freshUser.cumulative_volume_sol || 0;
       const { RANKS } = require("../keyboards");
       const rank = RANKS[freshUser.rank] || RANKS[1];
-      let msg = `📊 *Your Stats* [DEVNET]\n\n`;
-      msg += `🏅 Rank: *${rank.name}* (${freshUser.rank}/7)\n`;
-      msg += `💎 Fee: *${rank.fee.toFixed(2)}%*\n`;
-      msg += `📈 Total Volume: *${vol.toFixed(4)} SOL*\n\n`;
       const ts = (today.pnl || 0) >= 0 ? "+" : "";
-      msg += `*Today:* P&L: *${ts}${(today.pnl || 0).toFixed(4)} SOL* · ${today.trades || 0} trades · ${today.winRate || 0}% win\n`;
       const ws = weekly >= 0 ? "+" : "";
       const ms = monthly >= 0 ? "+" : "";
-      msg += `*Weekly:* *${ws}${weekly.toFixed(4)} SOL*\n`;
-      msg += `*Monthly:* *${ms}${monthly.toFixed(4)} SOL*\n`;
-      msg += `*Win Rate:* ${allTime.winRate || 0}% · *Loss Rate:* ${allTime.lossRate || 0}%\n`;
-      return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🏅 My Rank Card", callback_data: "gen_rank_card" }],[{ text: "🔄 Refresh", callback_data: "menu_stats" }],[{ text: "← Back", callback_data: "menu_main" }]] } });
+      // Fee savings
+      const dailyFee = db.getDailyFeeSaved(userId);
+      const weeklyFee = db.getWeeklyFeeSaved(userId);
+      const monthlyFee = db.getMonthlyFeeSaved(userId);
+      const nextRank = rank.nextSol || 0;
+      const rankPct = nextRank > 0 ? Math.min(99, (vol / nextRank) * 100) : 100;
+      const barLen = 16;
+      const filled = Math.round((rankPct / 100) * barLen);
+      const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+      const nextRankNames = ["","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite","MAX"];
+      let msg = `📊 *Your Trading Stats*\n\n`;
+      msg += `🏅 *${rank.name}* (${freshUser.rank}/7) — Fee: *${rank.fee.toFixed(2)}%*\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━\n\n`;
+      msg += `📅 *Today*\n`;
+      msg += `P&L: *${ts}${(today.pnl || 0).toFixed(4)} SOL* · *$${Math.abs((today.pnl||0)*150).toFixed(2)}*\n`;
+      msg += `Trades: *${today.trades || 0}* · Win Rate: *${today.winRate || 0}%*\n`;
+      msg += `Fee Saved Today: *$${dailyFee.toFixed(4)}*\n\n`;
+      msg += `📆 *This Week:* *${ws}${weekly.toFixed(4)} SOL* · Saved: *$${weeklyFee.toFixed(4)}*\n`;
+      msg += `🗓 *This Month:* *${ms}${monthly.toFixed(4)} SOL* · Saved: *$${monthlyFee.toFixed(4)}*\n\n`;
+      msg += `📈 *All Time*\n`;
+      msg += `Volume: *${vol.toFixed(4)} SOL*\n`;
+      msg += `Win: *${allTime.winRate || 0}%* · Loss: *${allTime.lossRate || 0}%*\n\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `🎯 *Rank Progress → ${nextRankNames[freshUser.rank] || "MAX"}*\n`;
+      msg += `\`${bar}\` ${rankPct.toFixed(0)}%\n`;
+      msg += `${vol.toFixed(2)} / ${nextRank} SOL needed\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━`;
+      const kb = { inline_keyboard: [
+        [{ text: "📤 Today's Card", callback_data: "stats_card_today" }, { text: "📤 Weekly Card", callback_data: "stats_card_week" }],
+        [{ text: "📤 Monthly Card", callback_data: "stats_card_month" }, { text: "🏅 Rank Card", callback_data: "gen_rank_card" }],
+        [{ text: "🔄 Refresh", callback_data: "menu_stats" }, { text: "← Back", callback_data: "menu_main" }],
+      ]};
+      return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+    }
+
+    if (data === "stats_card_today" || data === "stats_card_week" || data === "stats_card_month") {
+      await ctx.answerCallbackQuery("⏳ Generating card...");
+      const freshUser = db.getUser(userId);
+      const { RANKS } = require("../keyboards");
+      const rank = RANKS[freshUser.rank] || RANKS[1];
+      const period = data === "stats_card_today" ? "today" : data === "stats_card_week" ? "week" : "month";
+      const today = db.getTodayStats(userId, freshUser.active_wallet_id);
+      const weekly = db.getWeeklyPnl(userId);
+      const monthly = db.getMonthlyPnl(userId);
+      const allTime = db.getUserStats(userId);
+      const pnlSol = period === "today" ? (today.pnl || 0) : period === "week" ? weekly : monthly;
+      const days = period === "today" ? 1 : period === "week" ? 7 : 30;
+      const periodStats = db.getPeriodStats(userId, days);
+      const { generateStatsCard } = require("../statsCard");
+      const result = await generateStatsCard({
+        username: freshUser.username || "Trader",
+        rankName: rank.name,
+        rankNum: freshUser.rank || 1,
+        period,
+        pnlSol,
+        pnlUsd: Math.abs(pnlSol * 150),
+        trades: periodStats.trades || 0,
+        winRate: periodStats.winRate || 0,
+        volume: freshUser.cumulative_volume_sol || 0,
+        weekPnl: weekly,
+        monthPnl: monthly,
+        nextRankSol: rank.nextSol || 0,
+        rankProgress: (rank.nextSol || 0) > 0 ? Math.min(99, ((freshUser.cumulative_volume_sol||0) / (rank.nextSol||1)) * 100) : 100,
+        bestTrade: periodStats.bestTrade || 0,
+        worstTrade: periodStats.worstTrade || 0,
+        totalFees: periodStats.totalFees || 0,
+        streak: periodStats.streak || 0,
+        avgTrade: periodStats.avgTrade || 0,
+      });
+      if (result.type === "photo") {
+        const { InputFile } = require("grammy");
+        await ctx.replyWithPhoto(new InputFile(Buffer.from(result.buffer), `hawkx_${period}_pnl.png`));
+      } else {
+        await ctx.reply(result.text, { parse_mode: "Markdown" });
+      }
+      return true;
     }
 
     // ── SETTINGS ──────────────────────────────────────────────

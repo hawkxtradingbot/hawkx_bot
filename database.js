@@ -885,6 +885,79 @@ function removeWalletTracker(userId, id) {
   getDb().prepare("UPDATE wallet_trackers SET active = 0 WHERE id = ? AND user_id = ?").run(id, userId);
 }
 
+
+
+function getWeeklyFeeSaved(userId) {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  const since = d.toISOString();
+  const trades = getDb().prepare("SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?").all(userId, "sell", since);
+  const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
+  return Math.max(0, Math.min(raw, 9999));
+}
+
+function getMonthlyFeeSaved(userId) {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  const since = d.toISOString();
+  const trades = getDb().prepare(
+    'SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?'
+  ).all(userId, 'sell', since);
+  const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
+  return Math.max(0, Math.min(raw, 9999));
+}
+
+function getPeriodStats(userId, days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const since = d.toISOString();
+  const trades = getDb().prepare(
+    "SELECT * FROM trades WHERE user_id = ? AND action = 'sell' AND sol_amount < 1000 AND timestamp >= ? AND status = 'confirmed'"
+  ).all(userId, since);
+  
+  let pnl = 0, wins = 0, bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, currentStreak = 0;
+  let lastWin = null;
+  
+  trades.forEach(t => {
+    const net = t.sol_amount - t.fee_sol;
+    pnl += net;
+    totalFees += t.fee_sol;
+    if (net > bestTrade) bestTrade = net;
+    if (net < worstTrade) worstTrade = net;
+    if (net > 0) {
+      wins++;
+      if (lastWin === true) currentStreak++;
+      else currentStreak = 1;
+    } else {
+      if (lastWin === false) currentStreak--;
+      else currentStreak = -1;
+    }
+    lastWin = net > 0;
+    if (Math.abs(currentStreak) > Math.abs(streak)) streak = currentStreak;
+  });
+
+  return {
+    pnl,
+    trades: trades.length,
+    wins,
+    winRate: trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0,
+    bestTrade,
+    worstTrade,
+    totalFees,
+    streak,
+    avgTrade: trades.length > 0 ? pnl / trades.length : 0,
+  };
+}
+function getDailyFeeSaved(userId) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const since = today.toISOString();
+  const trades = getDb().prepare(
+    'SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?'
+  ).all(userId, 'sell', since);
+  const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
+  return Math.max(0, Math.min(raw, 9999));
+}
 module.exports = {
   getDb, getUser, createUser, updateUser, getAllUsers,
   setUserMode, setSapHash, clearSap,
@@ -913,6 +986,6 @@ module.exports = {
   getSysConfig, setSysConfig, addVolume,
   getGlobalBlacklist, addGlobalBlacklist, getUserBlacklist, getUserWhitelist,
   flagSuspicious, getTotalUsers, getRankDistribution, getRevenue,
-  getPriceAlerts, addPriceAlert,
+  getPriceAlerts, addPriceAlert, getDailyFeeSaved, getWeeklyFeeSaved, getMonthlyFeeSaved, getPeriodStats,
   getWalletTrackers, addWalletTracker, removeWalletTracker,
 };
