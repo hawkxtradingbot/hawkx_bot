@@ -133,21 +133,13 @@ function buildBeginnerSettingsMenu(user) {
 function buildProSettingsMenu(user) {
   const s = user?.settings || {};
   const kb = new InlineKeyboard();
-  kb.text("🤖 Auto Buy",  "pset_autobuy_screen")
-  .text("🤖 Auto Sell","pset_autosell_screen")
-  .row();
-  kb.text("⚡ Execution", "pset_execution").row();
-  kb.text("🔔 Alerts", "pset_alerts").row();
-  kb.text("🔐 PIN",       "set_sap")
-    .text("⏱ Session",   "set_session")
-    .text("🌐 Language",  "set_language")
-    .row();
-  kb.text(`📊 Weekly PnL: ${s.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
-  kb.text("🧪 +1 SOL Vol",      "devnet_add_volume").row();
-  kb.text("🌱 Beginner Mode →", "mode_set_beginner").row();
-  kb.text("← Back",    "menu_main")
-    .text("🔄 Refresh", "menu_settings")
-    .row();
+  kb.text("🤖 Auto Buy", "pset_autobuy_screen").text("🤖 Auto Sell", "pset_autosell_screen").row();
+  kb.text("⚡ Execution Settings", "pset_execution").row();
+  kb.text("🔔 Alerts & Notifications", "pset_alerts").row();
+  kb.text("🔐 PIN", "set_sap").text("⏱ Session", "set_session").row();
+  kb.text("🌐 Language", "set_language").text(`📊 PnL: ${s.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
+  kb.text("🌱 Beginner Mode", "mode_set_beginner").row();
+  kb.text("← Back", "menu_main").text("🔄 Refresh", "menu_settings").row();
   return kb;
 }
 
@@ -222,12 +214,13 @@ function buildWalletMenu(wallets, activeWalletId) {
   const kb = new InlineKeyboard();
   if (!Array.isArray(wallets)) wallets = [];
 
-  // Wallets as W1, W2, W3 style — 5 per row
-  for (let i = 0; i < wallets.length; i += 5) {
-    wallets.slice(i, i + 5).forEach((w, idx) => {
+  // Wallets — 3 per row with custom label
+  for (let i = 0; i < wallets.length; i += 3) {
+    wallets.slice(i, i + 3).forEach((w, idx) => {
       const num    = i + idx + 1;
       const active = w.wallet_id === activeWalletId;
-      kb.text(active ? `W${num} ✅` : `W${num}`, `wallet_select_${w.wallet_id}`);
+      const lbl = (w.label && !w.label.match(/^W\d+$/)) ? ` ${w.label}` : "";
+      kb.text(active ? `W${num}${lbl} ✅` : `W${num}${lbl}`, `wallet_select_${w.wallet_id}`);
     });
     kb.row();
   }
@@ -698,7 +691,7 @@ function getGuide(screen) { return GUIDES[screen] || ""; }
 
 module.exports = {
   buildMainMenu, buildBeginnerSettingsMenu, buildProSettingsMenu,
-  buildExecutionSettingsMenu, buildMevSettingsMenu,
+  buildExecutionSettingsMenu,
   buildAlertsSettingsMenu, buildWalletMenu, buildWalletDeleteSelect,
   buildWalletExportSelect, buildCopyTradeMenu, buildCopyWalletListMenu,
   buildCopyChannelListMenu, buildCopyChannelSettingsMenu,

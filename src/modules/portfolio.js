@@ -72,11 +72,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   // ── Wallet + Filter dropdowns ────────────────────────────────
   if (walletExpanded) {
     const wallets4 = db.getWallets(user.user_id) || [];
-    for (let i = 0; i < wallets4.length; i += 4) {
-      wallets4.slice(i, i+4).forEach((w, idx) => {
+    for (let i = 0; i < wallets2.length; i += 3) {
+      wallets2.slice(i, i+3).forEach((w, idx) => {
         const num = i+idx+1;
         const isSel = w.wallet_id === user.active_wallet_id;
-        kb.text(isSel ? `W${num} ✅` : `W${num}`, `pos_setwallet_${w.wallet_id}`);
+        const lbl = (w.label && !w.label.match(/^W\d+$/)) ? ` ${w.label}` : ""; kb.text(isSel ? `W${num}${lbl} ✅`.slice(0,20) : `W${num}${lbl}`.slice(0,20), `pos_setwallet_${w.wallet_id}`);
       });
       kb.row();
     }

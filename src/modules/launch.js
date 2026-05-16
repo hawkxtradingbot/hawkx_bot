@@ -39,7 +39,7 @@ function buildLaunchScreen(p, wallets, balance, walletNum, expanded) {
       walletBtns.push(wallets.slice(i, i+4).map((w, idx) => {
         const num = i+idx+1;
         const isSel = String(w.wallet_id) === String(p.wallet_id);
-        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `launch_setwallet_${w.wallet_id}` };
+        return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `launch_setwallet_${w.wallet_id}` };
       }));
     }
   }

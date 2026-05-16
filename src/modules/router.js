@@ -61,7 +61,6 @@ function setupRouter(bot) {
     const ks = require("./killSwitch").isActive();
     if (await handleMenuCallbacks(ctx, data, userId, user, bot, ks)) return;
 
-    if (await handleSettingCallback(ctx, user, data)) return;
 
     if (await handleTradingCallbacks(ctx, data, userId, user, bot, ks)) return;
     if (await handlePnlCardToggle(ctx, data, userId)) return;

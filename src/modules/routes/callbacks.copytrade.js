@@ -184,11 +184,11 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const name = cw.label || cw.wallet_address.slice(0, 16) + "...";
       const wallets2 = db.getWallets(userId) || [];
       const walletBtns = [];
-      for (let i = 0; i < wallets2.length; i += 4) {
-        walletBtns.push(wallets2.slice(i, i + 4).map((w, idx) => {
+      for (let i = 0; i < wallets2.length; i += 3) {
+        walletBtns.push(wallets2.slice(i, i + 3).map((w, idx) => {
           const num = i + idx + 1;
           const isSel = w.wallet_id === cw.wallet_id;
-          return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
+          return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
         }));
       }
 
@@ -456,10 +456,10 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const selWal3  = wallets3.find(w => w.wallet_id === updated.wallet_id);
       const wIdx3    = selWal3 ? wallets3.indexOf(selWal3) + 1 : "—";
       const wBtns3   = [];
-      for (let i = 0; i < wallets3.length; i += 4) {
-        wBtns3.push(wallets3.slice(i, i + 4).map((w, idx) => {
+      for (let i = 0; i < wallets3.length; i += 3) {
+        wBtns3.push(wallets3.slice(i, i + 3).map((w, idx) => {
           const num = i + idx + 1;
-          return { text: w.wallet_id === updated.wallet_id ? `W${num} ✅` : `W${num}`, callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
+          return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updated.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
         }));
       }
       const msg3 =
@@ -496,10 +496,10 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
         const updatedCS = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
         const wallets5 = db.getWallets(userId) || [];
         const wBtns5 = [];
-        for (let i = 0; i < wallets5.length; i += 4) {
-          wBtns5.push(wallets5.slice(i, i + 4).map((w, idx) => {
+        for (let i = 0; i < wallets5.length; i += 3) {
+          wBtns5.push(wallets5.slice(i, i + 3).map((w, idx) => {
             const num = i + idx + 1;
-            return { text: w.wallet_id === updatedCS.wallet_id ? `W${num} ✅` : `W${num}`, callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
+            return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updatedCS.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
           }));
         }
         const selWal5 = wallets5.find(w => w.wallet_id === updatedCS.wallet_id);

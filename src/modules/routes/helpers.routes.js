@@ -225,7 +225,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
         const num = i + idx + 1;
         const isSel = w.wallet_id === walletId;
         return {
-          text: isSel ? `W${num} ✅` : `W${num}`,
+          text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(),
           callback_data: `cw_setwallet_${w.wallet_id}`,
         };
       }),
@@ -360,7 +360,7 @@ async function buildReferralScreen(ctx, userId, showWallets) {
           const num = i + idx + 1;
           const isActive = w.public_key === payoutAddress;
           return {
-            text: isActive ? `W${num} ✅` : `W${num}`,
+            text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isActive?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(),
             callback_data: `payout_wallet_select_${w.wallet_id}`,
           };
         }),
@@ -528,7 +528,7 @@ Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━�
         const isSel = w.wallet_id === loWalletId;
         const caKey = ca.slice(0,8);
         db.setSysConfig(`lo_ca_map_${userId}_${caKey}`, ca);
-        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_tok_wallet_${caKey}_${w.wallet_id}` };
+        return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `lo_tok_wallet_${caKey}_${w.wallet_id}` };
       }));
     }
     const caKeyClose = ca.slice(0,8);
@@ -582,7 +582,7 @@ async function showLimitOrdersScreen(ctx, userId) {
       kb.inline_keyboard.push(wallets.slice(i, i+4).map((w, idx) => {
         const num = i+idx+1;
         const isSel = w.wallet_id === selWalletId;
-        return { text: isSel ? `W${num} ✅` : `W${num}`, callback_data: `lo_switch_wallet_${w.wallet_id}` };
+        return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `lo_switch_wallet_${w.wallet_id}` };
       }));
     }
     kb.inline_keyboard.push([{ text: "▲ Close", callback_data: "lo_wallet_collapse" }]);

@@ -507,7 +507,7 @@ function setupMessages(bot) {
         for (let i = 0; i < wallets4.length; i += 4) {
           wBtns4.push(wallets4.slice(i, i + 4).map((w, idx) => {
             const num = i + idx + 1;
-            return { text: w.wallet_id === updated2.wallet_id ? `W${num} ✅` : `W${num}`, callback_data: `cw_setwallet_edit_${cwId2}_${w.wallet_id}` };
+            return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updated2.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${cwId2}_${w.wallet_id}` };
           }));
         }
         const msg4 =

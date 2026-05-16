@@ -6,9 +6,6 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     // ── Main callback handler ─────────────────────────────────────
       async function handleSettingCallback(ctx, user, action, bot, onSourceBack) {
     console.log("[SETTINGS CB]:", action?.slice(0,25));
-  // Only handle settings-related actions
-  const settingsActions = ["menu_settings","pset_","bset_","set_","sap_","ast_","ab_","alert_","tracker_","mode_set_"];
-  if (!settingsActions.some(prefix => action?.startsWith(prefix) || action === prefix)) return false;
     // Handle select FIRST
     if (action && action.indexOf("ast_select_") === 0) {
       const id = parseInt(action.replace("ast_select_", ""));
@@ -663,41 +660,6 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       return;
     }
   console.log("[AUTOBUY] checking:", action);
-  if (action === "pset_autobuy_screen" || action === "ab_toggle" || action === "ab_mev") {
-    const s = db.getSettings(user.user_id);
-    if (action === "ab_toggle") {
-      const v = s?.auto_buy_enabled ? 0 : 1;
-      db.updateSettings(user.user_id, { auto_buy_enabled: v });
-      await ctx.answerCallbackQuery(v ? "🤖 Auto Buy: ON ✅" : "🤖 Auto Buy: OFF ◻️");
-    } else if (action === "ab_mev") {
-      const v = s?.auto_buy_mev ? 0 : 1;
-      db.updateSettings(user.user_id, { auto_buy_mev: v });
-      await ctx.answerCallbackQuery(v ? "🛡 MEV: ON" : "🛡 MEV: OFF");
-    } else {
-      await ctx.answerCallbackQuery();
-    }
-    const fresh = db.getSettings(user.user_id);
-    const { buildAutoBuyScreen } = require("../keyboards");
-    const msg =
-      `🤖 *Auto Buy*\n\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `📚 *HOW IT WORKS:*\n` +
-      `When ON — any CA you paste in chat\n` +
-      `auto-buys instantly with your settings.\n` +
-      `No confirm screen needed.\n` +
-      `━━━━━━━━━━━━━━━━━━━`;
-    try { 
-        await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh) });
-        const msgId = ctx.callbackQuery?.message?.message_id;
-        if (msgId) db.setSysConfig(`autobuy_msg_${user.user_id}`, String(msgId));
-      }
-      catch (e) {
-        if (e?.description?.includes("not modified")) return;
-        const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoBuyScreen(fresh) });
-        db.setSysConfig(`autobuy_msg_${user.user_id}`, String(sent.message_id));
-      }
-      return;
-    }
 
     if (action === "ab_amount") {
       await ctx.answerCallbackQuery();
@@ -708,39 +670,9 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       return;
     }
 
-  if (action === "ab_slippage") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx, "📉 *Auto Buy Slippage*\n\nEnter % (e.g. 10):");
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "ab_set_slippage");
-    return;
-  }
 
-  if (action === "ab_gas") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx, "⛽ *Auto Buy Gas*\n\nEnter SOL gas fee (e.g. 0.005):");
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "ab_set_gas");
-    return;
-  }
 
-  if (action === "ab_max") {
-    await ctx.answerCallbackQuery();
-    const promptId = await sendPrompt(ctx, "🔢 *Max Buys Per Token*\n\nEnter max times to auto-buy same token (e.g. 1):");
-    db.setSysConfig(`prompt_msg_${user.user_id}`, String(promptId));
-    db.setSysConfig(`pending_${user.user_id}`, "ab_set_max");
-    return;
-  }
 
-    if (action === "ab_mev") {
-    const s = db.getSettings(user.user_id);
-    const v = s?.auto_buy_enabled ? 0 : 1;
-    db.updateSettings(user.user_id, { auto_buy_enabled: v });
-    await ctx.answerCallbackQuery(v ? "🤖 Auto Buy: ON ✅" : "🤖 Auto Buy: OFF ◻️");
-    const { buildAutoBuyScreen } = require("../keyboards");
-    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoBuyScreen(db.getSettings(user.user_id)) }); } catch {}
-    return;
-  }
   if (action === "pset_execution") {
     await ctx.answerCallbackQuery();
     const s = db.getSettings(user.user_id);
@@ -784,13 +716,6 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     return;
   }
 
-  if (action === "pset_mev") {
-    await ctx.answerCallbackQuery();
-    const s = db.getSettings(user.user_id);
-    try { await ctx.editMessageText("🛡 *MEV & Protection*", { parse_mode: "Markdown", reply_markup: buildMevSettingsMenu(s) }); }
-    catch { await ctx.reply("🛡 *MEV & Protection*", { parse_mode: "Markdown", reply_markup: buildMevSettingsMenu(s) }); }
-    return;
-  }
 
 
 
@@ -852,7 +777,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
 
 
 
-  return false;
+  await ctx.answerCallbackQuery("Unknown setting.");
 }
 
 // ── Text input handler ────────────────────────────────────────

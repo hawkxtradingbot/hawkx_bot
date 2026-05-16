@@ -7,9 +7,6 @@ const { buildWalletMenu, buildWalletDeleteSelect, buildWalletExportSelect } = re
 const { simulatePriceMovement } = require("../executor");
 const config = require("../../../config");
 
-async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
-    // ── WALLETS ───────────────────────────────────────────────
-// ── Helper: build wallet screen ──────────────────────────────
 async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     const freshUser = db.getUser(userId);
     const wallets = db.getWallets(userId) || [];
@@ -54,6 +51,16 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     return safeEdit(ctx, text, buildWalletMenu(wallets, walletId));
   }
 
+
+
+function getWalletBtn(w, num, isActive, cbData) {
+  const lbl = (w.label && !w.label.match(/^W\d+$/)) ? ` ${w.label}` : "";
+  const text = isActive ? `W${num}${lbl} ✅`.slice(0,20) : `W${num}${lbl}`.slice(0,20);
+  return { text, callback_data: cbData };
+}
+async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
+    // ── WALLETS ───────────────────────────────────────────────
+// ── Helper: build wallet screen ──────────────────────────────
   if (data === "menu_wallets") {
     await ctx.answerCallbackQuery();
     return showWalletScreen(ctx, userId, null);
@@ -303,16 +310,7 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
         1;
       const walletRows = [];
       for (let i = 0; i < wallets.length; i += 3) {
-        walletRows.push(
-          wallets.slice(i, i + 3).map((w, idx) => {
-            const num = i + idx + 1;
-            const isActive = w.wallet_id === freshUser.active_wallet_id;
-            return {
-              text: isActive ? `W${num} ✅` : `W${num}`,
-              callback_data: `deposit_select_${w.wallet_id}`,
-            };
-          }),
-        );
+        walletRows.push(wallets.slice(i, i + 3).map((w, idx) => getWalletBtn(w, i+idx+1, w.wallet_id===freshUser.active_wallet_id, `deposit_select_${w.wallet_id}`)));
       }
       const depMsg =
         `💰 *Deposit*\n\n` +
@@ -426,16 +424,7 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       const freshUser = db.getUser(userId);
       const walletRows = [];
       for (let i = 0; i < wallets.length; i += 3) {
-        walletRows.push(
-          wallets.slice(i, i + 3).map((w, idx) => {
-            const num = i + idx + 1;
-            const isActive = w.wallet_id === freshUser.active_wallet_id;
-            return {
-              text: isActive ? `W${num} ✅` : `W${num}`,
-              callback_data: `withdraw_from_${w.wallet_id}`,
-            };
-          }),
-        );
+        walletRows.push(wallets.slice(i, i + 3).map((w, idx) => getWalletBtn(w, i+idx+1, w.wallet_id===freshUser.active_wallet_id, `withdraw_from_${w.wallet_id}`)));
       }
       try {
         await ctx.editMessageText(
