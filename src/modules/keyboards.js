@@ -673,8 +673,10 @@ function buildRankUpBanner(user, rankName, fee) {
 }
 
 const GUIDES = {
-  main_beginner: "🌱 *Beginner Mode* — Tap Positions to view tokens. Settings to customise.",
-  main_pro:      "⚡ *Pro Mode* — Full access.\n\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — open trades\n💼 Wallets — manage wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n🚀 Launch — launch your token\n📋 Limit Orders — set price targets\n⭐ Watchlist — track tokens",
+  main_beginner: "🌱 *Beginner Mode*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n⚙️ Settings — customise bot\n💰 Referrals — earn rewards\n❓ Help — support & guide\n━━━━━━━━━━━━━━━━━━━",
+
+  main_pro: "🦅 HawkX — Always Watching. Always First.\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n📋 Limit Orders — set price targets\n⚙️ Settings — customise bot\n🚀 Launch Token — launch your token\n⭐ Watchlist — track tokens\n💰 Referrals — earn rewards\n❓ Help — support\n━━━━━━━━━━━━━━━━━━━",
+
   positions:     "📂 Filter by All / Manual / Channel / Copy Wallet. Tap token name to manage.",
   wallets:       "💼 Tap wallet to switch. Deposit · Withdraw · Import · Export all here.",
   settings_beg:  "⚙️ Set buy/sell amounts, slippage, trade speed and security PIN.",
