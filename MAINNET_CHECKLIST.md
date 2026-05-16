@@ -133,3 +133,28 @@
 ## Rank Up Notification (Mainnet TODO)
 - [ ] Fix sendPhoto network issue on VPS (test rank card sending on mainnet)
 - [ ] Verify rank card image generates correctly on VPS
+
+## ✅ COMPLETED IN THIS SESSION
+
+### UI/UX Improvements
+- [x] Portfolio screen V13 — compact layout, hold time, source labels
+- [x] Wallet screen — copy address, rename, instant refresh
+- [x] Settings — execution inline presets (speed/slippage/jito)
+- [x] Alerts system — price alerts + wallet tracker
+- [x] Rank info screen — icons, progress bar, fee savings
+- [x] Main menu guides — button descriptions, tagline
+- [x] Commands open directly (no extra button)
+- [x] Wallet labels show everywhere — 3 per row
+- [x] Auto sell per position
+- [x] Risk system removed (simplified)
+- [x] Rank up notification — journey message + rank card
+
+### Mainnet TODO Added
+- [ ] Remove devnet buttons (faucet, mock buy, add volume)
+- [ ] Remove [DEVNET] labels from all messages
+- [ ] Update bot username to @HawkX_Trade_Bot
+- [ ] Update referral link to mainnet bot
+- [ ] Test rank card photo sending on VPS
+- [ ] Price alert monitor cron
+- [ ] Wallet tracker via Helius webhooks
+- [ ] Daily PnL report cron
