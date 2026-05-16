@@ -4,17 +4,24 @@ const { handlePnlCard } = require("./helpers.routes");
 const { showAdminPanel, isAdmin } = require("../admin");
 
 function setupCommands(bot) {
+  // Helper: make command ctx work like callback ctx
+  function makeCbCtx(ctx) {
+    ctx.answerCallbackQuery = async () => {};
+    ctx.callbackQuery = { data: "", message: ctx.message };
+    return ctx;
+  }
+
   bot.api.setMyCommands([
-    { command: "start", description: "🏠 Main Menu" },
-    { command: "buy", description: "🟢 Buy a token" },
-    { command: "sell", description: "🔴 Sell positions" },
+    { command: "start",     description: "🏠 Main Menu" },
+    { command: "buy",       description: "🟢 Buy a token" },
+    { command: "sell",      description: "🔴 Sell positions" },
     { command: "positions", description: "📂 Open positions" },
-    { command: "wallets", description: "💼 Manage wallets" },
-    { command: "settings", description: "⚙️ Settings" },
-    { command: "referrals", description: "👥 Referral program" },
-    { command: "faucet", description: "🚰 Get devnet SOL" },
-    { command: "mystats", description: "📊 My stats & rank" },
-    { command: "help", description: "❓ Help & commands" },
+    { command: "wallets",   description: "💼 Manage wallets" },
+    { command: "settings",  description: "⚙️ Settings" },
+    { command: "referrals", description: "💰 Referrals" },
+    { command: "mystats",   description: "📊 Stats & Rank" },
+    { command: "sniper",    description: "🎯 Sniper (Pro)" },
+    { command: "help",      description: "❓ Help" },
   ]).catch(() => {});
 
   bot.command("start", async (ctx) => {
@@ -42,7 +49,8 @@ function setupCommands(bot) {
   bot.command("sell", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("🔴 *Sell Token*\n\nGo to Positions to sell:", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "📂 Positions", callback_data: "menu_portfolio" }]] }});
+    const { getPortfolio } = require("../portfolio");
+    return getPortfolio(ctx, user);
   });
 
   bot.command("positions", async (ctx) => {
@@ -55,7 +63,9 @@ function setupCommands(bot) {
   bot.command("wallets", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("💼 Wallets", { reply_markup: { inline_keyboard: [[{ text: "💼 My Wallets", callback_data: "menu_wallets" }]] }});
+    makeCbCtx(ctx);
+    const { showWalletScreen } = require("../routes/callbacks.wallet");
+    return showWalletScreen(ctx, ctx.from.id, null);
   });
 
   bot.command("settings", async (ctx) => {
@@ -68,7 +78,8 @@ function setupCommands(bot) {
   bot.command("referrals", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("👥 Referrals", { reply_markup: { inline_keyboard: [[{ text: "👥 My Referrals", callback_data: "menu_referrals" }]] }});
+    const { buildReferralScreen } = require("./helpers.routes");
+    return buildReferralScreen(ctx, ctx.from.id, false);
   });
 
 
@@ -83,7 +94,9 @@ function setupCommands(bot) {
   bot.command("mystats", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("📊 My Stats", { reply_markup: { inline_keyboard: [[{ text: "📊 View My Stats", callback_data: "menu_stats" }]] }});
+    makeCbCtx(ctx);
+    const { handleMenuCallbacks } = require("./callbacks.menu");
+    return handleMenuCallbacks(ctx, "menu_stats", ctx.from.id, user, bot, false);
   });
 
   bot.command("security", async (ctx) => {
@@ -153,36 +166,51 @@ function setupCommands(bot) {
   bot.command("sniper", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("🎯 Sniper", { reply_markup: { inline_keyboard: [[{ text: "🎯 Open Sniper", callback_data: "menu_sniper" }]] }});
+    makeCbCtx(ctx);
+    const { handleSniperCallbacks } = require("./callbacks.sniper");
+    return handleSniperCallbacks(ctx, "menu_sniper", ctx.from.id, user, bot, false);
   });
 
   bot.command("copytrade", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("👥 Copy Trade", { reply_markup: { inline_keyboard: [[{ text: "👥 Copy Trade", callback_data: "menu_copy" }]] }});
+    makeCbCtx(ctx);
+    const { handleCopyTradeCallbacks } = require("./callbacks.copytrade");
+    return handleCopyTradeCallbacks(ctx, "menu_copy_trade", ctx.from.id, user, bot, false);
   });
 
   bot.command("launch", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("🚀 Launch Token", { reply_markup: { inline_keyboard: [[{ text: "🚀 Launch Token", callback_data: "menu_launch" }]] }});
+    makeCbCtx(ctx);
+    const { showLaunchScreen } = require("./helpers.routes");
+    return showLaunchScreen(ctx, ctx.from.id);
   });
 
   bot.command("limitorders", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
+    makeCbCtx(ctx);
+    const db2 = require("../../../database");
+    db2.setSysConfig(`lo_msg_${ctx.from.id}`, "0");
+    const { showLimitOrdersScreen } = require("./helpers.routes");
     return showLimitOrdersScreen(ctx, ctx.from.id);
   });
 
   bot.command("watchlist", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
-    await ctx.reply("⭐ Watchlist", { reply_markup: { inline_keyboard: [[{ text: "⭐ My Watchlist", callback_data: "menu_watchlist" }]] }});
+    makeCbCtx(ctx);
+    const { handleWatchlistCallbacks } = require("./callbacks.watchlist");
+    return handleWatchlistCallbacks(ctx, "menu_watchlist", ctx.from.id, user, bot, false);
   });
 
   bot.command("autobuy", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
+    makeCbCtx(ctx);
+    const db2 = require("../../../database");
+    db2.setSysConfig(`autobuy_msg_${ctx.from.id}`, "0");
     const { handleSettingCallback } = require("../settings/index");
     return handleSettingCallback(ctx, user, "pset_autobuy_screen", bot);
   });
@@ -190,6 +218,7 @@ function setupCommands(bot) {
   bot.command("autosell", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
+    makeCbCtx(ctx);
     const { handleSettingCallback } = require("../settings/index");
     return handleSettingCallback(ctx, user, "pset_autosell_screen", bot, async (source) => {
       if (source === "msnipe_as_back" || source === "msnipe_open_as") return refreshMsnipeScreen(ctx, userId);

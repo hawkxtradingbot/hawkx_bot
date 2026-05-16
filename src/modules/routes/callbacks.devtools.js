@@ -49,26 +49,28 @@ async function handleDevToolCallbacks(ctx, data, userId, user, bot, ks) {
     // ── HELP ──────────────────────────────────────────────────
     if (data === "menu_help") {
       await ctx.answerCallbackQuery();
-      return ctx.reply(
-        `❓ *HawkX Help*\n\n` +
-          `*Getting Started:*\n` +
-          `1. Get test SOL — 🚰 Faucet\n` +
-          `2. Paste a token CA to buy\n` +
-          `3. Set Stop Loss in Settings\n` +
-          `4. Invite friends — Referrals\n\n` +
-          `*Modes:*\n` +
-          `Beginner — 8 buttons, clean and simple\n` +
-          `Pro — Full features access\n\n` +
-          `*Security:*\n` +
-          `Set SAP PIN in Settings.\n\n` +
-          `Support: @HawkXSupport`,
-        {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]],
-          },
-        },
-      );
+      const helpMsg = "❓ *HawkX Help*\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Getting Started:*\n" +
+        "1. Get test SOL — 🚰 Faucet\n" +
+        "2. Paste token CA in chat to buy\n" +
+        "3. View positions → manage trades\n" +
+        "4. Invite friends → earn referrals\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Modes:*\n" +
+        "🌱 Beginner — simple 8-button layout\n" +
+        "⚡ Pro — full features + sniper + copy\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Security:*\n" +
+        "🔐 Set PIN in Settings → protects key export\n" +
+        "🔑 Non-custodial — only you hold your keys\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Support:* @HawkXSupport\n" +
+        "*Channel:* @HawkX_Trade_Bot";
+      const helpKb = { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] };
+      try { await ctx.editMessageText(helpMsg, { parse_mode: "Markdown", reply_markup: helpKb }); }
+      catch { await ctx.reply(helpMsg, { parse_mode: "Markdown", reply_markup: helpKb }); }
+      return true;
     }
 
 

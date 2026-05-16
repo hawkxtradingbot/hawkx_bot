@@ -556,11 +556,13 @@ Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━�
     else throw new Error("no msg");
   } catch(e) {
     if (e?.description?.includes("not modified")) return;
+    console.log("[LIMIT CATCH]:", e.message);
     const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
     db.setSysConfig(`lo_msg_${userId}`, String(s.message_id));
   }
 }
 async function showLimitOrdersScreen(ctx, userId) {
+  console.log("[LIMIT] called, chat:", ctx.chat?.id, "msg:", ctx.message?.message_id);
   const orders = db.getLimitOrders(userId);
   const wallets = db.getWallets(userId) || [];
   const user = db.getUser(userId);
