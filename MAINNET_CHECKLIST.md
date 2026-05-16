@@ -123,3 +123,9 @@
 | **Total** | **10** | **41** |
 
 **Estimated time to mainnet: 2-3 weeks**
+
+## Alerts & Notifications (Mainnet TODO)
+- [ ] Daily PnL Report cron job — send daily summary to users with weekly_summary=1
+- [ ] Price Alert monitor — check token prices vs alerts every minute, fire when hit
+- [ ] Wallet Tracker monitor — monitor tracked wallets via Helius webhooks, notify on trade
+- [ ] MCap alert trigger — check mcap vs target using DexScreener API

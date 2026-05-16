@@ -331,6 +331,66 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   }
 
   // ── LANGUAGE ──────────────────────────────────────────────────
+  if (action === "alert_add_price") {
+    await ctx.answerCallbackQuery();
+    const alerts = db.getPriceAlerts(user.user_id);
+    let msg = "🔔 *Price Alerts*\n\nGet notified when token hits target.\n▸ Paste CA → set Price or MCap\n━━━━━━━━━━━━━━━━━━━\n";
+    if (alerts.length === 0) msg += "_No active alerts._\n";
+    else alerts.forEach((a,i) => { const tn=a.token_name||a.token_ca.slice(0,8); const dir=a.direction==="mcap_above"?"MCap▲":"Price▲"; const val=a.target_price>=1000000?"$"+(a.target_price/1000000).toFixed(1)+"M":a.target_price>=1000?"$"+(a.target_price/1000).toFixed(0)+"K":"$"+a.target_price; msg+=(i+1)+". *"+tn+"* — "+dir+" "+val+"\n"; });
+    msg += "\n_Paste CA to add alert:_";
+    db.setSysConfig("pending_"+user.user_id, "alert_add_ca");
+    const alertKb = { inline_keyboard: [
+      ...alerts.map(a => { const tn=(a.token_name||a.token_ca.slice(0,8)).slice(0,12); const dir=a.direction==="mcap_above"?"MCap▲":"▲"; const val=a.target_price>=1000000?"$"+(a.target_price/1000000).toFixed(1)+"M":a.target_price>=1000?"$"+(a.target_price/1000).toFixed(0)+"K":"$"+a.target_price; return [{ text: tn+" "+dir+" "+val+" 🗑", callback_data: "alert_remove_"+a.id }]; }),
+      [{ text: "← Back", callback_data: "pset_alerts" }],
+    ]};
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: alertKb }); }
+    catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: alertKb }); }
+    return true;
+  }
+
+  if (action.startsWith("alert_remove_")) {
+    const id = parseInt(action.replace("alert_remove_", ""));
+    db.getDb().prepare("DELETE FROM price_alerts WHERE id = ? AND user_id = ?").run(id, user.user_id);
+    await ctx.answerCallbackQuery("✅ Removed!");
+    const alerts2 = db.getPriceAlerts(user.user_id);
+    const alertKb2 = { inline_keyboard: [
+      ...alerts2.map(a => { const tn=(a.token_name||a.token_ca.slice(0,8)).slice(0,12); const dir=a.direction==="mcap_above"?"MCap▲":"▲"; const val=a.target_price>=1000000?"$"+(a.target_price/1000000).toFixed(1)+"M":a.target_price>=1000?"$"+(a.target_price/1000).toFixed(0)+"K":"$"+a.target_price; return [{ text: tn+" "+dir+" "+val+" 🗑", callback_data: "alert_remove_"+a.id }]; }),
+      [{ text: "← Back", callback_data: "pset_alerts" }],
+    ]};
+    try { await ctx.editMessageReplyMarkup({ reply_markup: alertKb2 }); } catch {}
+    return true;
+  }
+
+  if (action === "alert_add_wallet") {
+    await ctx.answerCallbackQuery();
+    const trackers = db.getWalletTrackers(user.user_id);
+    let msg2 = "👛 *Wallet Tracker*\n\nGet notified when a wallet trades.\n▸ Paste wallet address to track\n━━━━━━━━━━━━━━━━━━━\n";
+    if (trackers.length === 0) msg2 += "_No wallets tracked._\n";
+    else trackers.forEach((t,i) => { msg2 += (i+1)+". *"+t.label+"*\n"; });
+    msg2 += "\n_Paste wallet address:_";
+    db.setSysConfig("pending_"+user.user_id, "tracker_add_address");
+    const trackerKb = { inline_keyboard: [
+      ...trackers.map(t => [{ text: t.label+" 🗑", callback_data: "tracker_remove_"+t.id }]),
+      [{ text: "← Back", callback_data: "pset_alerts" }],
+    ]};
+    try { await ctx.editMessageText(msg2, { parse_mode: "Markdown", reply_markup: trackerKb }); }
+    catch { await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: trackerKb }); }
+    return true;
+  }
+
+  if (action.startsWith("tracker_remove_")) {
+    const id = parseInt(action.replace("tracker_remove_", ""));
+    db.removeWalletTracker(user.user_id, id);
+    await ctx.answerCallbackQuery("✅ Removed!");
+    const trackers2 = db.getWalletTrackers(user.user_id);
+    const trackerKb2 = { inline_keyboard: [
+      ...trackers2.map(t => [{ text: t.label+" 🗑", callback_data: "tracker_remove_"+t.id }]),
+      [{ text: "← Back", callback_data: "pset_alerts" }],
+    ]};
+    try { await ctx.editMessageReplyMarkup({ reply_markup: trackerKb2 }); } catch {}
+    return true;
+  }
+
   if (action === "set_language") {
     await ctx.answerCallbackQuery();
     await ctx.reply("🌐 Select your language:", {
@@ -733,9 +793,11 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
 
   if (action === "pset_alerts") {
     await ctx.answerCallbackQuery();
-    try { await ctx.editMessageText("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(s) }); }
-    catch { await ctx.reply("🔔 *Alerts & Notifications*", { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(s) }); }
-    return;
+    const alertsS = db.getSettings(user.user_id);
+    const alertGuide = "🔔 *Alerts & Notifications*\n\n▸ *Price Alert* — notify when token hits price/MCap\n▸ *Wallet Tracker* — notify when wallet trades\n▸ *Daily PnL* — daily summary\n━━━━━━━━━━━━━━━━━━━";
+    try { await ctx.editMessageText(alertGuide, { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(alertsS) }); }
+    catch { await ctx.reply(alertGuide, { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(alertsS) }); }
+    return true;
   }
 
 

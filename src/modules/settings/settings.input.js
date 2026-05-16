@@ -244,6 +244,58 @@ async function handleTextInput(ctx, user, pendingKey) {
       await ctx.reply(`✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
       break;
     }
+    case "alert_add_ca": {
+      const ca = text.trim();
+      if (ca.length < 32) { await ctx.reply("❌ Invalid token address."); handled = false; break; }
+      db.setSysConfig(`alert_pending_ca_${userId}`, ca);
+      let tokenName = ca.slice(0,8);
+      let priceInfo = "";
+      try {
+        const { getTokenInfo, formatNum, formatPrice } = require("../tokenInfo");
+        const info = await getTokenInfo(ca);
+        if (info.name) tokenName = info.name;
+        if (info.price) priceInfo += "\n💲 " + formatPrice(info.price);
+        if (info.mcap) priceInfo += "\n📊 " + formatNum(info.mcap);
+      } catch {}
+      db.setSysConfig(`alert_pending_name_${userId}`, tokenName);
+      db.setSysConfig(`pending_${userId}`, "alert_add_target");
+      await ctx.reply("🔔 *" + tokenName + "*" + priceInfo + "\n\nEnter target:\n▸ Price: 0.000001\n▸ MCap: 500K or 1M", { parse_mode: "Markdown" });
+      handled = false;
+      break;
+    }
+    case "alert_add_target": {
+      const raw = text.trim(); const upper = raw.toUpperCase();
+      let v = 0; let alertType = "price";
+      if (upper.endsWith("K")) { alertType = "mcap_above"; v = parseFloat(raw) * 1000; }
+      else if (upper.endsWith("M")) { alertType = "mcap_above"; v = parseFloat(raw) * 1000000; }
+      else { v = parseFloat(raw); }
+      if (isNaN(v) || v <= 0) { await ctx.reply("❌ Enter price (0.000001) or MCap (500K, 1M)"); handled = false; break; }
+      const alertCa = db.getSysConfig(`alert_pending_ca_${userId}`) || "";
+      const alertName = db.getSysConfig(`alert_pending_name_${userId}`) || alertCa.slice(0,8);
+      db.addPriceAlert(userId, alertCa, alertName, v, alertType);
+      await ctx.reply("✅ Alert set for *" + alertName + "*", { parse_mode: "Markdown" });
+      // Show updated alerts screen
+      const alerts = db.getPriceAlerts(userId);
+      let alertMsg = "🔔 *Price Alerts*\n\n";
+      alerts.forEach((a,i) => {
+        const tName = a.token_name||a.token_ca.slice(0,8);
+        const dir = a.direction==="mcap_above" ? "MCap▲" : "Price▲";
+        const val = a.target_price >= 1000000 ? "$"+(a.target_price/1000000).toFixed(1)+"M" : a.target_price >= 1000 ? "$"+(a.target_price/1000).toFixed(0)+"K" : "$"+a.target_price;
+      });
+      alertMsg += "\nPaste a token CA to add alert:";
+      const kb = { inline_keyboard: [
+        ...alerts.map(a => [{ text: "🗑 "+(a.token_name||a.token_ca.slice(0,8)), callback_data: "alert_remove_"+a.id }]),
+        [{ text: "← Back", callback_data: "pset_alerts" }],
+      ]};
+      await ctx.reply(alertMsg, { parse_mode: "Markdown", reply_markup: kb });
+      break;
+    }
+    case "tracker_add_address": {
+      const addr = text.trim();
+      if (addr.length < 32) { await ctx.reply("❌ Invalid wallet address."); handled = false; break; }
+      db.addWalletTracker(userId, addr, addr.slice(0,8)+"...");
+      break;
+    }
     case "buy_custom_amount": {
       const v = parseFloat(text);
       if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }

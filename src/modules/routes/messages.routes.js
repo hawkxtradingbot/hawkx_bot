@@ -100,6 +100,9 @@ function setupMessages(bot) {
         "ast_set_name","ast_set_sl","ast_set_sl_pct","ast_set_tp","ast_set_tp_pct",
         "cw_edit_set_amount_","cw_edit_set_slip_","cw_edit_set_gas_",
         "cch_autosell_new_","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
+      "alert_add_ca", "alert_add_target", "alert_add_price_val", "alert_add_mcap_val", "tracker_add_address",
+      "buy_custom_amount", "set_daily_loss", "set_daily_trades", "set_max_pos",
+      "wallet_rename",
       ];
       if (settingsPending.includes(pending)) {
       const freshUser = db.getUser(userId);
