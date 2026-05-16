@@ -63,14 +63,37 @@ async function notify(userId, eventType, data = {}) {
       break;
 
     // ── RANK UP ─────────────────────────────────────────────
-    case "RANK_UP":
+    case "RANK_UP": {
       const rankInfo = RANKS[data.newRank] || {};
-      msg = buildRankUpBanner(
-        user,
-        data.rankName || rankInfo.name || "Unknown",
-        data.fee      || rankInfo.fee  || "?"
-      );
+      const oldRank = data.oldRank || (data.newRank - 1);
+      const rankNames = { 1:"Scout", 2:"Tracker", 3:"Hunter", 4:"Predator", 5:"Apex", 6:"Hawk", 7:"Hawk Elite" };
+      // Build journey string
+      let journey = "";
+      if (data.newRank - oldRank > 1) {
+        const steps = [];
+        for (let r = oldRank; r <= data.newRank; r++) steps.push(rankNames[r]);
+        journey = "\n\n🚀 *Rank Journey:*\n" + steps.join(" → ");
+        journey += "\n\n⚡ You jumped *" + (data.newRank - oldRank) + " ranks* in one go!";
+      }
+      const oldFee = (RANKS[oldRank]?.fee || 1.00).toFixed(2);
+      const newFee = (rankInfo.fee || 0.5).toFixed(2);
+      const saving = (parseFloat(oldFee) - parseFloat(newFee)).toFixed(2);
+      const rankMsg = "🎉 *Congratulations " + (user.username || "Trader") + "!*\n\n" +
+        "🏅 New Rank: *" + (data.rankName || rankInfo.name) + "*" + journey + "\n\n" +
+        "💸 New Fee: *" + newFee + "%* (was " + oldFee + "%)\n" +
+        "💰 Saving: *" + saving + "% per trade* 🦅";
+      try {
+        const { generateRankCard } = require("./statsCard");
+        const { InputFile } = require("grammy");
+        const cardBuf = await generateRankCard({ username: user.username || "Trader", rank: data.newRank, rankName: data.rankName || rankInfo.name, fee: rankInfo.fee, volume: user.cumulative_volume_sol || 0, trades: user.total_trades || 0, winRate: user.win_rate || 0 });
+        if (cardBuf && botRef) {
+          await botRef.api.sendPhoto(userId, new InputFile(cardBuf, "rank_card.png"), { caption: rankMsg, parse_mode: "Markdown" });
+          return;
+        }
+      } catch(e) { console.log("[RANK CARD ERR]", e.message); }
+      msg = rankMsg;
       break;
+    }
 
     // ── TRIAL ENDING ─────────────────────────────────────────
     case "TRIAL_ENDING":

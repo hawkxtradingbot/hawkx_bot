@@ -39,6 +39,7 @@ function checkAndPromote(userId, notifyCallback) {
       notifyCallback(userId, "RANK_UP", {
         rankName,
         newRank,
+        oldRank: user.rank,
         fee,
         username: user.username || "Trader",
       });
