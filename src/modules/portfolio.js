@@ -7,7 +7,7 @@ const { InlineKeyboard } = require("grammy");
 const SOURCE_LABELS = {
   manual:       "🏷 Manual",
   sniper:       "🎯 Sniper",
-  auto_buy:     "🤖 Auto",
+  auto_buy:     "[AutoBuy]",
   copy_channel: "📡 Channel",
   copy_wallet:  "👛 Copy",
 };
@@ -146,15 +146,15 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
     msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}\n`;
     msg += `${formatPnl(pnlPct)} | ${formatSol(pnlSol)} SOL\n`;
-    msg += `🛒 ${pos.sol_invested.toFixed(4)} SOL → 📈 ${currentValue.toFixed(4)} SOL\n`;
-    msg += `💰 ${(pos.token_amount||0).toLocaleString()} ${name} | ⏱ ${holdTime}\n`;
+    msg += `Bought: ${pos.sol_invested.toFixed(4)} → Now: ${currentValue.toFixed(4)} SOL\n`;
+    msg += `Holdings: ${(pos.token_amount||0).toLocaleString()} ${name} | Hold: ${holdTime}\n`;
 
     // MCap
     if (pos.entry_mcap && pos.entry_mcap > 0) {
       const entryMcap = pos.entry_mcap >= 1000000
         ? `$${(pos.entry_mcap/1000000).toFixed(1)}M`
         : `$${(pos.entry_mcap/1000).toFixed(0)}K`;
-      msg += `📊 Entry: ${entryMcap}\n`;
+      msg += `Entry MCap: ${entryMcap}\n`;
     }
     msg += `━━━━━━━━━━━━━━━━━━━\n`;
   }
@@ -163,7 +163,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   const totalPnl  = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested * 100) : 0;
   const totalSign = totalPnl >= 0 ? "+" : "";
   const totalPnlSol = totalCurrent - totalInvested;
-  msg += `📊 Total P&L: <b>${totalSign}${totalPnl.toFixed(2)}%</b> | ${totalSign}${totalPnlSol.toFixed(4)} SOL\n`;
+  msg += `Total P&L: <b>${totalSign}${totalPnl.toFixed(2)}%</b> | ${totalSign}${totalPnlSol.toFixed(4)} SOL\n`;
 
   // ── Token selector buttons ───────────────────────────────────
   paginated.forEach((pos) => {
@@ -200,7 +200,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .text("🔴 100%", `sell_pct_100_${selPos.position_id}`)
         .row();
       kb.text("📋 Limit Orders", "menu_limit_orders")
-        .text("📌 Auto Sell", `menu_autosell_${selPos.position_id}`)
+        .text("📌 Auto Sell", `pos_autosell_${selPos.position_id}`)
         .row();
     } else {
       const s1 = settings.sell_pct_1 || 25;
@@ -209,7 +209,6 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .text(`🔴 ${s2}%`,  `sell_pct_${s2}_${selPos.position_id}`)
         .text("🔴 Initial", `sell_initial_${selPos.position_id}`)
         .row();
-      kb.text("📋 Limit Orders", "menu_limit_orders").row();
     }
   }
 

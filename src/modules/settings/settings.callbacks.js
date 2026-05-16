@@ -6,6 +6,9 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     // ── Main callback handler ─────────────────────────────────────
       async function handleSettingCallback(ctx, user, action, bot, onSourceBack) {
     console.log("[SETTINGS CB]:", action?.slice(0,25));
+  // Only handle settings-related actions
+  const settingsActions = ["menu_settings","pset_","bset_","set_","sap_","ast_","ab_","alert_","tracker_","mode_set_"];
+  if (!settingsActions.some(prefix => action?.startsWith(prefix) || action === prefix)) return false;
     // Handle select FIRST
     if (action && action.indexOf("ast_select_") === 0) {
       const id = parseInt(action.replace("ast_select_", ""));
@@ -849,7 +852,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
 
 
 
-  await ctx.answerCallbackQuery("Unknown setting.");
+  return false;
 }
 
 // ── Text input handler ────────────────────────────────────────

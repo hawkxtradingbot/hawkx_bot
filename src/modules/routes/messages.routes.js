@@ -102,7 +102,6 @@ function setupMessages(bot) {
         "cch_autosell_new_","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
       "alert_add_ca", "alert_add_target", "alert_add_price_val", "alert_add_mcap_val", "tracker_add_address",
       "buy_custom_amount", "set_daily_loss", "set_daily_trades", "set_max_pos",
-      "wallet_rename",
       ];
       if (settingsPending.includes(pending)) {
       const freshUser = db.getUser(userId);
@@ -115,8 +114,12 @@ function setupMessages(bot) {
       const newName = text.trim().slice(0, 20);
       if (!newName) { await ctx.reply("❌ Name cannot be empty."); return; }
       db.getDb().prepare("UPDATE wallets SET label = ? WHERE wallet_id = ? AND user_id = ?").run(newName, freshUser2.active_wallet_id, userId);
-      await ctx.reply(`✅ Wallet renamed to *${newName}*`, { parse_mode: "Markdown" });
       db.setSysConfig(`pending_${userId}`, "");
+      await ctx.reply(`✅ Renamed to *${newName}*`, { parse_mode: "Markdown" });
+      // Auto refresh wallet screen
+      const { showWalletScreen } = require("./callbacks.wallet");
+      const freshUser3 = db.getUser(userId);
+      await showWalletScreen(ctx, userId, freshUser3.active_wallet_id);
       return;
     }
 

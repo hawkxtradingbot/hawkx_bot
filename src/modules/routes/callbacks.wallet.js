@@ -9,8 +9,8 @@ const config = require("../../../config");
 
 async function handleWalletCallbacks(ctx, data, userId, user, bot, ks) {
     // ── WALLETS ───────────────────────────────────────────────
-    // ── Helper: build wallet screen ──────────────────────────────
-  async function showWalletScreen(ctx, userId, activeWalletId, msg) {
+// ── Helper: build wallet screen ──────────────────────────────
+async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     const freshUser = db.getUser(userId);
     const wallets = db.getWallets(userId) || [];
     const walletId = activeWalletId || freshUser.active_wallet_id;
@@ -633,4 +633,4 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
     return false;
 }
 
-module.exports = { handleWalletCallbacks };
+module.exports = { handleWalletCallbacks, showWalletScreen };

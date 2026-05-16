@@ -217,14 +217,14 @@ async function handlePositionAutoSell(ctx, data, userId, user) {
     const { InlineKeyboard } = require("grammy");
     const kb = new InlineKeyboard();
     if (!templates.length) {
-      kb.text("➕ Create Template", "pset_autosell_screen").row();
+      kb.text("⚙️ Manage Templates", "pset_autosell_screen").row();
     } else {
       templates.forEach(t => {
         const isSel = current === t.id;
         kb.text(isSel ? `✅ ${t.name}` : t.name, `pos_ast_use_${posId}_${t.id}`).row();
       });
       if (current) kb.text("❌ Remove Auto Sell", `pos_ast_remove_${posId}`).row();
-      kb.text("➕ New Template", "pset_autosell_screen").row();
+      
     }
     kb.text("← Back", `pos_filter_all_0_${posId}`).row();
     const msg = `📌 *Auto Sell — ${tokenName}*\n\n` +
