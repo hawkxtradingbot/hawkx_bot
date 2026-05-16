@@ -129,3 +129,7 @@
 - [ ] Price Alert monitor — check token prices vs alerts every minute, fire when hit
 - [ ] Wallet Tracker monitor — monitor tracked wallets via Helius webhooks, notify on trade
 - [ ] MCap alert trigger — check mcap vs target using DexScreener API
+
+## Rank Up Notification (Mainnet TODO)
+- [ ] Fix sendPhoto network issue on VPS (test rank card sending on mainnet)
+- [ ] Verify rank card image generates correctly on VPS
