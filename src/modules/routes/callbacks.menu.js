@@ -48,7 +48,11 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       const freshUser = db.getUser(userId);
       const { buildRankInfoMessage } = require("../keyboards");
-      return ctx.reply(buildRankInfoMessage(freshUser), { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] } });
+      const rankMsg = buildRankInfoMessage(freshUser);
+      const rankKb = { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] };
+      try { await ctx.editMessageText(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }
+      catch { await ctx.reply(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }
+      return;
     }
 
     // ── STATS ─────────────────────────────────────────────────

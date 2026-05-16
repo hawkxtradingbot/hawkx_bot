@@ -34,19 +34,40 @@ function getModeLabel(user) {
 function buildRankInfoMessage(user) {
   const vol     = Math.max(0, user?.cumulative_volume_sol || 0);
   const curRank = user?.rank || 1;
-  let msg = "🦅 *HawkX Rank & Fee System*\n\n";
-  msg += "_Trade more volume → rank up → pay less fee_\n\n";
+  const rankIcons = { 1:"🥉", 2:"🥈", 3:"🥇", 4:"🏆", 5:"💎", 6:"🦅", 7:"👑" };
+  let msg = "🦅 *Rank & Fee System*\n";
+  msg += "_Trade more → rank up → pay less fee_\n\n";
+  msg += "━━━━━━━━━━━━━━━━━━━\n";
   for (let r = 1; r <= 7; r++) {
-    const info   = RANKS[r];
-    const active = curRank === r ? " ◀ *YOU*" : "";
-    const volReq = r === 1 ? "0 SOL" : `${info.nextSol} SOL devnet`;
-    msg += `${active ? "▶" : "  "} *${info.name}* — ${info.fee.toFixed(2)}% fee${active}\n`;
-    msg += `   Volume needed: ${volReq}\n`;
+    const info = RANKS[r];
+    const icon = rankIcons[r];
+    const isYou = curRank === r;
+    const volReq = r === 1 ? "0 SOL" : `${info.nextSol} SOL`;
+    if (isYou) {
+      msg += `▶ ${icon} *${info.name}* — *${info.fee.toFixed(2)}%* ◀ YOU\n`;
+    } else if (r < curRank) {
+      msg += `  ${icon} ~~${info.name}~~ — ${info.fee.toFixed(2)}% ✅\n`;
+    } else {
+      msg += `  ${icon} ${info.name} — ${info.fee.toFixed(2)}% | ${volReq}\n`;
+    }
   }
-  msg += `\n📈 Your volume: *${vol.toFixed(4)} SOL*`;
+  msg += "━━━━━━━━━━━━━━━━━━━\n\n";
+  // Progress bar
+  const rank = RANKS[curRank];
+  const nextSol = rank.nextSol || 0;
+  const rankPct = nextSol > 0 ? Math.min(100, (vol / nextSol) * 100) : 100;
+  const filled = Math.round((rankPct / 100) * 16);
+  const bar = "█".repeat(filled) + "░".repeat(16 - filled);
+  msg += `📊 Progress: ${bar} ${rankPct.toFixed(0)}%\n`;
+  msg += `📈 Volume: *${vol.toFixed(4)} SOL*\n`;
   if (curRank < 7) {
-    const needed = Math.max(0, (RANKS[curRank].nextSol || 0) - vol).toFixed(4);
-    msg += `\n📉 Next rank in: *${needed} SOL*`;
+    const nextRank = RANKS[curRank + 1] || RANKS[curRank];
+    const needed = Math.max(0, nextSol - vol).toFixed(4);
+    msg += `📉 Need *${needed} SOL* → ${rankIcons[curRank+1]} ${nextRank.name}\n`;
+    const savings = (1.00 - rank.fee) * 100;
+    msg += `💰 Fee savings: *${savings.toFixed(2)}%* vs base rate\n`;
+  } else {
+    msg += `👑 *Maximum rank achieved!*\n`;
   }
   return msg;
 }
