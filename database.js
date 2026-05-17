@@ -40,6 +40,8 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN daily_loss_limit REAL DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN daily_trade_limit INTEGER DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN sniper_rt_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE settings ADD COLUMN sniper_rt_launchlab INTEGER DEFAULT 0",
+      "ALTER TABLE settings ADD COLUMN sniper_rt_jito REAL DEFAULT 0.0075",
     "ALTER TABLE settings ADD COLUMN sniper_rt_amount REAL DEFAULT 0.1",
     "ALTER TABLE settings ADD COLUMN sniper_rt_slippage REAL DEFAULT 50",
     "ALTER TABLE settings ADD COLUMN sniper_rt_fee REAL DEFAULT 0.003",
@@ -733,6 +735,8 @@ function getRealtimeSniperConfig(userId) {
     migrating: !!(s.sniper_rt_migrating ?? 1),
     auto_sell_enabled: s.sniper_rt_auto_sell_enabled || 0,
     auto_sell_template_id: s.sniper_rt_auto_sell_template_id || 0,
+    platform_launchlab: !!(s.sniper_rt_launchlab ?? 0),
+    jito_tip: Number(s.sniper_rt_jito ?? 0.0075),
   };
 }
 

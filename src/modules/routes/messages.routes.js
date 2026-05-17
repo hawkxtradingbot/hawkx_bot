@@ -953,7 +953,8 @@ function setupMessages(bot) {
     if (
       pending === "sniper_rt_amount" ||
       pending === "sniper_rt_slippage" ||
-      pending === "sniper_rt_fee"
+      pending === "sniper_rt_fee" ||
+      pending === "sniper_rt_jito"
     ) {
       const val = parseFloat(text);
       await deleteMsg(ctx, promptId);
@@ -966,15 +967,11 @@ function setupMessages(bot) {
         return;
       }
       const patch =
-        pending === "sniper_rt_amount"
-          ? { sniper_rt_amount: val }
-          : pending === "sniper_rt_slippage"
-            ? { sniper_rt_slippage: val }
-            : { sniper_rt_fee: val };
+        pending === "sniper_rt_amount" ? { sniper_rt_amount: val } : pending === "sniper_rt_slippage" ? { sniper_rt_slippage: val } : pending === "sniper_rt_jito" ? { sniper_rt_jito: val } : { sniper_rt_fee: val };
       db.updateRealtimeSniperConfig(userId, patch);
       db.setSysConfig(`sniper_screen_${userId}`, "realtime");
       const rtMsgId = parseInt(db.getSysConfig(`rt_msg_${userId}`) || "0");
-      const rtMsgText = `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`;
+      const rtMsgText = "⚡ *Real-Time Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Snipes ANY new Raydium pool instantly\n▸ Fastest entry — catches first block\n▸ No CA needed — fully automatic\n▸ Toggle sources: Raydium, Migrations, HawkX\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━\n\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n⚡ Jito — bundle priority tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━";
       if (rtMsgId) {
         try { await ctx.api.editMessageText(ctx.chat.id, rtMsgId, rtMsgText, { parse_mode: "Markdown", reply_markup: buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)) }); return; } catch {}
       }

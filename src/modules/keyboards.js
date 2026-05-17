@@ -459,8 +459,10 @@ function buildRealtimeSnipeMenu(cfg) {
   kb.text(`🌊 Raydium: ${cfg?.raydium ? "ON ✅" : "OFF ❌"}`, "sniper_rt_raydium")
     .text(`🔥 Migrating: ${cfg?.migrating ? "ON ✅" : "OFF ❌"}`, "sniper_rt_migrating")
     .row();
+  kb.text(cfg?.platform_launchlab ? "✅ HawkX Launch" : "◻️ HawkX Launch", "sniper_rt_hawkx")
+    .text(`⚡ Jito: ${cfg?.jito_tip||0.0075} SOL`, "sniper_rt_jito")
+    .row();
   kb.text(cfg?.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sniper_rt_autosell").row();
-  kb.text("✅ Save", "sniper_rt_save").row();
   kb.text("← Back", "menu_sniper")
     .text("🔄 Refresh", "sniper_realtime_menu")
     .row();
