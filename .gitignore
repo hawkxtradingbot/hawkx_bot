@@ -7,3 +7,4 @@ node_modules/
 .env.keys
 *.backup
 update_menu.js
+MAINNET_CHECKLIST.md
