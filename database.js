@@ -61,6 +61,9 @@ function runMigrations(d) {
       "ALTER TABLE copy_channels ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE copy_channels ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE sniper_configs ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE snipes ADD COLUMN label TEXT DEFAULT NULL",
+      "ALTER TABLE snipes ADD COLUMN gas REAL DEFAULT 0.005",
+      "ALTER TABLE snipes ADD COLUMN mev INTEGER DEFAULT 0",
       "ALTER TABLE sniper_configs ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE snipes ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
@@ -714,8 +717,8 @@ function getActiveSnipes(userId) {
 
 function addSnipe(userId, tokenCa, solAmount, slippage, configId, opts) {
   const o = opts || {};
-  getDb().prepare("INSERT INTO snipes (user_id, token_ca, sol_amount, slippage, config_id, gas, mev, auto_sell_template_id, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
-    .run(userId, tokenCa, solAmount || 0.1, slippage || 50, configId || null, o.gas || 0.005, o.mev ? 1 : 0, o.auto_sell_template_id || null);
+  getDb().prepare("INSERT INTO snipes (user_id, token_ca, sol_amount, slippage, config_id, gas, mev, auto_sell_template_id, label, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)")
+    .run(userId, tokenCa, solAmount || 0.1, slippage || 50, configId || null, o.gas || 0.005, o.mev ? 1 : 0, o.auto_sell_template_id || null, o.label || null);
 }
 
 function getRealtimeSniperConfig(userId) {

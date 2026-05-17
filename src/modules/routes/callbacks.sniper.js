@@ -16,6 +16,7 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
 
     if (data === "sniper_auto_menu") {
       await ctx.answerCallbackQuery();
+      db.setSysConfig(`sniper_screen_${userId}`, "auto");
       const configs = db.getSniperConfigs(userId);
       const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
       return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(configs));
@@ -94,11 +95,8 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       await ctx.answerCallbackQuery();
       const snipes = db.getActiveSnipes(userId);
       db.setSysConfig(`sniper_screen_${userId}`, "migration");
-      return safeEdit(
-        ctx,
-        `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`,
-        buildMigrationSniperMenu(snipes),
-      );
+      const migGuide = "🔀 *Migration Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Auto-snipes tokens at ~68K MCap\n▸ Catches PumpFun → Raydium migrations\n▸ No CA needed — bot catches it live\n▸ Set amount, slippage & auto sell\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, migGuide, buildMigrationSniperMenu(snipes));
     }
 
     if (data === "sniper_migration_new") {
@@ -127,6 +125,27 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
         const m = await ctx.reply("⛽ Enter gas fee in SOL (e.g. 0.005):");
         db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
         db.setSysConfig(`pending_${userId}`, "msnipe_gas");
+        return true;
+      }
+      if (data === "msnipe_rename") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("✏️ Enter name for this migration snipe:");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_set_label");
+        return true;
+      }
+      if (data === "msnipe_set_minliq") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("💧 Min Liquidity SOL (0=off, e.g. 5):");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_minliq");
+        return true;
+      }
+      if (data === "msnipe_set_maxmcap") {
+        await ctx.answerCallbackQuery();
+        const m = await ctx.reply("📊 Max MCap USD (0=off, e.g. 500000 or 500K):");
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "msnipe_maxmcap");
         return true;
       }
       if (data === "msnipe_toggle_mev") {
@@ -214,7 +233,8 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
         const mev = db.getSysConfig(`msnipe_mev_${userId}`) === "1";
         const tplId = parseInt(db.getSysConfig(`msnipe_tpl_${userId}`) || "0");
         const asOn = db.getSysConfig(`msnipe_as_${userId}`) === "1";
-        db.addSnipe(userId, null, sol, slippage, null, { gas, mev, auto_sell_template_id: asOn ? tplId : null });
+        const msnipeLabel2 = db.getSysConfig(`msnipe_label_${userId}`) || null;
+        db.addSnipe(userId, null, sol, slippage, null, { gas, mev, auto_sell_template_id: asOn ? tplId : null, label: msnipeLabel2 });
         await ctx.answerCallbackQuery("✅ Migration Snipe Armed!");
         const snipes = db.getActiveSnipes(userId);
         return safeEdit(ctx,
@@ -332,6 +352,24 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       await ctx.answerCallbackQuery();
       return true;
     }
+    if (data === "auto_pause_all") {
+      const allConfigs = db.getSniperConfigs(userId);
+      const anyActive2 = allConfigs.some(s => s.active);
+      db.getDb().prepare(`UPDATE sniper_configs SET active = ? WHERE user_id = ?`).run(anyActive2 ? 0 : 1, userId);
+      await ctx.answerCallbackQuery(anyActive2 ? "⏸ Auto Sniper paused." : "▶ Auto Sniper resumed.");
+      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
+    }
+
+    if (data === "migration_pause_all") {
+      const allSnipes2 = db.getActiveSnipes(userId);
+      const anySnipeActive = allSnipes2.some(s => s.active);
+      db.getDb().prepare(`UPDATE snipes SET active = ? WHERE user_id = ?`).run(anySnipeActive ? 0 : 1, userId);
+      await ctx.answerCallbackQuery(anySnipeActive ? "⏸ Migration paused." : "▶ Migration resumed.");
+      const migGuide = "🔀 *Migration Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Auto-snipes tokens at ~68K MCap\n▸ Catches PumpFun → Raydium migrations\n▸ No CA needed — bot catches it live\n▸ Set amount, slippage & auto sell\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, migGuide, buildMigrationSniperMenu(db.getActiveSnipes(userId)));
+    }
+
     if (data === "sniper_pause_all") {
       const allConfigs = db.getSniperConfigs(userId);
       const allSnipes = db.getActiveSnipes(userId);
@@ -508,20 +546,30 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       if (!s) { await ctx.answerCallbackQuery("Not found."); return true; }
       await ctx.answerCallbackQuery();
       const asOn = s.auto_sell_template_id ? "ON ✅" : "OFF ❌";
-      return safeEdit(ctx,
-        `🔀 *Migration Snipe Details*\n\n` +
-        `${s.active ? "🟢 Status: Active" : "🟡 Status: Paused"}\n\n` +
+      const snipeLabel = s.label || `Snipe #${id}`;
+      const snipeMsg = `🔀 *${snipeLabel}*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Tap Pause to stop this snipe\n▸ Tap Rename to change name\n▸ Tap Cancel to delete permanently\n━━━━━━━━━━━━━━━━━━━\n\n${s.active ? "🟢 Active" : "⏸ Paused"}\n\n💰 Amount: *${s.sol_amount} SOL*\n📉 Slippage: *${s.slippage||50}%*\n⛽ Gas: *${s.gas||0.005} SOL*\n🛡 MEV: *${s.mev ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${asOn}*`;
+        `${s.active ? "🟢 Active" : "⏸ Paused"}\n\n` +
         `💰 Amount: *${s.sol_amount} SOL*\n` +
         `📉 Slippage: *${s.slippage||50}%*\n` +
         `⛽ Gas: *${s.gas||0.005} SOL*\n` +
         `🛡 MEV: *${s.mev ? "ON ✅" : "OFF ❌"}*\n` +
-        `🤖 Auto Sell: *${asOn}*`,
-        { inline_keyboard: [
-          [{ text: s.active ? "🟡 Pause" : "🟢 Resume", callback_data: `snipe_toggle_${id}` },
-           { text: "✖ Cancel", callback_data: `snipe_cancel_${id}` }],
-          [{ text: "← Back", callback_data: "sniper_migration_menu" }],
-        ]}
-      );
+        `🤖 Auto Sell: *${asOn}*`;
+      const snipeKb = { inline_keyboard: [
+        [{ text: s.active ? "⏸ Pause" : "▶ Resume", callback_data: `snipe_toggle_${id}` }, { text: "✏️ Rename", callback_data: `snipe_rename_${id}` }],
+        [{ text: "✖ Cancel Snipe", callback_data: `snipe_cancel_${id}` }],
+        [{ text: "← Back", callback_data: "sniper_migration_menu" }],
+      ]};
+      db.setSysConfig(`snipe_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      return safeEdit(ctx, snipeMsg, snipeKb);
+    }
+
+    if (data.startsWith("snipe_rename_")) {
+      const id = parseInt(data.replace("snipe_rename_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("✏️ Enter new name for this snipe:");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `snipe_set_label_${id}`);
+      return true;
     }
 
     if (data.startsWith("snipe_toggle_")) {
@@ -531,20 +579,15 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       db.getDb().prepare("UPDATE snipes SET active = ? WHERE id = ? AND user_id = ?").run(s.active ? 0 : 1, id, userId);
       await ctx.answerCallbackQuery(s.active ? "⏸ Paused" : "▶ Resumed");
       const updated = db.getDb().prepare("SELECT * FROM snipes WHERE id = ? AND user_id = ?").get(id, userId);
-      const asOn = updated.auto_sell_template_id ? "ON ✅" : "OFF ❌";
-      return safeEdit(ctx,
-        `🔀 *Migration Snipe Details*\n\n` +
-        `💰 Amount: *${updated.sol_amount} SOL*\n` +
-        `📉 Slippage: *${updated.slippage||50}%*\n` +
-        `⛽ Gas: *${updated.gas||0.005} SOL*\n` +
-        `🛡 MEV: *${updated.mev ? "ON ✅" : "OFF ❌"}*\n` +
-        `🤖 Auto Sell: *${asOn}*`,
-        { inline_keyboard: [
-          [{ text: updated.active ? "🟡 Pause" : "🟢 Resume", callback_data: `snipe_toggle_${id}` },
-           { text: "✖ Cancel", callback_data: `snipe_cancel_${id}` }],
-          [{ text: "← Back", callback_data: "sniper_migration_menu" }],
-        ]}
-      );
+      const asOn2 = updated.auto_sell_template_id ? "ON ✅" : "OFF ❌";
+      const snipeName2 = updated.label || `Snipe #${id}`;
+      const toggleMsg = `🔀 *${snipeName2}*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Tap Pause to stop this snipe\n▸ Tap Rename to change name\n▸ Tap Cancel to delete permanently\n━━━━━━━━━━━━━━━━━━━\n\n${updated.active ? '🟢 Active' : '⏸ Paused'}\n\n💰 Amount: *${updated.sol_amount} SOL*\n📉 Slippage: *${updated.slippage||50}%*\n⛽ Gas: *${updated.gas||0.005} SOL*\n🛡 MEV: *${updated.mev ? 'ON ✅' : 'OFF ❌'}*\n🤖 Auto Sell: *${asOn2}*`;
+      const toggleKb = { inline_keyboard: [
+        [{ text: updated.active ? "⏸ Pause" : "▶ Resume", callback_data: `snipe_toggle_${id}` }, { text: "✏️ Rename", callback_data: `snipe_rename_${id}` }],
+        [{ text: "✖ Cancel Snipe", callback_data: `snipe_cancel_${id}` }],
+        [{ text: "← Back", callback_data: "sniper_migration_menu" }],
+      ]};
+      return safeEdit(ctx, toggleMsg, toggleKb);
     }
 
     if (data.startsWith("snipe_cancel_")) {
@@ -552,11 +595,7 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       db.cancelSnipe(userId, id);
       await ctx.answerCallbackQuery("✅ Cancelled.");
       db.setSysConfig(`sniper_screen_${userId}`, "migration");
-      return safeEdit(
-        ctx,
-        `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`,
-        buildMigrationSniperMenu(db.getActiveSnipes(userId)),
-      );
+      return safeEdit(ctx, "🔀 *Migration Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Auto-snipes tokens at ~68K MCap\n▸ Catches PumpFun → Raydium migrations\n▸ No CA needed — bot catches it live\n▸ Set amount, slippage & auto sell\n━━━━━━━━━━━━━━━━━━━", buildMigrationSniperMenu(db.getActiveSnipes(userId)));
     }
 
     if (data.startsWith("scfg_")) {

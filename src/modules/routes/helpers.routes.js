@@ -412,25 +412,30 @@ async function refreshMsnipeScreen(ctx, userId) {
       const wallets   = db.getWallets(userId) || [];
       const walletIdx = wallets.findIndex(w => w.wallet_id === freshUser.active_wallet_id) + 1;
       const sol       = db.getSysConfig(`msnipe_sol_${userId}`) || "0.1";
+      const msnipeLabel = db.getSysConfig(`msnipe_label_${userId}`) || "New Migration Snipe";
       const slippage  = db.getSysConfig(`msnipe_slip_${userId}`) || "50";
       const gas       = db.getSysConfig(`msnipe_gas_${userId}`) || "0.005";
       const mev       = db.getSysConfig(`msnipe_mev_${userId}`) === "1";
       const tplId     = parseInt(db.getSysConfig(`msnipe_tpl_${userId}`) || "0");
       const tpl       = tplId ? templates.find(t => t.id === tplId) : null;
       const asOn      = db.getSysConfig(`msnipe_as_${userId}`) === "1";
+      const minliq = db.getSysConfig(`msnipe_minliq_${userId}`) || "0";
+      const maxmcap = db.getSysConfig(`msnipe_maxmcap_${userId}`) || "0";
+      const mcapDisplay = parseFloat(maxmcap) >= 1000000 ? "$"+(parseFloat(maxmcap)/1000000).toFixed(1)+"M" : parseFloat(maxmcap) >= 1000 ? "$"+(parseFloat(maxmcap)/1000).toFixed(0)+"K" : parseFloat(maxmcap) > 0 ? "$"+maxmcap : "No limit";
       const msg =
-        `🔀 *New Migration Snipe*\n\n` +
+        `🔀 *${msnipeLabel}*\n\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `📚 *HOW IT WORKS:*\n` +
-        `Snipes any token launching on Raydium\n` +
-        `migrating from PumpFun or new launch\n` +
-        `at ~68K market cap automatically.\n` +
-        `No CA needed — bot catches it live.\n` +
+        `🎯 *How it works:*\n` +
+        `Catches PumpFun → Raydium migrations\n` +
+        `at ~68K MCap automatically.\n` +
+        `No CA needed — fully automatic.\n` +
         `━━━━━━━━━━━━━━━━━━━\n\n` +
         `💰 *Amount:* ${sol} SOL\n` +
         `📉 *Slippage:* ${slippage}%\n` +
         `⛽ *Gas:* ${gas} SOL\n` +
         `🛡 *MEV:* ${mev ? "ON ✅" : "OFF ❌"}\n` +
+        `💧 *Min Liq:* ${parseFloat(minliq) > 0 ? minliq+" SOL" : "No filter"}\n` +
+        `📊 *Max MCap:* ${mcapDisplay}\n` +
         `💼 *Wallet:* W${walletIdx}\n` +
         `🤖 *Auto Sell:* ${asOn ? `ON ✅ — ${tpl?.name||"No template"}` : "OFF ❌"}\n` +
         `━━━━━━━━━━━━━━━━━━━`;
@@ -440,13 +445,15 @@ async function refreshMsnipeScreen(ctx, userId) {
          { text: `⛽ ${gas}SOL`, callback_data: "msnipe_set_gas" }],
         [{ text: mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: "msnipe_toggle_mev" }],
         [{ text: `🤖 Auto Sell: ${asOn ? `ON ✅ — ${tpl?.name||"No template"}` : "OFF ❌"}`, callback_data: "msnipe_open_as" }],
-        [{ text: "✅ Start Sniping", callback_data: "msnipe_confirm" }],
+        [{ text: `💧 Min Liq: ${db.getSysConfig("msnipe_minliq_" + userId) || 0} SOL`, callback_data: "msnipe_set_minliq" }, { text: `📊 Max MCap: ${db.getSysConfig("msnipe_maxmcap_" + userId) || 0}`, callback_data: "msnipe_set_maxmcap" }],
+        [{ text: "✏️ Rename Setup", callback_data: "msnipe_rename" }, { text: "✅ Start Sniping", callback_data: "msnipe_confirm" }],
         [{ text: "← Back", callback_data: "sniper_migration_menu" }],
       ]};
       const savedMsgId = parseInt(db.getSysConfig(`msnipe_msg_${userId}`) || "0");
+      console.log("[MSNIPE] savedMsgId:", savedMsgId, "chatId:", ctx.chat?.id || ctx.message?.chat?.id || userId);
       try {
         if (savedMsgId) {
-          await ctx.api.editMessageText(ctx.chat.id, savedMsgId, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+          await ctx.api.editMessageText(ctx.chat?.id || ctx.message?.chat?.id || userId, savedMsgId, msg, { parse_mode: "Markdown", reply_markup: keyboard }).catch(e => console.log("[MSNIPE EDIT ERR]:", e.message));
         } else {
           await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: keyboard });
           const msgId = ctx.callbackQuery?.message?.message_id;

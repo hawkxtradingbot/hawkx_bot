@@ -391,7 +391,7 @@ function buildAutoSniperMenu(configs) {
   }
   kb.text("➕ Create Setup", "sniper_config_new").row();
   const anyActive = configs?.some(c => c.active);
-  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "sniper_pause_all").row();
+  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "auto_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_auto_menu")
     .row();
@@ -431,7 +431,8 @@ function buildMigrationSniperMenu(snipes) {
   else {
     snipes.forEach((s) => {
       const icon = s.active ? "🟢" : "🟡";
-      const label = `${icon} ${s.sol_amount}SOL | Slip:${s.slippage||50}%`;
+      const snipeName = s.label || `Snipe #${s.id}`;
+      const label = `${icon} ${snipeName}`;
       kb.text(label, `snipe_view_${s.id}`)
         .text("✖", `snipe_cancel_${s.id}`)
         .row();
@@ -439,7 +440,7 @@ function buildMigrationSniperMenu(snipes) {
   }
   kb.text("➕ New Migration Snipe", "sniper_migration_new").row();
   const anyActive = snipes?.some(s => s.active);
-  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "sniper_pause_all").row();
+  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "migration_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_migration_menu")
     .row();

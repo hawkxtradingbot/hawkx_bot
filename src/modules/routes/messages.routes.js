@@ -822,6 +822,49 @@ function setupMessages(bot) {
       }
       return;
     }
+      if (pending.startsWith("snipe_set_label_")) {
+        const id = parseInt(pending.replace("snipe_set_label_", ""));
+        await deleteMsg(ctx, promptId);
+        try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+        db.setSysConfig(`pending_${userId}`, "");
+        const newLabel = text.trim().slice(0,20);
+        db.getDb().prepare("UPDATE snipes SET label = ? WHERE id = ? AND user_id = ?").run(newLabel, id, userId);
+        // answerCallbackQuery not available in message context
+        const snipe = db.getDb().prepare("SELECT * FROM snipes WHERE id = ? AND user_id = ?").get(id, userId);
+        const asOn = snipe?.auto_sell_template_id ? "ON ✅" : "OFF ❌";
+        const snipeMsg = `🔀 *${newLabel}*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Tap Pause to stop this snipe\n▸ Tap Rename to change name\n▸ Tap Cancel to delete permanently\n━━━━━━━━━━━━━━━━━━━\n\n${snipe?.active ? "🟢 Active" : "⏸ Paused"}\n\n💰 Amount: *${snipe?.sol_amount} SOL*\n📉 Slippage: *${snipe?.slippage||50}%*\n⛽ Gas: *${snipe?.gas||0.005} SOL*\n🛡 MEV: *${snipe?.mev ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${asOn}*`;
+        const snipeKb = { inline_keyboard: [
+          [{ text: snipe?.active ? "⏸ Pause" : "▶ Resume", callback_data: `snipe_toggle_${id}` }, { text: "✏️ Rename", callback_data: `snipe_rename_${id}` }],
+          [{ text: "✖ Cancel Snipe", callback_data: `snipe_cancel_${id}` }],
+          [{ text: "← Back", callback_data: "sniper_migration_menu" }],
+        ]};
+        const viewMsgId = parseInt(db.getSysConfig(`snipe_view_msg_${userId}`) || "0");
+        if (viewMsgId) {
+          try { await ctx.api.editMessageText(ctx.chat.id, viewMsgId, snipeMsg, { parse_mode: "Markdown", reply_markup: snipeKb }); return; } catch {}
+        }
+        await ctx.reply(snipeMsg, { parse_mode: "Markdown", reply_markup: snipeKb });
+      }
+      if (pending === "msnipe_set_label") {
+        await deleteMsg(ctx, promptId);
+        try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+        db.setSysConfig(`pending_${userId}`, "");
+        db.setSysConfig(`msnipe_label_${userId}`, text.trim().slice(0,20));
+        await refreshMsnipeScreen(ctx, userId);
+        return;
+      }
+      if (pending === "msnipe_minliq" || pending === "msnipe_maxmcap") {
+        await deleteMsg(ctx, promptId);
+        try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+        db.setSysConfig(`pending_${userId}`, "");
+        const raw = text.trim().toUpperCase();
+        let val = parseFloat(raw);
+        if (raw.endsWith("K")) val = parseFloat(raw) * 1000;
+        if (raw.endsWith("M")) val = parseFloat(raw) * 1000000;
+        if (isNaN(val)) val = 0;
+        db.setSysConfig(`msnipe_${pending === "msnipe_minliq" ? "minliq" : "maxmcap"}_${userId}`, String(val));
+        await refreshMsnipeScreen(ctx, userId);
+        return;
+      }
       if (pending === "msnipe_sol" || pending === "msnipe_slip" || pending === "msnipe_gas") {
         await deleteMsg(ctx, promptId);
         try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
