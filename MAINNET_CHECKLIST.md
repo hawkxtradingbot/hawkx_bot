@@ -158,3 +158,9 @@
 - [ ] Price alert monitor cron
 - [ ] Wallet tracker via Helius webhooks
 - [ ] Daily PnL report cron
+
+## HawkX Launch → Sniper Integration (Mainnet TODO)
+- [ ] Wire launch completion to broadcast CA to all sniper users with platform_launchlab=1
+- [ ] Check each user's sniper filters before auto-sniping
+- [ ] Execute snipe if filters pass
+- [ ] Notify user when their launch gets sniped

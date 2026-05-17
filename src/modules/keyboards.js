@@ -390,7 +390,8 @@ function buildAutoSniperMenu(configs) {
     });
   }
   kb.text("➕ Create Setup", "sniper_config_new").row();
-  kb.text("⏸ Pause All",    "sniper_pause_all").row();
+  const anyActive = configs?.some(c => c.active);
+  kb.text(anyActive ? "⏸ Pause All" : "▶ Resume All", "sniper_pause_all").row();
   kb.text("← Back",    "menu_sniper")
     .text("🔄 Refresh", "sniper_auto_menu")
     .row();
@@ -413,7 +414,11 @@ function buildSniperConfigMenu(cfg) {
     .row();
   kb.text(cfg.use_lightning_rpc ? "✅ ⚡ Lightning RPC" : "◻️ ⚡ Lightning RPC", `scfg_rpc_${cfg.id}`).row();
   kb.text(`Max Snipes: ${cfg.max_snipes||5}`, `scfg_max_${cfg.id}`).row();
-  kb.text("✅ Save & Activate", `sniper_config_save_${cfg.id}`).row();
+  // Filters
+  kb.text(`💧 Min Liq: ${cfg.min_liquidity||0} SOL`, `scfg_minliq_${cfg.id}`).text(`📊 Max MCap: ${cfg.market_cap_min||0}`, `scfg_maxmcap_${cfg.id}`).row();
+  kb.text(`👤 Dev%: ${cfg.dev_holding_max||100}%`, `scfg_dev_${cfg.id}`).text(cfg.mint_auth_revoked ? "✅ Mint Rev" : "◻️ Mint Rev", `scfg_mint_${cfg.id}`).row();
+  kb.text(cfg.freeze_auth_revoked ? "✅ Freeze Rev" : "◻️ Freeze Rev", `scfg_freeze_${cfg.id}`).text(cfg.platform_launchlab ? "✅ HawkX Launch" : "◻️ HawkX Launch", `scfg_hawkx_${cfg.id}`).row();
+  kb.text("✏️ Rename", `scfg_rename_${cfg.id}`).text(cfg.active ? "✅ Active — tap to pause" : "⏸ Paused — tap to activate", `sniper_config_toggle_${cfg.id}`).row();
   kb.text("← Back", "sniper_auto_menu").row();
   return kb;
 }

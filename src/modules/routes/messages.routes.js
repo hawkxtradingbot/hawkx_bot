@@ -797,12 +797,29 @@ function setupMessages(bot) {
         fee: "snipe_fee",
         tip: "snipe_tip",
         max: "max_snipes",
+        minliq: "min_liquidity",
+        maxmcap: "market_cap_min",
+        dev: "dev_holding_max",
+        label: "label",
       };
-      if (fieldMap[field] && !isNaN(val))
+      if (field === "label") {
+        db.updateSniperConfig(userId, id, { label: text.trim().slice(0,20) });
+      } else if (fieldMap[field] && !isNaN(val)) {
         db.updateSniperConfig(userId, id, { [fieldMap[field]]: val });
+      }
       const cfg = db.getSniperConfig(id, userId);
-      if (cfg)
-        return safeEdit(ctx, `🎯 *${cfg.label}*`, buildSniperConfigMenu(cfg));
+      if (cfg) {
+        const cfgMsgId = parseInt(db.getSysConfig(`scfg_msg_${userId}`) || "0");
+        const chatId = ctx.chat?.id || ctx.message?.chat?.id;
+        if (cfgMsgId && chatId) {
+          try {
+            await ctx.api.editMessageText(chatId, cfgMsgId, `🎯 *${cfg.label}*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause`, { parse_mode: "Markdown", reply_markup: buildSniperConfigMenu(cfg) });
+            return;
+          } catch(e) { console.log("[SCFG EDIT ERR]", e.message); }
+        }
+        const sent = await ctx.reply(`🎯 *${cfg.label}*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause`, { parse_mode: "Markdown", reply_markup: buildSniperConfigMenu(cfg) });
+        db.setSysConfig(`scfg_msg_${userId}`, String(sent.message_id));
+      }
       return;
     }
       if (pending === "msnipe_sol" || pending === "msnipe_slip" || pending === "msnipe_gas") {

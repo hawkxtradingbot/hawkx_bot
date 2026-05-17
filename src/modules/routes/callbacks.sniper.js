@@ -17,11 +17,8 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
     if (data === "sniper_auto_menu") {
       await ctx.answerCallbackQuery();
       const configs = db.getSniperConfigs(userId);
-      return safeEdit(
-        ctx,
-        "🎯 *Auto Sniper*\n\nSnipes any new Solana token launch automatically.",
-        buildAutoSniperMenu(configs),
-      );
+      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(configs));
     }
 
     if (data === "sniper_config_new") {
@@ -34,7 +31,7 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
       const cfg = db.getSniperConfig(id, userId);
       return safeEdit(
         ctx,
-        `🎯 *New Auto Sniper Setup*\n\nConfigure your sniper:`,
+        "🎯 *Auto Sniper Setup*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause",
         buildSniperConfigMenu(cfg),
       );
     }
@@ -47,33 +44,48 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
         return true;
       }
       await ctx.answerCallbackQuery();
-      return safeEdit(
-        ctx,
-        `🎯 *${cfg.label}*\n\nEdit your sniper setup:`,
-        buildSniperConfigMenu(cfg),
-      );
+      await safeEdit(ctx, `🎯 *${cfg.label}*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause`, buildSniperConfigMenu(cfg));
+      db.setSysConfig(`scfg_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      return true;
     }
 
     if (data.startsWith("sniper_config_save_")) {
       const id = parseInt(data.replace("sniper_config_save_", ""));
       db.updateSniperConfig(userId, id, { active: 1 });
-      await ctx.answerCallbackQuery("✅ Setup saved & activated!");
-      return safeEdit(
-        ctx,
-        "🎯 *Auto Sniper*",
-        buildAutoSniperMenu(db.getSniperConfigs(userId)),
-      );
+      await ctx.answerCallbackQuery("✅ Activated!");
+      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
+    }
+
+    if (data.startsWith("sniper_config_toggle_")) {
+      const id = parseInt(data.replace("sniper_config_toggle_", ""));
+      const cfg = db.getSniperConfig(id, userId);
+      if (!cfg) { await ctx.answerCallbackQuery("Not found."); return true; }
+      const newActive = cfg.active ? 0 : 1;
+      db.updateSniperConfig(userId, id, { active: newActive });
+      await ctx.answerCallbackQuery(newActive ? "✅ Activated!" : "⏸ Paused!");
+      const updated = db.getSniperConfig(id, userId);
+      db.setSysConfig(`scfg_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      return safeEdit(ctx, `🎯 *${updated.label}*
+
+Edit your sniper setup:`, buildSniperConfigMenu(updated));
+    }
+
+    if (data.startsWith("scfg_rename_")) {
+      const id = parseInt(data.replace("scfg_rename_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("✏️ Enter new name for this setup:");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `scfg_set_label_${id}`);
+      return true;
     }
 
     if (data.startsWith("sniper_config_delete_")) {
       const id = parseInt(data.replace("sniper_config_delete_", ""));
       db.deleteSniperConfig(userId, id);
       await ctx.answerCallbackQuery("🗑 Deleted.");
-      return safeEdit(
-        ctx,
-        "🎯 *Auto Sniper*",
-        buildAutoSniperMenu(db.getSniperConfigs(userId)),
-      );
+      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
     }
 
     
@@ -321,30 +333,20 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data === "sniper_pause_all") {
+      const allConfigs = db.getSniperConfigs(userId);
       const allSnipes = db.getActiveSnipes(userId);
-      const anyActive = allSnipes.some(s => s.active);
+      const anyActive = allConfigs.some(s => s.active) || allSnipes.some(s => s.active);
       if (anyActive) {
         db.getDb().prepare("UPDATE snipes SET active = 0 WHERE user_id = ?").run(userId);
+        db.getDb().prepare("UPDATE sniper_configs SET active = 0 WHERE user_id = ?").run(userId);
         await ctx.answerCallbackQuery("⏸ All paused.");
       } else {
         db.getDb().prepare("UPDATE snipes SET active = 1 WHERE user_id = ?").run(userId);
+        db.getDb().prepare("UPDATE sniper_configs SET active = 1 WHERE user_id = ?").run(userId);
         await ctx.answerCallbackQuery("▶ All resumed.");
       }
-      const screen = db.getSysConfig(`sniper_screen_${userId}`) || "main";
-      if (screen === "migration") {
-        try { await ctx.editMessageReplyMarkup({ reply_markup: buildMigrationSniperMenu(db.getActiveSnipes(userId)) }); } catch {}
-        return true;
-      }
-      if (screen === "realtime") {
-        return safeEdit(ctx, `⚡ *Real-Time Snipe*
-
-${getGuide("sniper")}
-
-Snipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
-      }
-      return safeEdit(ctx, `🎯 *Sniper*
-
-${getGuide("sniper")}`, buildSniperMainMenu());
+      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
     }
 
     if (data === "sniper_realtime_menu") {
@@ -574,6 +576,9 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
         pump: "platform_pumpfun",
         moon: "platform_moonshot",
         rpc: "use_lightning_rpc",
+        mint: "mint_auth_revoked",
+        freeze: "freeze_auth_revoked",
+        hawkx: "platform_launchlab",
       };
 
       if (toggles[action]) {
@@ -590,16 +595,13 @@ ${getGuide("sniper")}`, buildSniperMainMenu());
 
       const prompts = {
         amt: { pending: `scfg_set_amt_${id}`, msg: "Enter snipe amount SOL:" },
-        slip: {
-          pending: `scfg_set_slip_${id}`,
-          msg: "Enter slippage % (e.g. 50):",
-        },
+        slip: { pending: `scfg_set_slip_${id}`, msg: "Enter slippage % (e.g. 50):" },
         fee: { pending: `scfg_set_fee_${id}`, msg: "Enter priority fee SOL:" },
         tip: { pending: `scfg_set_tip_${id}`, msg: "Enter Jito tip SOL:" },
-        max: {
-          pending: `scfg_set_max_${id}`,
-          msg: "Enter max snipes (e.g. 5):",
-        },
+        max: { pending: `scfg_set_max_${id}`, msg: "Enter max snipes (e.g. 5):" },
+        minliq: { pending: `scfg_set_minliq_${id}`, msg: "💧 Min Liquidity SOL (0=off, e.g. 5):" },
+        maxmcap: { pending: `scfg_set_maxmcap_${id}`, msg: "📊 Max MCap USD (0=off, e.g. 500000):" },
+        dev: { pending: `scfg_set_dev_${id}`, msg: "👤 Max Dev Holding % (100=off, e.g. 10):" },
       };
 
       if (prompts[action]) {
