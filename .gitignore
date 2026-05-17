@@ -8,3 +8,5 @@ node_modules/
 *.backup
 update_menu.js
 MAINNET_CHECKLIST.md
+DEVNET_PROGRESS.md
+MAINNET_STEPS.md
