@@ -2,6 +2,58 @@ const db = require("../../../database");
 const { safeEdit, showCwSetupScreen, stripMd, buildReferralScreen } = require("./helpers.routes");
 const { buildCopyTradeMenu, buildCopyWalletListMenu, buildCopyChannelListMenu, buildCopyChannelSettingsMenu, getGuide } = require("../keyboards");
 
+
+// ── Helper: build copy wallet screen ──────────────────────────
+function buildCwScreen(cw, wallets, expanded = false) {
+  const selWal = wallets.find(w => w.wallet_id === cw.wallet_id);
+  const wIdx = selWal ? wallets.indexOf(selWal) + 1 : "—";
+  const name = cw.label || cw.wallet_address.slice(0,16)+"...";
+  const msg =
+    `👛 *${name}*\n\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `▸ All settings auto-save instantly\n` +
+    `▸ Copy Sell mirrors whale sells\n` +
+    `▸ Max/Min filters control trade size\n` +
+    `━━━━━━━━━━━━━━━━━━━\n\n` +
+    `🎯 Address: \`${cw.wallet_address}\`\n\n` +
+    `💼 Wallet: *W${wIdx}*\n` +
+    `💰 Amount: *${cw.sol_amount} SOL*\n` +
+    `📉 Slippage: *${cw.slippage||50}%*\n` +
+    `⛽ Gas: *${cw.gas_fee||0.005} SOL*\n` +
+    `🛡 MEV: *${cw.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
+    `🔄 Copy Sell: *${cw.copy_sell ? "ON ✅" : "OFF ❌"}*\n` +
+    `🤖 Auto Sell: *${cw.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+    `📊 Max: *${cw.max_sol||1} SOL* | Min: *${cw.min_sol||0} SOL*\n` +
+    `% Copy: *${cw.copy_pct||100}%* | ⏱ Delay: *${cw.delay_seconds||0}s*\n` +
+    `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${cw.trades_executed||0}*`;
+  const selWal2 = wallets.find(w => w.wallet_id === cw.wallet_id);
+  const wIdx2 = selWal2 ? wallets.indexOf(selWal2) + 1 : "—";
+  const wLabel2 = (selWal2?.label && !selWal2.label.match(/^W\d+$/)) ? ` ${selWal2.label}` : "";
+  const wBtns = [];
+  if (expanded) {
+    for (let i = 0; i < wallets.length; i += 3) {
+      wBtns.push(wallets.slice(i,i+3).map((w,idx) => {
+        const num = i+idx+1;
+        const l = (w.label&&!w.label.match(/^W\d+$/))?  ` ${w.label}`:"";
+        return { text: w.wallet_id===cw.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20), callback_data: `cw_setwallet_edit_${cw.id}_${w.wallet_id}` };
+      }));
+    }
+    wBtns.push([{ text: "▲ Close", callback_data: `cw_wallet_collapse_${cw.id}` }]);
+  }
+  const kb = { inline_keyboard: [
+    expanded ? [] : [{ text: `💼 W${wIdx2}${wLabel2} ✅ ▼`, callback_data: `cw_wallet_expand_${cw.id}` }],
+    ...wBtns,
+    [{ text: `💰 ${cw.sol_amount}SOL`, callback_data: `cw_edit_amount_${cw.id}` }, { text: `📉 ${cw.slippage||50}%`, callback_data: `cw_edit_slip_${cw.id}` }, { text: `⛽ ${cw.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${cw.id}` }],
+    [{ text: cw.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${cw.id}` }],
+    [{ text: `📊 Max: ${cw.max_sol||1} SOL`, callback_data: `cw_edit_max_${cw.id}` }, { text: `📊 Min: ${cw.min_sol||0} SOL`, callback_data: `cw_edit_min_${cw.id}` }],
+    [{ text: `% Copy: ${cw.copy_pct||100}%`, callback_data: `cw_edit_pct_${cw.id}` }, { text: `⏱ Delay: ${cw.delay_seconds||0}s`, callback_data: `cw_edit_delay_${cw.id}` }],
+    [{ text: cw.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${cw.id}` }, { text: cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${cw.id}` }],
+    [{ text: "✏️ Rename", callback_data: `cw_rename_${cw.id}` }, { text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${cw.id}` }],
+    [{ text: "🗑 Delete", callback_data: `copy_wallet_delete_${cw.id}` }, { text: "← Back", callback_data: "copy_wallet_menu" }],
+  ]};
+  return { msg, kb };
+}
+
 async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     // ── COPY TRADE ────────────────────────────────────────────
     if (data === "menu_copy_trade") {
@@ -26,19 +78,7 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     if (data === "copy_wallet_menu") {
       await ctx.answerCallbackQuery();
       const cw = db.getCopyWallets(userId);
-      const guide =
-        `📚 *Guide:*\n` +
-        `➕ Add — add a wallet to copy\n` +
-        `🟢 Active — tap to view details\n` +
-        `⏸ Pause — stops copying trades\n` +
-        `▶ Resume — starts copying again\n` +
-        `🗑 Delete — remove permanently\n` +
-        `⏸ Pause All — stop all at once\n\n`;
-      return safeEdit(
-        ctx,
-        `👛 *Copy Wallet*\n\n${guide}`,
-        buildCopyWalletListMenu(cw),
-      );
+      return safeEdit(ctx, "👛 *Copy Wallet*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Add whale wallets to copy\n▸ Bot auto-buys when they buy\n▸ Bot auto-sells when they sell\n▸ Set max/min amounts & filters\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━", buildCopyWalletListMenu(cw));
     }
 
     if (data === "copy_wallet_add") {
@@ -71,7 +111,25 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       return;
     }
 
-    if (data.startsWith("cw_setwallet_")) {
+    if (data.startsWith("cw_wallet_expand_")) {
+      const id = parseInt(data.replace("cw_wallet_expand_", ""));
+      await ctx.answerCallbackQuery();
+      const cw2 = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets2 = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(cw2, wallets2, true);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_wallet_collapse_")) {
+      const id = parseInt(data.replace("cw_wallet_collapse_", ""));
+      await ctx.answerCallbackQuery();
+      const cw2 = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets2 = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(cw2, wallets2, false);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_setwallet_") && !data.startsWith("cw_setwallet_edit_")) {
       const walletId = parseInt(data.replace("cw_setwallet_", ""));
       db.setSysConfig(`cw_pending_wallet_${userId}`, String(walletId));
       db.setSysConfig(`cw_wallet_expanded_${userId}`, "0");
@@ -139,6 +197,38 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       return showCwSetupScreen(ctx, userId);
     }
+    if (data === "cw_set_max") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
+      const m = await ctx.reply("📊 Max copy SOL (e.g. 2 = max 2 SOL per trade):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_max");
+      return;
+    }
+    if (data === "cw_set_min") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
+      const m = await ctx.reply("📊 Min trade SOL to copy (0=off, e.g. 0.1):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_min");
+      return;
+    }
+    if (data === "cw_set_pct") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
+      const m = await ctx.reply("% Copy (e.g. 10 = copy 10% of whale trade, 100 = full copy):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_pct");
+      return;
+    }
+    if (data === "cw_set_delay") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_setup_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
+      const m = await ctx.reply("⏱ Delay seconds (0=instant, e.g. 2):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_delay");
+      return;
+    }
     if (data === "cw_set_slippage") {
       await ctx.answerCallbackQuery();
       db.setSysConfig(
@@ -192,28 +282,7 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
         }));
       }
 
-      const cwMsg =
-        `👛 *${name}*\n\n` +
-        `🎯 Address:\n\`${cw.wallet_address}\`\n\n` +
-        `💼 Using: *W${walletIdx}*\n` +
-        `💰 Buy: *${cw.sol_amount} SOL* | 📊 Slip: *${cw.slippage||50}%* | ⛽ Gas: *${cw.gas_fee||0.005} SOL*\n` +
-        `🛡 MEV: *${cw.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
-        `🔄 Copy Sell: *${cw.copy_sell ? "ON ✅" : "OFF ❌"}* | 🤖 Auto Sell: *${cw.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
-        `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${cw.trades_executed || 0}*`;
-
-      const cwKeyboard = { inline_keyboard: [
-        ...walletBtns,
-        [{ text: `💰 ${cw.sol_amount}SOL`, callback_data: `cw_edit_amount_${id}` },
-         { text: `📊 ${cw.slippage||50}%`, callback_data: `cw_edit_slip_${id}` },
-         { text: `⛽ ${cw.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${id}` }],
-        [{ text: cw.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${id}` }],
-        [{ text: cw.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${id}` },
-         { text: cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${id}` }],
-        [{ text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` },
-         { text: "🗑 Delete", callback_data: `copy_wallet_delete_${id}` }],
-        [{ text: "← Back", callback_data: "copy_wallet_menu" }],
-      ]}
-
+      const { msg: cwMsg, kb: cwKeyboard } = buildCwScreen(cw, wallets);
       try {
         await ctx.editMessageText(cwMsg, { parse_mode: "Markdown", reply_markup: cwKeyboard });
         db.setSysConfig(`cw_view_msg_${userId}`, String(ctx.callbackQuery.message.message_id));
@@ -226,55 +295,22 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
 
     if (data.startsWith("copy_wallet_toggle_")) {
       const id = parseInt(data.replace("copy_wallet_toggle_", ""));
-      const cw = db
-        .getDb()
-        .prepare("SELECT active FROM copy_wallets WHERE id = ? AND user_id = ?")
-        .get(id, userId);
-      if (!cw) {
-        await ctx.answerCallbackQuery("Not found.");
-        return;
-      }
-      db.getDb()
-        .prepare(
-          "UPDATE copy_wallets SET active = ? WHERE id = ? AND user_id = ?",
-        )
-        .run(cw.active ? 0 : 1, id, userId);
+      const cw = db.getDb().prepare("SELECT active FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
+      db.getDb().prepare("UPDATE copy_wallets SET active = ? WHERE id = ? AND user_id = ?").run(cw.active ? 0 : 1, id, userId);
       await ctx.answerCallbackQuery(cw.active ? "⏸ Paused" : "▶ Resumed");
-      return safeEdit(
-        ctx,
-        `👛 *Copy Wallet*
-
-📚 *Guide:*
-➕ Add — add a wallet to copy
-🟢 Active — tap to view details
-⏸ Pause — stops copying trades
-▶ Resume — starts copying again
-🗑 Delete — remove permanently
-⏸ Pause All — stop all at once
-`,
-        buildCopyWalletListMenu(db.getCopyWallets(userId)),
-      );
+      const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(updated, wallets);
+      return safeEdit(ctx, msg, kb);
     }
     if (data.startsWith("copy_wallet_delete_")) {
       const id = parseInt(data.replace("copy_wallet_delete_", ""));
-      db.getDb()
-        .prepare("DELETE FROM copy_wallets WHERE id = ? AND user_id = ?")
-        .run(id, userId);
+      db.getDb().prepare("DELETE FROM copy_wallets WHERE id = ? AND user_id = ?").run(id, userId);
       await ctx.answerCallbackQuery("🗑 Deleted.");
-      return safeEdit(
-        ctx,
-        `👛 *Copy Wallet*
-
-📚 *Guide:*
-➕ Add — add a wallet to copy
-🟢 Active — tap to view details
-⏸ Pause — stops copying trades
-▶ Resume — starts copying again
-🗑 Delete — remove permanently
-⏸ Pause All — stop all at once
-`,
-        buildCopyWalletListMenu(db.getCopyWallets(userId)),
-      );
+      const cws = db.getCopyWallets(userId);
+      const cwGuide = "👛 *Copy Wallet*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Add whale wallets to copy\n▸ Bot auto-buys when they buy\n▸ Bot auto-sells when they sell\n▸ Set max/min amounts & filters\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, cwGuide, buildCopyWalletListMenu(cws));
     }
     if (data === "cw_setup_autosell") {
       await ctx.answerCallbackQuery();
@@ -441,7 +477,10 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const walletId = parseInt(parts[1]);
       db.getDb().prepare("UPDATE copy_wallets SET wallet_id = ? WHERE id = ? AND user_id = ?").run(walletId, cwId, userId);
       await ctx.answerCallbackQuery("✅ Wallet updated!");
-      ctx.callbackQuery.data = `copy_wallet_view_${cwId}`;
+      const updatedCw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, userId);
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(updatedCw, wallets, false);
+      return safeEdit(ctx, msg, kb);
     }
 
     if (data.startsWith("cw_edit_mev_")) {
@@ -450,40 +489,10 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
       db.getDb().prepare("UPDATE copy_wallets SET mev_protection = ? WHERE id = ? AND user_id = ?").run(cw.mev_protection ? 0 : 1, id, userId);
       await ctx.answerCallbackQuery(cw.mev_protection ? "🛡 MEV OFF" : "🛡 MEV ON ✅");
-      // Instant refresh
       const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
-      const wallets3 = db.getWallets(userId) || [];
-      const selWal3  = wallets3.find(w => w.wallet_id === updated.wallet_id);
-      const wIdx3    = selWal3 ? wallets3.indexOf(selWal3) + 1 : "—";
-      const wBtns3   = [];
-      for (let i = 0; i < wallets3.length; i += 3) {
-        wBtns3.push(wallets3.slice(i, i + 3).map((w, idx) => {
-          const num = i + idx + 1;
-          return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updated.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
-        }));
-      }
-      const msg3 =
-        `👛 *${updated.label || updated.wallet_address.slice(0,16)}*\n\n` +
-        `🎯 Address:\n\`${updated.wallet_address}\`\n\n` +
-        `💼 Using: *W${wIdx3}*\n` +
-        `💰 Buy: *${updated.sol_amount} SOL* | 📊 Slip: *${updated.slippage||50}%* | ⛽ Gas: *${updated.gas_fee||0.005} SOL*\n` +
-        `🛡 MEV: *${updated.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
-        `🔄 Copy Sell: *${updated.copy_sell ? "ON ✅" : "OFF ❌"}* | 🤖 Auto Sell: *${updated.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
-        `Status: *${updated.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${updated.trades_executed || 0}*`;
-      const kb3 = { inline_keyboard: [
-        ...wBtns3,
-        [{ text: `💰 ${updated.sol_amount}SOL`, callback_data: `cw_edit_amount_${id}` },
-         { text: `📊 ${updated.slippage||50}%`, callback_data: `cw_edit_slip_${id}` },
-         { text: `⛽ ${updated.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${id}` }],
-        [{ text: updated.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${id}` }],
-        [{ text: updated.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${id}` },
-         { text: updated.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${id}` }],
-        [{ text: updated.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` },
-         { text: "🗑 Delete", callback_data: `copy_wallet_delete_${id}` }],
-        [{ text: "← Back", callback_data: "copy_wallet_menu" }],
-      ]};
-      try { await ctx.editMessageText(msg3, { parse_mode: "Markdown", reply_markup: kb3 }); } catch {}
-      return;
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(updated, wallets);
+      return safeEdit(ctx, msg, kb);
     }
 
     if (data.startsWith("cw_edit_copysell_")) {
@@ -492,43 +501,45 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
       db.getDb().prepare("UPDATE copy_wallets SET copy_sell = ? WHERE id = ? AND user_id = ?").run(cw.copy_sell ? 0 : 1, id, userId);
       await ctx.answerCallbackQuery(cw.copy_sell ? "🔄 Copy Sell OFF" : "🔄 Copy Sell ON ✅");
-      // Refresh instantly
-        const updatedCS = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
-        const wallets5 = db.getWallets(userId) || [];
-        const wBtns5 = [];
-        for (let i = 0; i < wallets5.length; i += 3) {
-          wBtns5.push(wallets5.slice(i, i + 3).map((w, idx) => {
-            const num = i + idx + 1;
-            return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updatedCS.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${id}_${w.wallet_id}` };
-          }));
-        }
-        const selWal5 = wallets5.find(w => w.wallet_id === updatedCS.wallet_id);
-        const wIdx5 = selWal5 ? wallets5.indexOf(selWal5) + 1 : "—";
-        const msgCS =
-          `👛 *${updatedCS.label || updatedCS.wallet_address.slice(0,16)}*\n\n` +
-          `🎯 Address:\n\`${updatedCS.wallet_address}\`\n\n` +
-          `💼 Using: *W${wIdx5}*\n` +
-          `💰 Buy: *${updatedCS.sol_amount} SOL* | 📊 Slip: *${updatedCS.slippage||50}%* | ⛽ Gas: *${updatedCS.gas_fee||0.005} SOL*\n` +
-          `🛡 MEV: *${updatedCS.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
-          `🔄 Copy Sell: *${updatedCS.copy_sell ? "ON ✅" : "OFF ❌"}* | 🤖 Auto Sell: *${updatedCS.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
-          `Status: *${updatedCS.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${updatedCS.trades_executed || 0}*`;
-        const kbCS = { inline_keyboard: [
-          ...wBtns5,
-          [{ text: `💰 ${updatedCS.sol_amount}SOL`, callback_data: `cw_edit_amount_${id}` },
-           { text: `📊 ${updatedCS.slippage||50}%`, callback_data: `cw_edit_slip_${id}` },
-           { text: `⛽ ${updatedCS.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${id}` }],
-          [{ text: updatedCS.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${id}` }],
-          [{ text: updatedCS.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${id}` },
-           { text: updatedCS.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${id}` }],
-          [{ text: updatedCS.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${id}` },
-           { text: "🗑 Delete", callback_data: `copy_wallet_delete_${id}` }],
-          [{ text: "← Back", callback_data: "copy_wallet_menu" }],
-        ]};
-        try { await ctx.editMessageText(msgCS, { parse_mode: "Markdown", reply_markup: kbCS }); } catch {}
-        return;
-      }
+      const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(updated, wallets);
+      return safeEdit(ctx, msg, kb);
+    }
 
-      if (data.startsWith("cw_edit_amount_")) {
+      if (data.startsWith("cw_edit_max_")) {
+      const id = parseInt(data.replace("cw_edit_max_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("📊 Max copy SOL (e.g. 2 = max 2 SOL per trade):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cw_edit_set_max_${id}`);
+      return;
+    }
+    if (data.startsWith("cw_edit_min_")) {
+      const id = parseInt(data.replace("cw_edit_min_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("📊 Min trade SOL to copy (0=off, e.g. 0.1):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cw_edit_set_min_${id}`);
+      return;
+    }
+    if (data.startsWith("cw_edit_pct_")) {
+      const id = parseInt(data.replace("cw_edit_pct_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("% Copy amount (e.g. 10 = copy 10% of whale trade):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cw_edit_set_pct_${id}`);
+      return;
+    }
+    if (data.startsWith("cw_edit_delay_")) {
+      const id = parseInt(data.replace("cw_edit_delay_", ""));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply("⏱ Delay seconds (0=instant, e.g. 2):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cw_edit_set_delay_${id}`);
+      return;
+    }
+    if (data.startsWith("cw_edit_amount_")) {
       const id = parseInt(data.replace("cw_edit_amount_", ""));
       await ctx.answerCallbackQuery();
       const msg = await ctx.reply("💰 Enter buy amount in SOL (e.g. 0.1):")
@@ -556,33 +567,24 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     }
     if (data === "copy_wallet_pause_all") {
       const cws = db.getCopyWallets(userId);
-      const anyActive = cws.some((w) => w.active);
-      if (anyActive) {
-        db.getDb()
-          .prepare("UPDATE copy_wallets SET active = 0 WHERE user_id = ?")
-          .run(userId);
-        await ctx.answerCallbackQuery("⏸ All paused.");
-      } else {
-        db.getDb()
-          .prepare("UPDATE copy_wallets SET active = 1 WHERE user_id = ?")
-          .run(userId);
-        await ctx.answerCallbackQuery("▶ All resumed.");
-      }
-      return safeEdit(
-        ctx,
-        `👛 *Copy Wallet*
-
-📚 *Guide:*
-➕ Add — add a wallet to copy
-🟢 Active — tap to view details
-⏸ Pause — stops copying trades
-▶ Resume — starts copying again
-🗑 Delete — remove permanently
-⏸ Pause All — stop all at once
-`,
-        buildCopyWalletListMenu(db.getCopyWallets(userId)),
-      );
+      const anyActive = cws.some(w => w.active);
+      db.getDb().prepare(`UPDATE copy_wallets SET active = ? WHERE user_id = ?`).run(anyActive ? 0 : 1, userId);
+      await ctx.answerCallbackQuery(anyActive ? "⏸ All paused." : "▶ All resumed.");
+      const cwGuide = "👛 *Copy Wallet*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Add whale wallets to copy\n▸ Bot auto-buys when they buy\n▸ Bot auto-sells when they sell\n▸ Set max/min amounts & filters\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━";
+      return safeEdit(ctx, cwGuide, buildCopyWalletListMenu(db.getCopyWallets(userId)));
     }
+    if (data.startsWith("cw_rename_")) {
+      const id = parseInt(data.replace("cw_rename_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`cw_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("✏️ Enter new name for this wallet:");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cw_set_label_${id}`);
+      return true;
+    }
+
+    
+
     if (data === "cw_confirm_add") {
       const addr = db.getSysConfig(`cw_pending_addr_${userId}`);
       const name = db.getSysConfig(`cw_pending_name_${userId}`) || null;
@@ -597,25 +599,21 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const gas = parseFloat(
         db.getSysConfig(`cw_pending_gas_${userId}`) || "0.005",
       );
+      const maxSol = parseFloat(db.getSysConfig(`cw_pending_max_${userId}`) || "1");
+      const minSol = parseFloat(db.getSysConfig(`cw_pending_min_${userId}`) || "0");
+      const copyPct = parseFloat(db.getSysConfig(`cw_pending_pct_${userId}`) || "100");
+      const delaySec = parseInt(db.getSysConfig(`cw_pending_delay_${userId}`) || "0");
       if (!addr) {
         await ctx.answerCallbackQuery("❌ No address set.");
         return;
       }
       db.getDb()
         .prepare(
-          `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, active, wallet_id, slippage, gas_fee, copy_sell)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+          `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell, min_sol, copy_pct, delay_seconds)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          userId,
-          addr,
-          name,
-          sol,
-          copySell ? 1 : 0,
-          walletId || null,
-          slippage,
-          gas,
-          copySell ? 1 : 0,
+          userId, addr, name, sol, copySell ? 1 : 0, maxSol, walletId || null, slippage, gas, copySell ? 1 : 0, minSol, copyPct, delaySec
         );
 
       // Clear pending
@@ -1097,4 +1095,4 @@ ${getGuide("copy_channel")}`;
     return false;
 }
 
-module.exports = { handleCopyTradeCallbacks };
+module.exports = { handleCopyTradeCallbacks, buildCwScreen };

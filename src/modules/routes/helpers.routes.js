@@ -206,13 +206,14 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
   const addr = db.getSysConfig(`cw_pending_addr_${userId}`) || "";
   const name = db.getSysConfig(`cw_pending_name_${userId}`) || "";
   const freshUser = db.getUser(userId);
-  const walletId =
-    parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`)) ||
-    freshUser.active_wallet_id;
+  const walletId = parseInt(db.getSysConfig(`cw_pending_wallet_${userId}`)) || freshUser.active_wallet_id;
   const sol = db.getSysConfig(`cw_pending_sol_${userId}`) || "0.1";
-  const copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) !== "0";
   const slippage = db.getSysConfig(`cw_pending_slippage_${userId}`) || "50";
   const gas = db.getSysConfig(`cw_pending_gas_${userId}`) || "0.005";
+  const mev = db.getSysConfig(`cw_pending_mev_${userId}`) !== "0";
+  let copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) !== "0";
+  let autoSell = db.getSysConfig(`cw_pending_autosell_${userId}`) === "1";
+  if (autoSell && copySell) { copySell = false; db.setSysConfig(`cw_pending_copysell_${userId}`, "0"); }
   const wallets = db.getWallets(userId) || [];
   const selWal = wallets.find((w) => w.wallet_id === walletId);
   const walletIdx = selWal ? wallets.indexOf(selWal) + 1 : 1;
@@ -234,27 +235,35 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
 
   const msg =
     `👛 *Add Copy Wallet*\n\n` +
-    `📚 *Guide:*\n` +
-    `🎯 Paste wallet address to follow\n` +
-    `📝 Give it a name (optional)\n` +
-    `💼 Select your wallet to use\n` +
-    `💰 Set buy amount per trade\n` +
-    `🔄 Copy Sell — auto-sell when they sell\n` +
-    `📊 Slippage — applies to buy & sell\n` +
-    `⛽ Gas Fee — applies to buy & sell\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🎯 *Follow:* ${addr ? `\`${addr}\`` : "❗ Not set"}\n` +
-    `📝 *Name:* ${stripMd(name) || "Not set"}\n` +
-    `💼 *Your Wallet:* W${walletIdx}\n` +
-    `💰 *Buy Amount:* ${sol} SOL\n` +
-    `🔄 *Copy Sell:* ${copySell ? "ON ✅" : "OFF ❌"}\n` +
-    `📊 *Slippage:* ${slippage}%\n` +
-    `⛽ *Gas Fee:* ${gas} SOL\n` +
+    `▸ Paste whale wallet address to follow\n` +
+    `▸ Bot auto-buys when they buy\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🔄 *Copy Sell* — bot sells when whale sells\n` +
+    `🤖 *Auto Sell* — uses your TP/SL template\n` +
+    `⚠️ Only one can be ON at a time\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Max* — max SOL per copied trade\n` +
+    `📊 *Min* — skip trades below X SOL\n` +
+    `*% Copy* — copy X% of whale amount\n` +
+    `⏱ *Delay* — wait X sec before copying\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `_Tap any button below to change:_`;
+    `📋 *Current Settings:*\n` +
+    `🎯 Follow: ${addr ? `\`${addr}\`` : "❗ Not set"}\n` +
+    `📝 Name: ${stripMd(name) || "Not set"}\n` +
+    `💼 Wallet: W${walletIdx} ✅\n` +
+    `💰 Amount: ${sol} SOL\n` +
+    `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}\n` +
+    `📉 Slippage: ${slippage}%\n` +
+    `⛽ Gas: ${gas} SOL\n` +
+    `🛡 MEV: ${mev ? "ON ✅" : "OFF ❌"}\n` +
+    `🤖 Auto Sell: ${autoSell ? "ON ✅" : "OFF ❌"}\n` +
+    `📊 Max: ${db.getSysConfig(`cw_pending_max_${userId}`) || 1} SOL | Min: ${db.getSysConfig(`cw_pending_min_${userId}`) || 0} SOL\n` +
+    `% Copy: ${db.getSysConfig(`cw_pending_pct_${userId}`) || 100}% | ⏱ Delay: ${db.getSysConfig(`cw_pending_delay_${userId}`) || 0}s\n` +
+    `━━━━━━━━━━━━━━━━━━━`;
 
-  const mev = db.getSysConfig(`cw_pending_mev_${userId}`) !== "0";
-  const autoSell = db.getSysConfig(`cw_pending_autosell_${userId}`) === "1";
+  // Mutual exclusion — if auto sell ON, copy sell must be OFF
+  if (autoSell && copySell) { copySell = false; db.setSysConfig(`cw_pending_copysell_${userId}`, "0"); }
 
   const keyboard = {
     inline_keyboard: [
@@ -270,6 +279,8 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
       [{ text: mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: "cw_toggle_mev" }],
       [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_toggle_copysell" },
        { text: `🤖 Auto Sell: ${autoSell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_setup_autosell" }],
+      [{ text: `📊 Max: ${db.getSysConfig(`cw_pending_max_${userId}`) || 1} SOL`, callback_data: "cw_set_max" }, { text: `📊 Min: ${db.getSysConfig(`cw_pending_min_${userId}`) || 0} SOL`, callback_data: "cw_set_min" }],
+      [{ text: `% Copy: ${db.getSysConfig(`cw_pending_pct_${userId}`) || 100}%`, callback_data: "cw_set_pct" }, { text: `⏱ Delay: ${db.getSysConfig(`cw_pending_delay_${userId}`) || 0}s`, callback_data: "cw_set_delay" }],
       [{ text: "✅ Add Copy Wallet", callback_data: "cw_confirm_add" }],
       [{ text: "← Back", callback_data: "copy_wallet_menu" }],
     ],

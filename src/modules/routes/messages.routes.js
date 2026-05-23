@@ -1,4 +1,6 @@
 const db = require("../../../database");
+let _buildCwScreen = null;
+function getBuildCwScreen() { if (!_buildCwScreen) { const m = require("./callbacks.copytrade"); _buildCwScreen = m.buildCwScreen; } return _buildCwScreen; }
 const { buildLaunchMsg, showCwSetupScreen, safeReply, safeEdit, deleteUserMsg, buildReferralScreen, refreshMsnipeScreen, buildTokenOrdersScreen, showLimitOrdersScreen } = require("./helpers.routes");
 const { handleTextInput } = require("../settings/index");
 const { handleAdminTextInput, isAdmin } = require("../admin");
@@ -98,11 +100,25 @@ function setupMessages(bot) {
         "ab_set_gas",
         "ab_set_max",
         "ast_set_name","ast_set_sl","ast_set_sl_pct","ast_set_tp","ast_set_tp_pct",
-        "cw_edit_set_amount_","cw_edit_set_slip_","cw_edit_set_gas_",
+        "cw_edit_set_amount_","cw_edit_set_slip_","cw_edit_set_gas_","cw_edit_set_max_","cw_edit_set_min_","cw_edit_set_pct_","cw_edit_set_delay_",
         "cch_autosell_new_","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
       "alert_add_ca", "alert_add_target", "alert_add_price_val", "alert_add_mcap_val", "tracker_add_address",
       "buy_custom_amount", "set_daily_loss", "set_daily_trades", "set_max_pos",
       ];
+    if (pending === "cw_max" || pending === "cw_min" || pending === "cw_pct" || pending === "cw_delay") {
+      const val = pending === "cw_pct" ? Math.min(100,Math.max(1,parseFloat(text))) : Math.max(0,parseFloat(text));
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (!isNaN(val)) {
+        if (pending === "cw_max") db.setSysConfig(`cw_pending_max_${userId}`, String(val));
+        if (pending === "cw_min") db.setSysConfig(`cw_pending_min_${userId}`, String(val));
+        if (pending === "cw_pct") db.setSysConfig(`cw_pending_pct_${userId}`, String(val));
+        if (pending === "cw_delay") db.setSysConfig(`cw_pending_delay_${userId}`, String(val));
+      }
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
+    }
+
       if (settingsPending.includes(pending)) {
       const freshUser = db.getUser(userId);
       return handleTextInput(ctx, freshUser, pending);
@@ -487,65 +503,23 @@ function setupMessages(bot) {
       );
       return;
     }
-      if (pending.startsWith("cw_edit_set_amount_") || pending.startsWith("cw_edit_set_slip_") || pending.startsWith("cw_edit_set_gas_")) {
+      if (pending.startsWith("cw_edit_set_amount_") || pending.startsWith("cw_edit_set_slip_") || pending.startsWith("cw_edit_set_gas_") || pending.startsWith("cw_edit_set_max_") || pending.startsWith("cw_edit_set_min_") || pending.startsWith("cw_edit_set_pct_") || pending.startsWith("cw_edit_set_delay_")) {
+        const cwId2 = parseInt(pending.split("_").pop());
         await deleteMsg(ctx, promptId);
         try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
         db.setSysConfig(`pending_${userId}`, "");
         const val = parseFloat(text);
         if (isNaN(val) || val <= 0) { await ctx.reply("❌ Invalid value."); return; }
-        const parts2 = pending.split("_");
-        const cwId2 = parseInt(parts2[parts2.length - 1]);
         if (pending.startsWith("cw_edit_set_amount_")) db.getDb().prepare("UPDATE copy_wallets SET sol_amount = ? WHERE id = ? AND user_id = ?").run(val, cwId2, userId);
         if (pending.startsWith("cw_edit_set_slip_")) db.getDb().prepare("UPDATE copy_wallets SET slippage = ? WHERE id = ? AND user_id = ?").run(val, cwId2, userId);
         if (pending.startsWith("cw_edit_set_gas_")) db.getDb().prepare("UPDATE copy_wallets SET gas_fee = ? WHERE id = ? AND user_id = ?").run(val, cwId2, userId);
-        // Instant refresh wallet view
-        const updated2 = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId2, userId);
-        const wallets4 = db.getWallets(userId) || [];
-        const selWal4  = wallets4.find(w => w.wallet_id === updated2.wallet_id);
-        const wIdx4    = selWal4 ? wallets4.indexOf(selWal4) + 1 : "—";
-        const wBtns4   = [];
-        for (let i = 0; i < wallets4.length; i += 4) {
-          wBtns4.push(wallets4.slice(i, i + 4).map((w, idx) => {
-            const num = i + idx + 1;
-            return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return w.wallet_id===updated2.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `cw_setwallet_edit_${cwId2}_${w.wallet_id}` };
-          }));
-        }
-        const msg4 =
-          `👛 *${updated2.label || updated2.wallet_address.slice(0,16)}*\n\n` +
-          `🎯 Address:\n\`${updated2.wallet_address}\`\n\n` +
-          `💼 Using: *W${wIdx4}*\n` +
-          `💰 Buy: *${updated2.sol_amount} SOL* | 📊 Slip: *${updated2.slippage||50}%* | ⛽ Gas: *${updated2.gas_fee||0.005} SOL*\n` +
-          `🛡 MEV: *${updated2.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
-          `🔄 Copy Sell: *${updated2.copy_sell ? "ON ✅" : "OFF ❌"}* | 🤖 Auto Sell: *${updated2.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
-          `Status: *${updated2.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${updated2.trades_executed || 0}*`;
-        const kb4 = { inline_keyboard: [
-          ...wBtns4,
-          [{ text: `💰 ${updated2.sol_amount}SOL`, callback_data: `cw_edit_amount_${cwId2}` },
-           { text: `📊 ${updated2.slippage||50}%`, callback_data: `cw_edit_slip_${cwId2}` },
-           { text: `⛽ ${updated2.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${cwId2}` }],
-          [{ text: updated2.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${cwId2}` }],
-          [{ text: updated2.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${cwId2}` },
-           { text: updated2.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${cwId2}` }],
-          [{ text: updated2.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${cwId2}` },
-           { text: "🗑 Delete", callback_data: `copy_wallet_delete_${cwId2}` }],
-          [{ text: "← Back", callback_data: "copy_wallet_menu" }],
-        ]};
-        const viewMsgId = parseInt(db.getSysConfig(`cw_view_msg_${userId}`) || "0");
-        try {
-          if (viewMsgId) {
-            await ctx.api.editMessageText(ctx.chat.id, viewMsgId, msg4, { parse_mode: "Markdown", reply_markup: kb4 });
-          } else {
-            const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: kb4 });
-            db.setSysConfig(`cw_view_msg_${userId}`, String(s.message_id));
-          }
-        } catch (e) {
-          if (e?.description?.includes("not modified")) return;
-          const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: kb4 });
-          db.setSysConfig(`cw_view_msg_${userId}`, String(s.message_id));
-        }
+        if (pending.startsWith("cw_edit_set_max_")) db.getDb().prepare("UPDATE copy_wallets SET max_sol = ? WHERE id = ? AND user_id = ?").run(val, cwId2, userId);
+        if (pending.startsWith("cw_edit_set_min_")) db.getDb().prepare("UPDATE copy_wallets SET min_sol = ? WHERE id = ? AND user_id = ?").run(val, cwId2, userId);
+        if (pending.startsWith("cw_edit_set_pct_")) db.getDb().prepare("UPDATE copy_wallets SET copy_pct = ? WHERE id = ? AND user_id = ?").run(Math.min(100,Math.max(1,val)), cwId2, userId);
+        if (pending.startsWith("cw_edit_set_delay_")) db.getDb().prepare("UPDATE copy_wallets SET delay_seconds = ? WHERE id = ? AND user_id = ?").run(Math.max(0,val), cwId2, userId);
+        await refreshCwScreen(ctx, userId, cwId2);
         return;
       }
-      
     if (pending === "cw_follow_address") {
       await deleteMsg(ctx, promptId);
       try {
@@ -612,6 +586,38 @@ function setupMessages(bot) {
         return;
       }
       db.setSysConfig(`cw_pending_gas_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
+    }
+    if (pending === "cw_max") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (!isNaN(val) && val >= 0) db.setSysConfig(`cw_pending_max_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
+    }
+    if (pending === "cw_min") {
+      const val = parseFloat(text);
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (!isNaN(val) && val >= 0) db.setSysConfig(`cw_pending_min_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
+    }
+    if (pending === "cw_pct") {
+      const val = Math.min(100, Math.max(1, parseFloat(text)));
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (!isNaN(val)) db.setSysConfig(`cw_pending_pct_${userId}`, String(val));
+      return showCwSetupScreen(ctx, userId, ctx.chat.id);
+    }
+    if (pending === "cw_delay") {
+      const val = Math.max(0, parseFloat(text));
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (!isNaN(val)) db.setSysConfig(`cw_pending_delay_${userId}`, String(val));
       return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
     if (pending === "copy_wallet_address") {
@@ -1132,3 +1138,19 @@ function setupMessages(bot) {
 
 } 
 module.exports = { setupMessages };
+
+async function refreshCwScreen(ctx, userId, cwId) {
+  const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, userId);
+  if (!cw) return;
+  const wallets = db.getWallets(userId) || [];
+  const { buildCwScreen } = require("./callbacks.copytrade");
+  const { msg, kb } = buildCwScreen(cw, wallets);
+  const viewMsgId = parseInt(db.getSysConfig(`cw_view_msg_${userId}`) || "0");
+  const chatId = ctx.chat?.id;
+  if (viewMsgId && chatId) {
+    try { await ctx.api.editMessageText(chatId, viewMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {}
+  }
+  const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+  db.setSysConfig(`cw_view_msg_${userId}`, String(sent.message_id));
+}
+

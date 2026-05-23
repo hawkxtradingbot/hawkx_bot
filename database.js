@@ -63,6 +63,14 @@ function runMigrations(d) {
       "ALTER TABLE copy_channels ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE copy_channels ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE sniper_configs ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE copy_wallets ADD COLUMN min_sol REAL DEFAULT 0",
+      "ALTER TABLE copy_wallets ADD COLUMN copy_pct REAL DEFAULT 100",
+      "ALTER TABLE copy_wallets ADD COLUMN delay_seconds INTEGER DEFAULT 0",
+      "ALTER TABLE copy_wallets ADD COLUMN slippage REAL DEFAULT 50",
+      "ALTER TABLE copy_wallets ADD COLUMN gas_fee REAL DEFAULT 0.005",
+      "ALTER TABLE copy_wallets ADD COLUMN mev_protection INTEGER DEFAULT 1",
+      "ALTER TABLE copy_wallets ADD COLUMN copy_sell INTEGER DEFAULT 1",
+      "ALTER TABLE copy_wallets ADD COLUMN trades_executed INTEGER DEFAULT 0",
       "ALTER TABLE snipes ADD COLUMN label TEXT DEFAULT NULL",
       "ALTER TABLE snipes ADD COLUMN gas REAL DEFAULT 0.005",
       "ALTER TABLE snipes ADD COLUMN mev INTEGER DEFAULT 0",
@@ -606,16 +614,16 @@ function getCopyWallets(userId) {
   ).all(userId);
 }
 
-function addCopyWallet(userId, address, label, solAmount, mirrorSells, maxSol, walletId = null, slippage = 50, gasFee = 0.005, copySell = 1) {
+function addCopyWallet(userId, address, label, solAmount, mirrorSells, maxSol, walletId = null, slippage = 50, gasFee = 0.005, copySell = 1, minSol = 0, copyPct = 100, delaySec = 0) {
   const count = getCopyWallets(userId).length;
   if (count >= 5) return { error: "Max 5 copy wallets reached." };
   try {
     const existing = getDb().prepare("SELECT id FROM copy_wallets WHERE user_id = ? AND wallet_address = ?").get(userId, address);
     if (existing) return { error: "Wallet already added." };
     getDb().prepare(
-      `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`
-    ).run(userId, address, label || address.slice(0,8)+"...", solAmount || 0.1, mirrorSells ? 1 : 0, maxSol || 1, walletId, slippage, gasFee, copySell);
+      `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell, min_sol, copy_pct, delay_seconds)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(userId, address, label || address.slice(0,8)+"...", solAmount || 0.1, mirrorSells ? 1 : 0, maxSol || 1, walletId, slippage, gasFee, copySell, minSol, copyPct, delaySec);
     return { success: true };
   } catch (e) {
     return { error: e.message };
