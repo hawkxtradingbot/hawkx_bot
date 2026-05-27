@@ -98,15 +98,15 @@ HawkX is a **non-custodial Solana trading bot** built natively inside Telegram. 
 
 Trade more volume → rank up → pay less fees.
 
-| Rank | Volume Required | Fee |
-|------|----------------|-----|
-| 🥉 Scout | 0 SOL | 1.00% |
-| 🥈 Tracker | 10 SOL | 0.90% |
-| 🥇 Hunter | 50 SOL | 0.80% |
-| 🏆 Predator | 150 SOL | 0.70% |
-| 💎 Apex | 500 SOL | 0.60% |
-| 🦅 Hawk | 1,500 SOL | 0.55% |
-| 👑 Hawk Elite | 5,000 SOL | 0.50% |
+| Rank | Volume Required | Fee | Wallets |
+|------|----------------|-----|---------|
+| 🥉 Degen | 0 SOL | 1.00% | 5 |
+| 🥈 Flipper | 10 SOL | 0.85% | 5 |
+| 🥇 Trader | 50 SOL | 0.80% | 5 |
+| 🏆 Sniper | 200 SOL | 0.75% | 15 |
+| 💎 Whale | 500 SOL | 0.70% | 15 |
+| 🦅 Shark | 1,000 SOL | 0.60% | 15 |
+| 👑 Hawk Elite | 2,000 SOL | 0.50% | 15 |
 
 ---
 
