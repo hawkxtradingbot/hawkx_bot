@@ -142,7 +142,7 @@ bot.start({
     console.log("");
     console.log("─────────────────────────────────");
     console.log("🦅 HawkX V11 Devnet Ready!");
-    console.log("Always Watching. Always First.");
+    console.log("Always One Step Ahead.");
     console.log("─────────────────────────────────");
     console.log("");
     console.log("TEST COMMANDS:");

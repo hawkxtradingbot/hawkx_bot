@@ -726,6 +726,22 @@ function setupMessages(bot) {
       return;
     }
 
+    if (pending.startsWith("cch_set_label_")) {
+      const chId = parseInt(pending.replace("cch_set_label_", ""));
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const newLabel = text.trim().slice(0,30);
+      db.updateCopyChannel(userId, chId, { channel_name: newLabel });
+      const ch = db.getCopyChannel(chId, userId);
+      const viewMsgId = parseInt(db.getSysConfig(`ch_view_msg_${userId}`) || "0");
+      const chMsg = `📡 *${newLabel}*\n\nStatus: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\nSignals: *${ch.signals_caught||0}* | Trades: *${ch.trades_executed||0}*\n\n💰 Buy: *${ch.buy_amount||0.1} SOL*\n📊 Slip: *${ch.slippage||50}%*\n⛽ Gas: *${ch.tip||0.005} SOL*\n🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*`;
+      const { buildCopyChannelSettingsMenu } = require("../keyboards");
+      if (viewMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, viewMsgId, chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) }); return; } catch {} }
+      await ctx.reply(chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) });
+      return;
+    }
+
     if (pending === "copy_channel_id") {
       await deleteMsg(ctx, promptId);
       try {

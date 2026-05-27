@@ -737,6 +737,16 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
 
 
 
+    if (data.startsWith("cch_rename_")) {
+      const id = parseInt(data.replace("cch_rename_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("✏️ Enter new name for this channel:");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_label_${id}`);
+      return true;
+    }
+
     if (data.startsWith("copy_channel_view_")) {
       const id = parseInt(data.replace("copy_channel_view_", ""));
       const ch = db.getCopyChannel(id, userId);
