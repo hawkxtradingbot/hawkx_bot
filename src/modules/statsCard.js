@@ -159,7 +159,7 @@ async function generateTradeCard(opts) {
   <text x="58" y="440" font-family="Arial" font-size="10" fill="#E8720C" letter-spacing="2">RANK BENEFIT</text>
   <text x="58" y="457" font-family="Arial Black" font-size="15" fill="${rankColor}">${rankName.toUpperCase()} RANK  |  ${feeRate}% FEE  |  TRADE:$${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)} DAY:$${hideAmounts ? "***" : dailyFeeSaved < 0.01 ? dailyFeeSaved.toFixed(4) : dailyFeeSaved.toFixed(2)} WK:$${hideAmounts ? "***" : weeklyFeeSaved < 0.01 ? weeklyFeeSaved.toFixed(4) : weeklyFeeSaved.toFixed(2)}</text>
   <line x1="40" y1="472" x2="${W-40}" y2="472" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always One Step Ahead.</text>
+  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
   <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 
@@ -253,7 +253,7 @@ async function generateStatsCard(opts) {
   <rect x="40" y="430" width="${Math.max(4,(W-80)*(rankProgress/100))}" height="10" rx="5" fill="${periodAccent}"/>
   <text x="40" y="456" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.4)">${rankProgress.toFixed(0)}% · ${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} / ${nextRankSol || "MAX"} SOL</text>
   <line x1="40" y1="470" x2="${W-40}" y2="470" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always One Step Ahead.</text>
+  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
   <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 
@@ -327,7 +327,7 @@ async function generateRankCard(opts) {
   <rect x="40" y="385" width="${Math.max(8,(W-80)*(rankProgress/100))}" height="16" rx="8" fill="url(#rankGrad)" opacity="0.9"/>
   <text x="40" y="418" font-family="Arial" font-size="13" fill="${rankColor}">${rankProgress.toFixed(0)}% · ${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} / ${nextRankSol || "MAX"} SOL needed</text>
   <line x1="40" y1="438" x2="${W-40}" y2="438" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="468" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always One Step Ahead.</text>
+  <text x="40" y="468" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
   <text x="${W-40}" y="468" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 

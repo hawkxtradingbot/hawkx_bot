@@ -143,7 +143,7 @@ async function generatePnlCard(opts) {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `_"${expr}"_\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `_Always One Step Ahead. 🦅_`;
+    `_Always Watching. Always First. 🦅_`;
 
   return { type: "text", text: card };
 }
@@ -161,7 +161,7 @@ async function generateRankCard(opts) {
   const savings = ((1.0 - fee) * 100).toFixed(0);
   const tags    = ["","Every legend starts here.","You found the rhythm.",
     "Strategy over luck.","Precision is your edge.","The market feels you.",
-    "Always hunting. Always winning.","Always One Step Ahead."];
+    "Always hunting. Always winning.","Always Watching. Always First."];
   const topPct  = ["","","","","Top 25%","Top 15%","Top 5%","Top 1% 👑"][rankNum] || "";
 
   const barLen  = 20;
@@ -196,7 +196,7 @@ async function generateRankCard(opts) {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `_"${tags[rankNum]}"_\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `_Always One Step Ahead. 🦅_`;
+    `_Always Watching. Always First. 🦅_`;
 
   return { type: "text", text: card };
 }
