@@ -313,9 +313,7 @@ function buildCopyTradeMenu() {
     else {
       copyWallets.forEach((cw) => {
         const name = cw.label || cw.wallet_address.slice(0,12) + "...";
-        kb.text(`${cw.active ? "🟢" : "⏸"} ${name}`, `copy_wallet_view_${cw.id}`)
-          .text("🗑", `copy_wallet_delete_${cw.id}`)
-          .row();
+        kb.text(`${cw.active ? "🟢" : "⏸"} ${name}`, `copy_wallet_view_${cw.id}`).row();
       });
     }
   if (count < 5) kb.text(`➕ Add Copy Wallet (${count}/5)`, "copy_wallet_add").row();
@@ -335,9 +333,7 @@ function buildCopyChannelListMenu(copyChannels) {
     copyChannels.forEach((cc) => {
       const name   = cc.channel_name || cc.channel_id;
       const status = cc.status === "active" ? "🟢" : "⏸";
-      kb.text(`${status} ${name}`, `copy_channel_view_${cc.id}`)
-        .text("🗑", `copy_channel_delete_${cc.id}`)
-        .row();
+      kb.text(`${status} ${name}`, `copy_channel_view_${cc.id}`).row();
     });
   }
   kb.text("➕ Add Copy Channel", "copy_channel_add").row();
@@ -347,7 +343,7 @@ function buildCopyChannelListMenu(copyChannels) {
   return kb;
 }
 
-function buildCopyChannelSettingsMenu(ch) {
+function buildCopyChannelSettingsMenu(ch, expanded = false) {
   const kb = new InlineKeyboard();
   kb.text(`💰 ${ch.buy_amount||0.1}SOL`, `cch_buy_${ch.id}`)
     .text(`📊 ${ch.slippage||50}%`, `cch_slip_${ch.id}`)
@@ -356,10 +352,23 @@ function buildCopyChannelSettingsMenu(ch) {
   kb.text(ch.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", `cch_mev_${ch.id}`)
     .text(ch.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cch_autosell_${ch.id}`)
     .row();
-  kb.text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_pause_${ch.id}`)
-    .text("🗑 Delete", `copy_channel_delete_${ch.id}`)
+  if (expanded) {
+    kb.text("🔍 Filters ▲", `cch_filters_collapse_${ch.id}`).row();
+    kb.text(`💧 Min Liq: ${ch.min_liquidity ? ch.min_liquidity + " SOL" : "OFF"}`, `cch_minliq_${ch.id}`)
+      .text(`📊 Max MCap: ${ch.max_mcap ? (ch.max_mcap/1000) + "K" : "OFF"}`, `cch_maxmcap_${ch.id}`)
+      .row();
+    kb.text(`📉 Min MCap: ${ch.min_mcap ? (ch.min_mcap/1000) + "K" : "OFF"}`, `cch_minmcap_${ch.id}`)
+      .text(`⏰ Min Age: ${ch.min_token_age ? ch.min_token_age + "m" : "OFF"}`, `cch_minage_${ch.id}`)
+      .row();
+    kb.text("🚫 Blacklist Words", `cch_blacklist_${ch.id}`).row();
+  } else {
+    kb.text("🔍 Filters ▼", `cch_filters_expand_${ch.id}`).row();
+  }
+  kb.text("✏️ Rename", `cch_rename_${ch.id}`)
+    .text(ch.status === "active" ? "⏸ Pause Channel" : "▶ Resume Channel", `copy_channel_toggle_${ch.id}`)
     .row();
-  kb.text("← Back", "copy_channel_menu").row();
+  kb.text("← Back", "copy_channel_menu")
+    .text("🗑 Delete", `copy_channel_delete_${ch.id}`).row();
   return kb;
 }
 

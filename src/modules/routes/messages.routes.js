@@ -1,11 +1,11 @@
 const db = require("../../../database");
 let _buildCwScreen = null;
 function getBuildCwScreen() { if (!_buildCwScreen) { const m = require("./callbacks.copytrade"); _buildCwScreen = m.buildCwScreen; } return _buildCwScreen; }
-const { buildLaunchMsg, showCwSetupScreen, safeReply, safeEdit, deleteUserMsg, buildReferralScreen, refreshMsnipeScreen, buildTokenOrdersScreen, showLimitOrdersScreen } = require("./helpers.routes");
+const { buildLaunchMsg, showCwSetupScreen, safeReply, safeEdit, deleteUserMsg, buildReferralScreen, refreshMsnipeScreen, buildTokenOrdersScreen, showLimitOrdersScreen, stripMd } = require("./helpers.routes");
 const { handleTextInput } = require("../settings/index");
 const { handleAdminTextInput, isAdmin } = require("../admin");
 const { isSolanaAddress } = require("../walletVault");
-const { buildMainMenu, buildSniperMainMenu, buildSniperConfigMenu, buildRealtimeSnipeMenu, buildMigrationSniperMenu, getGuide } = require("../keyboards");
+const { buildMainMenu, buildSniperMainMenu, buildSniperConfigMenu, buildRealtimeSnipeMenu, buildMigrationSniperMenu, getGuide, buildCopyChannelSettingsMenu } = require("../keyboards");
 const { getTokenInfo, formatNum, formatPrice } = require("../tokenInfo");
 const { handleAutoBuy, executeRealtimeSnipe, mockBuy, mockSell } = require("../executor");
 
@@ -14,6 +14,12 @@ async function deleteMsg(ctx, msgId) {
   try {
     await ctx.api.deleteMessage(ctx.chat.id, msgId);
   } catch {}
+}
+
+
+function buildChDetailMsg(ch) {
+  const nm = (ch.channel_name || ch.channel_id).replace(/([_*\[\]()~`>#+=|{}.!-])/g, "\\$1");
+  return `📡 *${nm}*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Auto-buys any CA posted in channel\n▸ Filters block weak/risky signals\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━\n\nStatus: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\nSignals: *${ch.signals_caught||0}* | Trades: *${ch.trades_executed||0}* | Skipped: *${ch.skipped_signals||0}*\n\n💰 Buy: *${ch.buy_amount||0.1} SOL*\n📊 Slippage: *${ch.slippage||50}%*\n⛽ Gas: *${ch.tip||0.005} SOL*\n🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*`;
 }
 
 function setupMessages(bot) {
@@ -61,7 +67,7 @@ function setupMessages(bot) {
           const channels = db.getCopyChannels(ctx.from.id);
           const newCh = channels.find(c => c.channel_id === channelId) || channels[0];
           await ctx.reply(`✅ *${channelName}* added!`, { parse_mode: "Markdown" });
-          if (newCh) await ctx.reply(`📡 *${channelName}*\n\nConfigure settings:`, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) });
+          if (newCh) { const s = await ctx.reply(buildChDetailMsg(newCh), { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) }); db.setSysConfig(`ch_view_msg_${ctx.from.id}`, String(s.message_id)); }
         }
         return;
       }
@@ -696,13 +702,10 @@ function setupMessages(bot) {
       const channels = db.getCopyChannels(userId);
       const newCh =
         channels.find((c) => c.channel_id === channelId) || channels[0];
-      const sl = newCh?.stop_loss_pct || 0;
-      const tp = newCh?.take_profit_pct || 0;
       if (newCh) {
-        const chMsg1 = `📡 *${channelName}*\n\n━━━━━━━━━━━━━━━━━━━\n💰 = buy amount  📊 = slippage  ⛽ = gas\n🛡 = MEV protection  🤖 = auto sell\n⏸ = pause  🗑 = delete\n━━━━━━━━━━━━━━━━━━━\n\nStatus: ⏸ Paused | Signals: *0* | Trades: *0*\n💰 Buy: *${newCh.buy_amount||0.1} SOL* | 📊 Slip: *${newCh.slippage||50}%* | ⛽ Gas: *${newCh.tip||0.005} SOL*\n🛡 MEV: *OFF ❌* | 🤖 Auto Sell: *OFF ❌*`;
-        console.log("[DEBUG] chMsg1:", chMsg1.slice(0,100));
         await ctx.api.sendMessage(ctx.chat.id, `✅ *${channelName}* added!`, { parse_mode: "Markdown" });
-        await ctx.api.sendMessage(ctx.chat.id, chMsg1, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) });
+        const s = await ctx.api.sendMessage(ctx.chat.id, buildChDetailMsg(newCh), { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) });
+        db.setSysConfig(`ch_view_msg_${userId}`, String(s.message_id));
       } else {
         await ctx.api.sendMessage(ctx.chat.id, "❌ Could not add channel. Try again.");
       }
@@ -719,10 +722,58 @@ function setupMessages(bot) {
       const channels2 = db.getCopyChannels(userId);
       const newCh2 = channels2.find(c => c.channel_id === channelId2) || channels2[0];
       if (newCh2) {
-        const chMsg2 = `📡 *${channelId2}*\n\n━━━━━━━━━━━━━━━━━━━\n💰 = buy amount  📊 = slippage  ⛽ = gas\n🛡 = MEV protection  🤖 = auto sell\n⏸ = pause  🗑 = delete\n━━━━━━━━━━━━━━━━━━━\n\nStatus: ⏸ Paused | Signals: *0* | Trades: *0*\n💰 Buy: *${newCh2.buy_amount||0.1} SOL* | 📊 Slip: *${newCh2.slippage||50}%* | ⛽ Gas: *${newCh2.tip||0.005} SOL*\n🛡 MEV: *OFF ❌* | 🤖 Auto Sell: *OFF ❌*`;
         await ctx.reply(`✅ *${channelId2}* added!`, { parse_mode: "Markdown" });
-        await ctx.reply(chMsg2, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh2) });
+        const s = await ctx.reply(buildChDetailMsg(newCh2), { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh2) });
+        db.setSysConfig(`ch_view_msg_${userId}`, String(s.message_id));
       } else { await ctx.reply("❌ Could not add channel."); }
+      return;
+    }
+
+    if (pending.startsWith("cch_set_minliq_") || pending.startsWith("cch_set_maxmcap_") || pending.startsWith("cch_set_minmcap_") || pending.startsWith("cch_set_minage_") || pending.startsWith("cch_set_blacklist_")) {
+      const chId = parseInt(pending.split("_").pop());
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      if (pending.startsWith("cch_set_blacklist_")) {
+        let words = [];
+        if (text.toLowerCase() !== "clear") words = text.split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+        db.updateCopyChannel(userId, chId, { blacklist: JSON.stringify(words) });
+      } else {
+        const val = parseFloat(text);
+        if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid value."); return; }
+        if (pending.startsWith("cch_set_minliq_")) db.updateCopyChannel(userId, chId, { min_liquidity: val });
+        if (pending.startsWith("cch_set_maxmcap_")) db.updateCopyChannel(userId, chId, { max_mcap: val });
+        if (pending.startsWith("cch_set_minmcap_")) db.updateCopyChannel(userId, chId, { min_mcap: val });
+        if (pending.startsWith("cch_set_minage_")) db.updateCopyChannel(userId, chId, { min_token_age: Math.floor(val) });
+      }
+      const ch = db.getCopyChannel(chId, userId);
+      const { buildCopyChannelSettingsMenu } = require("../keyboards");
+      const nm = (ch.channel_name || ch.channel_id).replace(/([_*\[\]()~`>#+=|{}.!-])/g, "\\$1");
+      let bl = []; try { bl = JSON.parse(ch.blacklist || "[]"); } catch {}
+      const fMsg = `📡 *${nm}*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Auto-buys any CA posted in channel\n▸ Filters block weak/risky signals\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━\n\nStatus: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\nSignals: *${ch.signals_caught||0}* | Trades: *${ch.trades_executed||0}* | Skipped: *${ch.skipped_signals||0}*\n\n💰 Buy: *${ch.buy_amount||0.1} SOL*\n📊 Slippage: *${ch.slippage||50}%*\n⛽ Gas: *${ch.tip||0.005} SOL*\n🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n\n🔍 *FILTERS:*\n💧 Min Liquidity: *${ch.min_liquidity ? ch.min_liquidity + " SOL" : "OFF"}*\n📊 Max MCap: *${ch.max_mcap ? "$" + (ch.max_mcap/1000) + "K" : "OFF"}*\n📉 Min MCap: *${ch.min_mcap ? "$" + (ch.min_mcap/1000) + "K" : "OFF"}*\n⏰ Min Token Age: *${ch.min_token_age ? ch.min_token_age + " min" : "OFF"}*\n🚫 Blacklist: *${bl.length ? bl.join(", ") : "None"}*`;
+      const viewMsgId = parseInt(db.getSysConfig(`ch_view_msg_${userId}`) || "0");
+      if (viewMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, viewMsgId, fMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch, true) }); return; } catch {} }
+      await ctx.reply(fMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch, true) });
+      return;
+    }
+
+    if (pending.startsWith("cch_set_buy_") || pending.startsWith("cch_set_slip_") || pending.startsWith("cch_set_tip_")) {
+      const chId = parseInt(pending.split("_").pop());
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const val = parseFloat(text);
+      if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid value."); return; }
+      if (pending.startsWith("cch_set_buy_")) db.updateCopyChannel(userId, chId, { buy_amount: val });
+      if (pending.startsWith("cch_set_slip_")) db.updateCopyChannel(userId, chId, { slippage: val });
+      if (pending.startsWith("cch_set_tip_")) db.updateCopyChannel(userId, chId, { tip: val });
+      const ch = db.getCopyChannel(chId, userId);
+      const { buildCopyChannelSettingsMenu } = require("../keyboards");
+      const name = (ch.channel_name || ch.channel_id).replace(/([_*\[\]()~`>#+=|{}.!-])/g, "\\$1");
+      const chMsg = buildChDetailMsg(ch);
+      const viewMsgId = parseInt(db.getSysConfig(`ch_view_msg_${userId}`) || "0");
+      if (viewMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, viewMsgId, chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) }); return; } catch {} }
+      await ctx.reply(chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) });
       return;
     }
 
@@ -748,36 +799,20 @@ function setupMessages(bot) {
         await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
       } catch {}
       db.setSysConfig(`pending_${userId}`, "");
-      const channelId = text.startsWith("@") ? text : `@${text}`;
+      let raw = text.trim();
+      // Extract username from t.me link or @username
+      if (raw.includes("t.me/")) raw = raw.split("t.me/")[1].split(/[/?]/)[0];
+      raw = raw.replace(/^@/, "").replace(/^https?:\/\//, "");
+      const channelId = "@" + raw;
       const safeChId = stripMd(channelId);
       db.addCopyChannel(userId, channelId, channelId, {});
       const channels = db.getCopyChannels(userId);
       const newCh =
         channels.find((c) => c.channel_id === channelId) || channels[0];
-      const sl = newCh?.stop_loss_pct || 0;
-      const tp = newCh?.take_profit_pct || 0;
-      await ctx.api.sendMessage(
-        ctx.chat.id,
-        `✅ Channel *${safeChId}* added!`,
-        { parse_mode: "Markdown" },
-      );
+      await ctx.api.sendMessage(ctx.chat.id, `✅ Channel *${safeChId}* added!`, { parse_mode: "Markdown" });
       if (newCh) {
-        await ctx.api.sendMessage(
-          ctx.chat.id,
-          `📡 *${safeChId}*\n\n` +
-            `Status: ⏸ Paused\n` +
-            `Signals caught: *0*\n` +
-            `Trades executed: *0*\n\n` +
-            `💰 Buy: *${newCh.buy_amount || 0.1} SOL*\n` +
-            `📊 Slippage: *${newCh.slippage || 50}%*\n` +
-            `⛽ Gas: *${newCh.tip || 0.005} SOL*\n` +
-            `🛑 SL: *${sl === 0 ? "OFF" : sl + "%"}*\n` +
-            `🎯 TP: *${tp === 0 ? "OFF" : tp + "%"}*\n` +
-            `🔄 Copy Sell: *OFF ❌*\n` +
-            `🛡 MEV: *OFF ❌*\n\n` +
-            `_Tap any button to change:_`,
-          { reply_markup: buildCopyChannelSettingsMenu(newCh) },
-        );
+        const s = await ctx.api.sendMessage(ctx.chat.id, buildChDetailMsg(newCh), { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(newCh) });
+        db.setSysConfig(`ch_view_msg_${userId}`, String(s.message_id));
       }
       return;
     }

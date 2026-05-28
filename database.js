@@ -107,6 +107,8 @@ function runMigrations(d) {
         created_at TEXT DEFAULT (datetime('now')))`,
     "ALTER TABLE copy_channels ADD COLUMN wallet_id INTEGER DEFAULT NULL",
     "ALTER TABLE copy_channels ADD COLUMN gas_fee REAL DEFAULT 0.005",
+    "ALTER TABLE copy_channels ADD COLUMN skipped_signals INTEGER DEFAULT 0",
+    "ALTER TABLE copy_channels ADD COLUMN min_token_age INTEGER DEFAULT 0",
     "ALTER TABLE positions ADD COLUMN entry_mcap REAL DEFAULT 0",
     "ALTER TABLE positions ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
     `CREATE TABLE IF NOT EXISTS copy_wallets (

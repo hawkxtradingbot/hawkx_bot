@@ -49,8 +49,41 @@ function buildCwScreen(cw, wallets, expanded = false) {
     [{ text: `% Copy: ${cw.copy_pct||100}%`, callback_data: `cw_edit_pct_${cw.id}` }, { text: `⏱ Delay: ${cw.delay_seconds||0}s`, callback_data: `cw_edit_delay_${cw.id}` }],
     [{ text: cw.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${cw.id}` }, { text: cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${cw.id}` }],
     [{ text: "✏️ Rename", callback_data: `cw_rename_${cw.id}` }, { text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${cw.id}` }],
-    [{ text: "🗑 Delete", callback_data: `copy_wallet_delete_${cw.id}` }, { text: "← Back", callback_data: "copy_wallet_menu" }],
+    [{ text: "← Back", callback_data: "copy_wallet_menu" }, { text: "🗑 Delete", callback_data: `copy_wallet_delete_${cw.id}` }],
   ]};
+  return { msg, kb };
+}
+
+
+// ── Helper: build copy channel screen ──────────────────────────
+function buildChScreen(ch, expanded = false) {
+  const name = ch.channel_name || ch.channel_id;
+  const { buildCopyChannelSettingsMenu } = require("../keyboards");
+  let msg =
+    `📡 *${name}*\n\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `▸ Auto-buys any CA posted in channel\n` +
+    `▸ Filters block weak/risky signals\n` +
+    `▸ All settings auto-save instantly\n` +
+    `━━━━━━━━━━━━━━━━━━━\n\n` +
+    `Status: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
+    `Signals: *${ch.signals_caught||0}* | Trades: *${ch.trades_executed||0}* | Skipped: *${ch.skipped_signals||0}*\n\n` +
+    `💰 Buy: *${ch.buy_amount||0.1} SOL*\n` +
+    `📊 Slippage: *${ch.slippage||50}%*\n` +
+    `⛽ Gas: *${ch.tip||0.005} SOL*\n` +
+    `🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
+    `🤖 Auto Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*`;
+  if (expanded) {
+    let bl = [];
+    try { bl = JSON.parse(ch.blacklist || "[]"); } catch {}
+    msg += `\n\n🔍 *FILTERS:*\n` +
+      `💧 Min Liquidity: *${ch.min_liquidity ? ch.min_liquidity + " SOL" : "OFF"}*\n` +
+      `📊 Max MCap: *${ch.max_mcap ? "$" + (ch.max_mcap/1000) + "K" : "OFF"}*\n` +
+      `📉 Min MCap: *${ch.min_mcap ? "$" + (ch.min_mcap/1000) + "K" : "OFF"}*\n` +
+      `⏰ Min Token Age: *${ch.min_token_age ? ch.min_token_age + " min" : "OFF"}*\n` +
+      `🚫 Blacklist: *${bl.length ? bl.join(", ") : "None"}*`;
+  }
+  const kb = buildCopyChannelSettingsMenu(ch, expanded);
   return { msg, kb };
 }
 
@@ -306,6 +339,21 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     }
     if (data.startsWith("copy_wallet_delete_")) {
       const id = parseInt(data.replace("copy_wallet_delete_", ""));
+      await ctx.answerCallbackQuery();
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      if (!cw) return;
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(cw, wallets);
+      // Swap last row to confirm buttons
+      kb.inline_keyboard[kb.inline_keyboard.length - 1] = [
+        { text: "✅ Confirm Delete", callback_data: `cw_delconfirm_${id}` },
+        { text: "← Cancel", callback_data: `copy_wallet_view_${id}` }
+      ];
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_delconfirm_")) {
+      const id = parseInt(data.replace("cw_delconfirm_", ""));
       db.getDb().prepare("DELETE FROM copy_wallets WHERE id = ? AND user_id = ?").run(id, userId);
       await ctx.answerCallbackQuery("🗑 Deleted.");
       const cws = db.getCopyWallets(userId);
@@ -747,19 +795,126 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
 
+        if (data.startsWith("cch_buy_")) {
+      const id = parseInt(data.replace("cch_buy_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("💰 Enter buy amount in SOL (e.g. 0.1):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_buy_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_slip_")) {
+      const id = parseInt(data.replace("cch_slip_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("📊 Enter slippage % (e.g. 50):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_slip_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_tip_")) {
+      const id = parseInt(data.replace("cch_tip_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("⛽ Enter gas fee in SOL (e.g. 0.005):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_tip_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_mev_")) {
+      const id = parseInt(data.replace("cch_mev_", ""));
+      const ch = db.getCopyChannel(id, userId);
+      if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
+      db.updateCopyChannel(userId, id, { mev_protection: ch.mev_protection ? 0 : 1 });
+      await ctx.answerCallbackQuery(ch.mev_protection ? "🛡 MEV OFF" : "🛡 MEV ON ✅");
+      const updated = db.getCopyChannel(id, userId);
+      const { msg, kb } = buildChScreen(updated);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cch_filters_expand_")) {
+      const id = parseInt(data.replace("cch_filters_expand_", ""));
+      await ctx.answerCallbackQuery();
+      const ch = db.getCopyChannel(id, userId);
+      if (!ch) return;
+      const { msg, kb } = buildChScreen(ch, true);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cch_filters_collapse_")) {
+      const id = parseInt(data.replace("cch_filters_collapse_", ""));
+      await ctx.answerCallbackQuery();
+      const ch = db.getCopyChannel(id, userId);
+      if (!ch) return;
+      const { msg, kb } = buildChScreen(ch, false);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cch_minliq_")) {
+      const id = parseInt(data.replace("cch_minliq_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("💧 Enter min liquidity in SOL (0 = off):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_minliq_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_maxmcap_")) {
+      const id = parseInt(data.replace("cch_maxmcap_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("📊 Enter max market cap in USD (e.g. 100000, 0 = off):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_maxmcap_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_minmcap_")) {
+      const id = parseInt(data.replace("cch_minmcap_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("📉 Enter min market cap in USD (e.g. 10000, 0 = off):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_minmcap_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_minage_")) {
+      const id = parseInt(data.replace("cch_minage_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("⏰ Enter min token age in minutes (0 = off):");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_minage_${id}`);
+      return true;
+    }
+
+    if (data.startsWith("cch_blacklist_")) {
+      const id = parseInt(data.replace("cch_blacklist_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
+      const m = await ctx.reply("🚫 Enter blacklist words (comma separated).\nIf channel message contains any, signal is skipped.\n\nExample: rug, scam, presale\n\nSend 'clear' to remove all:");
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `cch_set_blacklist_${id}`);
+      return true;
+    }
+
     if (data.startsWith("copy_channel_view_")) {
       const id = parseInt(data.replace("copy_channel_view_", ""));
       const ch = db.getCopyChannel(id, userId);
       if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
-      const name = stripMd(ch.channel_name || ch.channel_id);
-      const chMsg = `📡 *${name}*\n\nStatus: ${ch.status === "active" ? "🟢 Active" : "⏸ Paused"}\nSignals: *${ch.signals_caught||0}* | Trades: *${ch.trades_executed||0}*\n\n💰 Buy: *${ch.buy_amount||0.1} SOL*\n📊 Slip: *${ch.slippage||50}%*\n⛽ Gas: *${ch.tip||0.005} SOL*\n🛡 MEV: *${ch.mev_protection ? "ON ✅" : "OFF ❌"}*\n🤖 Auto Sell: *${ch.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*`;
+      const { msg, kb } = buildChScreen(ch);
       try {
-        await ctx.editMessageText(chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) });
-        const msgId = ctx.callbackQuery?.message?.message_id;
-        if (msgId) db.setSysConfig(`ch_view_msg_${userId}`, String(msgId));
+        await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb });
+        db.setSysConfig(`ch_view_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
       } catch {
-        const s = await ctx.reply(chMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelSettingsMenu(ch) });
+        const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
         db.setSysConfig(`ch_view_msg_${userId}`, String(s.message_id));
       }
       return;
@@ -768,35 +923,13 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     if (data.startsWith("copy_channel_toggle_")) {
       const id = parseInt(data.replace("copy_channel_toggle_", ""));
       const ch = db.getCopyChannel(id, userId);
-      if (!ch) {
-        await ctx.answerCallbackQuery("Not found.");
-        return;
-      }
+      if (!ch) { await ctx.answerCallbackQuery("Not found."); return; }
       const newStatus = ch.status === "active" ? "paused" : "active";
       db.updateCopyChannel(userId, id, { status: newStatus });
-      await ctx.answerCallbackQuery(
-        newStatus === "active" ? "▶ Resumed" : "⏸ Paused",
-      );
+      await ctx.answerCallbackQuery(newStatus === "active" ? "▶ Resumed" : "⏸ Paused");
       const updated = db.getCopyChannel(id, userId);
-      const name = stripMd(updated.channel_name || updated.channel_id);
-      const sl2 = updated.stop_loss_pct || 0;
-      const tp2 = updated.take_profit_pct || 0;
-      return safeEdit(
-        ctx,
-        `📡 *${name}*\n\n` +
-          `Status: ${updated.status === "active" ? "🟢 Active" : "⏸ Paused"}\n` +
-          `Signals caught: *${updated.signals_caught || 0}*\n` +
-          `Trades executed: *${updated.trades_executed || 0}*\n\n` +
-          `💰 Buy: *${updated.buy_amount || 0.1} SOL*\n` +
-          `📊 Slippage: *${updated.slippage || 50}%*\n` +
-          `⛽ Gas: *${updated.tip || 0.005} SOL*\n` +
-          `🛑 SL: *${sl2 === 0 ? "OFF" : sl2 + "%"}*\n` +
-          `🎯 TP: *${tp2 === 0 ? "OFF" : tp2 + "%"}*\n` +
-          `🤖 Auto Sell: *Coming Soon*\n` +
-          `🛡 MEV: *${updated.mev_protection ? "ON ✅" : "OFF ❌"}*\n\n` +
-          `_Tap any button to change:_`,
-        buildCopyChannelSettingsMenu(updated),
-      );
+      const { msg, kb } = buildChScreen(updated);
+      return safeEdit(ctx, msg, kb);
     }
 
     if (data.startsWith("copy_channel_activate_")) {
@@ -812,11 +945,22 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
 
     if (data.startsWith("copy_channel_delete_")) {
       const id = parseInt(data.replace("copy_channel_delete_", ""));
+      await ctx.answerCallbackQuery();
+      const ch = db.getCopyChannel(id, userId);
+      if (!ch) return;
+      const { msg, kb } = buildChScreen(ch);
+      kb.inline_keyboard[kb.inline_keyboard.length - 1] = [
+        { text: "✅ Confirm Delete", callback_data: `cch_delconfirm_${id}` },
+        { text: "← Cancel", callback_data: `copy_channel_view_${id}` }
+      ];
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cch_delconfirm_")) {
+      const id = parseInt(data.replace("cch_delconfirm_", ""));
       db.deleteCopyChannel(userId, id);
       await ctx.answerCallbackQuery("🗑 Deleted.");
-      const guideMsg = `📡 *Copy Channel*
-
-${getGuide("copy_channel")}`;
+      const guideMsg = `📡 *Copy Channel*\n\n${getGuide("copy_channel")}`;
       try { await ctx.editMessageText(guideMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelListMenu(db.getCopyChannels(userId)) }); }
       catch { await ctx.reply(guideMsg, { parse_mode: "Markdown", reply_markup: buildCopyChannelListMenu(db.getCopyChannels(userId)) }); }
     }
@@ -1105,4 +1249,4 @@ ${getGuide("copy_channel")}`;
     return false;
 }
 
-module.exports = { handleCopyTradeCallbacks, buildCwScreen };
+module.exports = { handleCopyTradeCallbacks, buildCwScreen, buildChScreen };
