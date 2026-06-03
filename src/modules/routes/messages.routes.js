@@ -255,26 +255,6 @@ function setupMessages(bot) {
       return;
     }
 
-    if (pending === "lo_paste_ca") {
-      await deleteMsg(ctx, promptId);
-      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
-      db.setSysConfig(`pending_${userId}`, "");
-      if (text.length < 32 || text.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(text)) {
-        await ctx.reply("❌ Invalid CA."); return;
-      }
-      const loType = db.getSysConfig(`lo_type_${userId}`) || "buy";
-      const tInfo = await getTokenInfo(text);
-      const tName = tInfo?.name || text.slice(0,8);
-      db.setSysConfig(`lo_pending_ca_${userId}`, text);
-      db.setSysConfig(`lo_pending_name_${userId}`, tName);
-      const { getMockPrice: gmp2 } = require("../executor");
-      const mockP = gmp2(text);
-      const priceStr = tInfo?.price ? `${formatPrice(tInfo.price)}` : `${mockP.toFixed(8)} [DEVNET]`;
-      const m = await ctx.reply(`${loType === "buy" ? "🟢 Limit Buy" : "🔴 Limit Sell"} — *${tName}*\n\n💰 Price: ${priceStr}\n\nEnter target price:`, { parse_mode: "Markdown" });
-      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-      db.setSysConfig(`pending_${userId}`, "lo_set_price");
-      return;
-    }
 
     if (pending === "lo_set_sell_pct_direct") {
       await deleteMsg(ctx, promptId);
@@ -357,6 +337,27 @@ function setupMessages(bot) {
       const price3 = parseFloat(db.getSysConfig(`lo_price_${userId}`) || "0");
       const ca3 = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
       const name3 = db.getSysConfig(`lo_pending_name_${userId}`) || "Token";
+      const loWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || db.getUser(userId).active_wallet_id);
+      // ── PRE-TRADE VALIDATION ──
+      // 1. Buy: check wallet balance
+      if (loType3 === "buy") {
+        const w = db.getWallets(userId).find(x => x.wallet_id === loWalletId);
+        const bal = w ? parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0") : 0;
+        if (val > bal) {
+          await ctx.reply(`⚠️ *Low Balance Warning*\n\nOrder amount: *${val} SOL*\nWallet balance: *${bal.toFixed(3)} SOL*\n\nThe order is saved, but it may fail to execute if balance is still low when triggered. Top up your wallet.`, { parse_mode: "Markdown" });
+        }
+      }
+      // 2. Sell %: max 100
+      if (loType3 === "sell" && val > 100) { await ctx.reply("❌ Sell % cannot exceed 100."); return; }
+      // 3. Duplicate order check
+      const existing = db.getLimitOrders(userId).filter(o =>
+        o.token_ca === ca3 && o.order_type === loType3 && o.wallet_id === loWalletId &&
+        ((price3 > 0 && Math.abs((o.target_price||0) - price3) < price3*0.001) ||
+         (parseFloat(db.getSysConfig(`lo_mcap_${userId}`)||"0") > 0 && o.target_mcap === parseFloat(db.getSysConfig(`lo_mcap_${userId}`)||"0")))
+      );
+      if (existing.length) {
+        await ctx.reply("⚠️ You already have a similar order for this token at this target. Order still saved — cancel duplicates if not needed.");
+      }
       db.addLimitOrder(userId, {
         tokenCa: ca3, tokenName: name3, orderType: loType3,
         targetPrice: price3,
@@ -1036,17 +1037,44 @@ function setupMessages(bot) {
       db.setSysConfig(`rt_msg_${userId}`, String(s.message_id));
     }
 
+    if (pending === "wl_alert_target") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const ca = db.getSysConfig(`alert_pending_ca_${userId}`) || "";
+      const nm = db.getSysConfig(`alert_pending_name_${userId}`) || ca.slice(0,8);
+      let tp = 0, dir = "price_above";
+      const cl = text.trim().toUpperCase();
+      if (cl.endsWith("K")) { tp = parseFloat(cl) * 1000; dir = "mcap_above"; }
+      else if (cl.endsWith("M")) { tp = parseFloat(cl) * 1000000; dir = "mcap_above"; }
+      else { const n = parseFloat(cl); if (n >= 1000) { tp = n; dir = "mcap_above"; } else { tp = n; dir = "price_above"; } }
+      if (tp <= 0) { await ctx.reply("❌ Invalid target."); return; }
+      db.addPriceAlert(userId, ca, nm, tp, dir);
+      const wlId = parseInt(db.getSysConfig(`alert_pending_wlid_${userId}`) || "0");
+      if (wlId) {
+        const { showAlertMgmtScreen } = require("./callbacks.watchlist");
+        return showAlertMgmtScreen(ctx, userId, wlId);
+      }
+      const { showWatchlistScreen } = require("./helpers.routes");
+      return showWatchlistScreen(ctx, userId);
+    }
+
     if (pending === "watchlist_add_ca") {
       await deleteMsg(ctx, promptId);
-      try {
-        await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
-      } catch {}
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       db.setSysConfig(`pending_${userId}`, "");
-      db.addToWatchlist(userId, text, "Unknown", 0);
-      await ctx.reply(`✅ Added to watchlist: \`${text.slice(0, 12)}...\``, {
-        parse_mode: "Markdown",
-      });
-      return;
+      // Validate CA
+      if (text.length < 32 || text.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(text)) {
+        await ctx.reply("❌ Invalid Solana CA. Try again.");
+        return;
+      }
+      // Fetch token name
+      let tName = text.slice(0, 8);
+      try { const ti = await getTokenInfo(text); if (ti?.name) tName = ti.name; } catch {}
+      db.addToWatchlist(userId, text, tName, 0);
+      // Refresh watchlist screen
+      const { showWatchlistScreen } = require("./helpers.routes");
+      return showWatchlistScreen(ctx, userId);
     }
 
     if (pending.startsWith("set_limit_sell_")) {

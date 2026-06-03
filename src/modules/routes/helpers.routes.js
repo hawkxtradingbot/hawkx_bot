@@ -98,7 +98,7 @@ async function handlePnlCard(ctx, user, posId, hideAmounts) {
     const result = await generatePnlCard({
       username: user.username || "Trader",
       rankNum: user.rank || 1,
-      tokenName: pos.token_name || pos.token_ca.slice(0, 8),
+      tokenName: pos.token_name || pos.token_ca.slice(0,12),
       pnlPct,
       pnlSol,
       entryMcap: pos.entry_mcap || 0,
@@ -113,7 +113,7 @@ async function handlePnlCard(ctx, user, posId, hideAmounts) {
       try {
         const caption =
           `🦅 *HAWKX PNL CARD*\n` +
-          `👤 @${user.username||"Trader"} · ${pos.token_name||pos.token_ca.slice(0,8)}\n` +
+          `👤 @${user.username||"Trader"} · ${pos.token_name||pos.token_ca.slice(0,12)}\n` +
           `${pnlPct >= 0 ? "📈" : "📉"} *${pnlPct >= 0 ? "+" : ""}${Math.abs(pnlPct).toFixed(1)}%*\n` +
           `💰 ${pnlPct >= 0 ? "+" : ""}${Math.abs(pnlSol).toFixed(4)} SOL\n` +
           `📊 Entry: *${entryMcap > 0 ? "$"+(entryMcap/1000).toFixed(1)+"K" : "N/A"}* → Exit: *${exitMcap > 0 ? "$"+(exitMcap/1000).toFixed(1)+"K" : "N/A"}*`;
@@ -482,7 +482,7 @@ async function buildLaunchMsg(userId, expanded) {
   const wallets = db.getWallets(userId) || [];
   const selWal = wallets.find(w => String(w.wallet_id) === String(p.wallet_id)) || wallets[0];
   const walletNum = selWal ? wallets.indexOf(selWal)+1 : 1;
-  const balance = selWal ? (selWal.balance || 0) : 0;
+  const balance = selWal ? parseFloat(db.getSysConfig(`mock_balance_${selWal.public_key}`) || "0") : 0;
   const platformName = p.platform === "pump" ? "🌊 Pump.fun" : "🦅 HawkX";
   const msg =
     `🚀 *Launch Token — ${platformName}*\n\n` +
@@ -507,18 +507,19 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   const { getMockPrice } = require("../executor");
   const tokenOrders = db.getLimitOrders(userId, ca);
   const pos2 = db.getAllOpenPositions().find(p => p.user_id === userId && p.token_ca === ca);
-  const name = pos2?.token_name || tokenOrders[0]?.token_name || ca.slice(0,8);
+  const name = pos2?.token_name || tokenOrders[0]?.token_name || ca.slice(0,12);
   db.setSysConfig(`lo_pending_ca_${userId}`, ca);
   db.setSysConfig(`lo_pending_name_${userId}`, name);
   const user2 = db.getUser(userId);
   const wallets2 = db.getWallets(userId) || [];
-  const loWalletId = parseInt(db.getSysConfig(`lo_token_wallet_${userId}_${ca}`) || user2.active_wallet_id);
+  const loWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user2.active_wallet_id);
   const selWal2 = wallets2.find(w => w.wallet_id === loWalletId) || wallets2[0];
   const walletNum2 = wallets2.indexOf(selWal2) + 1;
   let priceInfo = "";
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
-  const msg = `📋 *${name} — Limit Orders*\n\n━━━ 📚 GUIDE ━━━\n🟢 Buy triggers at or below target\n🔴 Sell triggers at or above target
-Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+  const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
+  const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
+  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy when price drops to target\n🔴 Sell when price rises to target\nTap an order to pause or delete.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
@@ -539,31 +540,13 @@ Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━�
       ]);
     }
   });
-  if (walletExpanded) {
-    for (let i = 0; i < wallets2.length; i += 4) {
-      kb.inline_keyboard.push(wallets2.slice(i, i+4).map((w, idx) => {
-        const num = i+idx+1;
-        const isSel = w.wallet_id === loWalletId;
-        const caKey = ca.slice(0,8);
-        db.setSysConfig(`lo_ca_map_${userId}_${caKey}`, ca);
-        return { text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isSel?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(), callback_data: `lo_tok_wallet_${caKey}_${w.wallet_id}` };
-      }));
-    }
-    const caKeyClose = ca.slice(0,8);
-    db.setSysConfig(`lo_ca_map_${userId}_${caKeyClose}`, ca);
-    kb.inline_keyboard.push([{ text: "▲ Close", callback_data: `lo_token_ca_${caKeyClose}` }]);
-  } else {
-    const caKeyExp = ca.slice(0,8);
-    db.setSysConfig(`lo_ca_map_${userId}_${caKeyExp}`, ca);
-    kb.inline_keyboard.push([{ text: `💼 W${walletNum2} ▼`, callback_data: `lo_tok_wallet_expand_${caKeyExp}` }]);
-  }
   kb.inline_keyboard.push([
     { text: "➕ Add Buy", callback_data: "lo_add_buy" },
     { text: "➕ Add Sell", callback_data: "lo_add_sell" },
   ]);
   kb.inline_keyboard.push([
     { text: "← Back", callback_data: "limit_orders_refresh" },
-    { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca.slice(0,8)}` },
+    { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca.slice(0,12)}` },
   ]);
   const curMsgId = forceMsgId || ctx.callbackQuery?.message?.message_id;
   if (curMsgId) db.setSysConfig(`lo_msg_${userId}`, String(curMsgId));
@@ -574,13 +557,11 @@ Tap order → Pause or Delete\n━━━━━━━━━━━━━━━━�
     else throw new Error("no msg");
   } catch(e) {
     if (e?.description?.includes("not modified")) return;
-    console.log("[LIMIT CATCH]:", e.message);
     const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
     db.setSysConfig(`lo_msg_${userId}`, String(s.message_id));
   }
 }
 async function showLimitOrdersScreen(ctx, userId) {
-  console.log("[LIMIT] called, chat:", ctx.chat?.id, "msg:", ctx.message?.message_id);
   const orders = db.getLimitOrders(userId);
   const wallets = db.getWallets(userId) || [];
   const user = db.getUser(userId);
@@ -588,13 +569,12 @@ async function showLimitOrdersScreen(ctx, userId) {
   const selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
-  const balance = activeWallet ? (activeWallet.balance || 0) : 0;
+  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
   // Filter positions by SELECTED wallet
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
   // Filter orders by selected wallet
   const walletOrders = orders.filter(o => o.wallet_id === selWalletId || (!o.wallet_id && selWalletId === parseInt(db.getUser(userId).active_wallet_id)));
-  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy — triggers when price/MC drops to target\n🔴 Sell — triggers when price/MC rises to target\n💡 Switch wallet to see its tokens & orders
-💼 Each wallet executes its own orders\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
+  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\nBuy or sell at your target price.\n💼 Pick a wallet, then tap a token.\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
   const kb = { inline_keyboard: [] };
   const loWalletExpanded = db.getSysConfig(`lo_wallet_expanded_${userId}`) === "1";
   if (loWalletExpanded) {
@@ -621,7 +601,7 @@ async function showLimitOrdersScreen(ctx, userId) {
       const allPaused = tOrders.length > 0 && tOrders.every(o => o.paused);
       const icon = tOrders.length === 0 ? "" : allPaused ? " ⏸" : " 🟢";
       const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
-      const caKey2 = p.token_ca.slice(0,8);
+      const caKey2 = p.token_ca.slice(0,12);
       db.setSysConfig(`lo_ca_map_${userId}_${caKey2}`, p.token_ca);
       return { text: `📊 ${name}${icon}`, callback_data: `lo_token_ca_${caKey2}` };
     }));
@@ -664,7 +644,75 @@ async function showLaunchScreen(ctx, userId) {
 }
 
 
+
+async function showWatchlistScreen(ctx, userId) {
+  const items = db.getWatchlist(userId);
+  const alerts = db.getPriceAlerts(userId);
+  let msg = "⭐ *Watchlist & Alerts*\n\n━━━━━━━━━━━━━━━━━━━\n📈 Chart · 🟢 Buy · 🔔 Set price alerts\n💡 Get notified when a token hits your target\n━━━━━━━━━━━━━━━━━━━\n";
+  const kb = { inline_keyboard: [] };
+
+  if (!items.length) {
+    msg += "_No tokens yet. Tap ➕ to add one._\n━━━━━━━━━━━━━━━━━━━";
+  } else {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      let info = {};
+      try { info = await getTokenInfo(it.token_ca); } catch {}
+      const name = info.name || it.token_name || it.token_ca.slice(0, 8);
+      const dexUrl = "https://dexscreener.com/solana/" + it.token_ca;
+      const priceStr = info.price ? formatPrice(info.price) : "—";
+      const mcStr = info.mcap ? formatNum(info.mcap) : "—";
+      const fmt = (v) => !v ? "—" : (v > 0 ? "🟢+" : "🔴") + Math.abs(v).toFixed(1) + "%";
+
+      // All alerts for this token
+      const tokenAlerts = alerts.filter(a => a.token_ca === it.token_ca);
+      let alertLine = "🔔 _No alert_";
+      if (tokenAlerts.length) {
+        alertLine = tokenAlerts.map(a => {
+          const val = a.target_price >= 1000000 ? "$"+(a.target_price/1000000).toFixed(1)+"M"
+            : a.target_price >= 1000 ? "$"+(a.target_price/1000).toFixed(0)+"K" : "$"+a.target_price;
+          return "🔔 " + (a.direction === "mcap_above" ? "MC▲" : "▲") + val;
+        }).join(" · ");
+      }
+
+      msg += "\n*" + (i+1) + ". " + name + (info.symbol ? " (" + info.symbol + ")" : "") + "* · [📈 Chart](" + dexUrl + ")\n";
+      msg += priceStr + " · MC " + mcStr + "\n";
+      msg += "5m:" + fmt(info.change5m) + " 1h:" + fmt(info.change1h) + " 6h:" + fmt(info.change6h) + " 24h:" + fmt(info.change24h) + "\n";
+      msg += alertLine + "\n━━━━━━━━━━━━━━━━━━━\n";
+
+      kb.inline_keyboard.push([
+        { text: "🟢 Buy " + ((info.symbol || name).slice(0,10)), callback_data: "wl_buy_" + it.id },
+        { text: "🔔 Alert", callback_data: "wl_alert_" + it.id },
+        { text: "🗑", callback_data: "wl_remove_" + it.id },
+      ]);
+    }
+  }
+
+  kb.inline_keyboard.push([{ text: "➕ Add Token", callback_data: "watchlist_add" }]);
+  kb.inline_keyboard.push([
+    { text: "← Back", callback_data: "menu_main" },
+    { text: "🔄 Refresh", callback_data: "menu_watchlist" },
+  ]);
+
+  const curMsgId = ctx.callbackQuery?.message?.message_id;
+  if (curMsgId) db.setSysConfig("wl_msg_" + userId, String(curMsgId));
+  const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
+  try {
+    if (curMsgId && chatId) {
+      await ctx.api.editMessageText(chatId, curMsgId, msg, { parse_mode: "Markdown", reply_markup: kb, disable_web_page_preview: true });
+    } else {
+      const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb, disable_web_page_preview: true });
+      db.setSysConfig("wl_msg_" + userId, String(s.message_id));
+    }
+  } catch(e) {
+    if (e?.description?.includes("not modified")) return;
+    const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb, disable_web_page_preview: true });
+    db.setSysConfig("wl_msg_" + userId, String(s.message_id));
+  }
+}
+
 module.exports = {
+  showWatchlistScreen,
   handlePnlCard,
   safeEdit,
   safeReply,

@@ -298,19 +298,53 @@ async function checkLimitOrders(notifyFn) {
       if (!triggered) continue;
 
 
-      // Execute BUY limit order
+      // Execute BUY limit order (no ctx — replicate core buy logic)
       if (order.order_type === 'buy') {
         const user = db.getUser(order.user_id);
         if (user) {
-          const { mockBuy } = require('./executor');
-          if (notifyFn) {
-            notifyFn(order.user_id, 'limit_order', {
-              message:
-                `📌 *Limit Buy Executed*\n\n` +
-                `Token: *${order.token_name || order.token_ca.slice(0,8)}*\n` +
-                `Amount: *${order.sol_amount} SOL*\n` +
-                `Price: *${currentPrice.toFixed(8)}*`,
-            });
+          const walletId = order.wallet_id || user.active_wallet_id;
+          const wallet = db.getDb().prepare("SELECT * FROM wallets WHERE wallet_id = ?").get(walletId);
+          if (wallet) {
+            const bal = parseFloat(db.getSysConfig("mock_balance_" + wallet.public_key) || "0");
+            if (bal >= order.sol_amount) {
+              // Deduct balance
+              db.setSysConfig("mock_balance_" + wallet.public_key, String(bal - order.sol_amount));
+              const { getEffectiveFeeRate } = require("./executor");
+              const feeRate = getEffectiveFeeRate(user);
+              const feeSol = order.sol_amount * feeRate;
+              const tokenAmount = (order.sol_amount * (1 - feeRate)) / currentPrice;
+              // Check existing position
+              const existing = db.getDb().prepare("SELECT * FROM positions WHERE token_ca = ? AND user_id = ? AND wallet_id = ? AND status = 'open'").get(order.token_ca, order.user_id, walletId);
+              if (existing) {
+                const newTokens = existing.token_amount + tokenAmount;
+                const newInvested = existing.sol_invested + order.sol_amount;
+                db.getDb().prepare("UPDATE positions SET sol_invested = ?, token_amount = ?, buy_price = ? WHERE position_id = ?").run(newInvested, newTokens, currentPrice, existing.position_id);
+              } else {
+                db.getDb().prepare("INSERT INTO positions (user_id, wallet_id, token_ca, token_name, sol_invested, token_amount, buy_price, entry_mcap, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')").run(order.user_id, walletId, order.token_ca, order.token_name || "", order.sol_amount, tokenAmount, currentPrice, currentMcap);
+              }
+              db.recordTrade({
+                userId: order.user_id, walletId, tokenCa: order.token_ca, tokenName: order.token_name || "",
+                platform: "devnet_mock", action: "buy", solAmount: order.sol_amount, tokenAmount,
+                priceSol: currentPrice, feeSol, feeRate, txHash: "DEVNET_LIMIT_BUY_" + Date.now(), status: "confirmed",
+              });
+              db.addVolume(order.user_id, order.sol_amount);
+              if (notifyFn) {
+                notifyFn(order.user_id, 'limit_order', {
+                  message:
+                    `📌 *Limit Buy Executed*\n\n` +
+                    `Token: *${order.token_name || order.token_ca.slice(0,8)}*\n` +
+                    `Spent: *${order.sol_amount} SOL*\n` +
+                    `Got: *${tokenAmount.toFixed(2)} tokens*\n` +
+                    `Price: *${currentPrice.toFixed(8)}*`,
+                });
+              }
+            } else {
+              if (notifyFn) {
+                notifyFn(order.user_id, 'limit_order', {
+                  message: `⚠️ *Limit Buy Failed*\n\nToken: *${order.token_name || order.token_ca.slice(0,8)}*\nNeeded: *${order.sol_amount} SOL* but wallet balance too low.`,
+                });
+              }
+            }
           }
         }
       }

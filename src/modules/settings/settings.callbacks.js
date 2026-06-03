@@ -722,7 +722,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
   if (action === "pset_alerts") {
     await ctx.answerCallbackQuery();
     const alertsS = db.getSettings(user.user_id);
-    const alertGuide = "🔔 *Alerts & Notifications*\n\n▸ *Price Alert* — notify when token hits price/MCap\n▸ *Wallet Tracker* — notify when wallet trades\n▸ *Daily PnL* — daily summary\n━━━━━━━━━━━━━━━━━━━";
+    const alertGuide = "🔔 *Alerts & Notifications*\n\n▸ *Wallet Tracker* — notify when a wallet trades\n▸ *Daily PnL* — daily summary report\n\n💡 _For token price alerts, use_ ⭐ *Watchlist*\n━━━━━━━━━━━━━━━━━━━";
     try { await ctx.editMessageText(alertGuide, { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(alertsS) }); }
     catch { await ctx.reply(alertGuide, { parse_mode: "Markdown", reply_markup: buildAlertsSettingsMenu(alertsS) }); }
     return true;

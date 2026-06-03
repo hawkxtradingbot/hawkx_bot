@@ -37,6 +37,10 @@ async function getTokenInfo(ca) {
       data.mcap        = pair.fdv               || pair.marketCap || 0;
       data.liquidity   = pair.liquidity?.usd    || 0;
       data.volume24h   = pair.volume?.h24       || 0;
+      data.change24h   = pair.priceChange?.h24  || 0;
+      data.change6h    = pair.priceChange?.h6   || 0;
+      data.change1h    = pair.priceChange?.h1   || 0;
+      data.change5m    = pair.priceChange?.m5   || 0;
     }
   } catch {}
 

@@ -220,9 +220,7 @@ function buildMevSettingsMenu(s) {
 
 function buildAlertsSettingsMenu(s) {
   const kb = new InlineKeyboard();
-  kb.text("➕ Price Alert",    "alert_add_price")
-    .text("➕ Wallet Tracker", "alert_add_wallet")
-    .row();
+  kb.text("👛 Wallet Tracker", "alert_add_wallet").row();
   kb.text(`📊 Daily PnL Report: ${s?.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
   kb.text("← Back", "menu_settings").row();
   return kb;

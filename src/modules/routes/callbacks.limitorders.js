@@ -7,6 +7,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
     if (data.startsWith("lo_switch_wallet_")) {
       const wId = parseInt(data.replace("lo_switch_wallet_", ""));
       db.setSysConfig(`lo_sel_wallet_${userId}`, String(wId));
+      db.setSysConfig(`lo_wallet_expanded_${userId}`, "0");
       await ctx.answerCallbackQuery("✅ Wallet switched!");
       return showLimitOrdersScreen(ctx, userId);
     }
@@ -58,7 +59,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       const curMsg3 = ctx.callbackQuery?.message?.message_id;
       if (curMsg3) db.setSysConfig(`lo_msg_${userId}`, String(curMsg3));
       db.setSysConfig(`lo_pending_ca_${userId}`, pos.token_ca);
-      db.setSysConfig(`lo_pending_name_${userId}`, pos.token_name || pos.token_ca.slice(0,8));
+      db.setSysConfig(`lo_pending_name_${userId}`, pos.token_name || pos.token_ca.slice(0,12));
       return buildTokenOrdersScreen(ctx, userId, pos.token_ca, false);
     }
 
@@ -89,7 +90,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
 
     if (data.startsWith("lo_setwallet_")) {
       const wId = parseInt(data.replace("lo_setwallet_", ""));
-      db.updateUser(userId, { active_wallet_id: wId });
+      db.setSysConfig(`lo_sel_wallet_${userId}`, String(wId));
       db.setSysConfig(`lo_wallet_expanded_${userId}`, "0");
       await ctx.answerCallbackQuery("✅ Wallet set!");
       const curMsg7 = ctx.callbackQuery?.message?.message_id;
