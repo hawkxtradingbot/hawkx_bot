@@ -181,6 +181,57 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
 
+    if (data.startsWith("lo_expiry_close_")) {
+      const id = parseInt(data.replace("lo_expiry_close_", ""));
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`lo_expiry_expand_${userId}`, "");
+      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      if (ca) return buildTokenOrdersScreen(ctx, userId, ca);
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
+    if (data.startsWith("lo_expiry_") && !data.startsWith("lo_setexp_") && !data.startsWith("lo_expiry_close_")) {
+      const id = parseInt(data.replace("lo_expiry_", ""));
+      await ctx.answerCallbackQuery();
+      // Set expiry-expand flag so the token screen shows expiry buttons inline under this order
+      db.setSysConfig(`lo_expiry_expand_${userId}`, String(id));
+      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      if (ca) return buildTokenOrdersScreen(ctx, userId, ca);
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
+    if (data.startsWith("lo_setexp_")) {
+      const rest = data.replace("lo_setexp_", "");
+      const parts = rest.split("_");
+      const id = parseInt(parts[0]);
+      const dur = parts[1];
+      if (dur === "custom") {
+        await ctx.answerCallbackQuery();
+        db.setSysConfig(`lo_expiry_pending_${userId}`, String(id));
+        const m = await ctx.reply("✏️ *Custom Expiry*\n\nEnter duration:\n• 30m (minutes)\n• 360h (hours)\n• 14d (days)\n• never", { parse_mode: "Markdown" });
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "lo_set_custom_expiry");
+        return true;
+      }
+      let expiresAt = null;
+      if (dur !== "never") {
+        const num = parseInt(dur);
+        const unit = dur.slice(-1);
+        let ms = 0;
+        if (unit === "h") ms = num * 3600000;
+        else if (unit === "d") ms = num * 86400000;
+        else if (unit === "m") ms = num * 60000;
+        expiresAt = new Date(Date.now() + ms).toISOString();
+      }
+      db.setLimitOrderExpiry(userId, id, expiresAt);
+      await ctx.answerCallbackQuery("✅ Expiry updated!");
+      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      db.setSysConfig(`lo_expiry_expand_${userId}`, "");
+      db.setSysConfig(`lo_selected_${userId}`, "");
+      if (ca) return buildTokenOrdersScreen(ctx, userId, ca);
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
     if (data === "menu_limit_orders" || data === "limit_orders_refresh") {
       await ctx.answerCallbackQuery();
       // Save message ID for same page editing

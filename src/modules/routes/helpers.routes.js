@@ -503,6 +503,18 @@ async function buildLaunchMsg(userId, expanded) {
   return { msg, kb };
 }
 
+function fmtExpiry(expiresAt) {
+  if (!expiresAt) return "♾ Never";
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return "⏰ Expired";
+  const d = Math.floor(ms / 86400000);
+  const hrs = Math.floor((ms % 86400000) / 3600000);
+  const mins = Math.floor((ms % 3600000) / 60000);
+  if (d > 0) return `⏰ ${d}d ${hrs}h`;
+  if (hrs > 0) return `⏰ ${hrs}h ${mins}m`;
+  return `⏰ ${mins}m`;
+}
+
 async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgId) {
   const { getMockPrice } = require("../executor");
   const tokenOrders = db.getLimitOrders(userId, ca);
@@ -519,21 +531,47 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
   const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
-  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy when price drops to target\n🔴 Sell when price rises to target\nTap an order to pause or delete.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy when price drops to target\n🔴 Sell when price rises to target\nTap an order → pause, delete, or set expiry.\n⏰ Orders expire in 48h by default.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
     const mcapLabel = o.target_mcap > 0
       ? `MC:${o.target_mcap >= 1000000 ? (o.target_mcap/1000000).toFixed(1)+"M" : (o.target_mcap/1000).toFixed(0)+"K"}`
       : `${parseFloat(o.target_price||0).toFixed(4)}`;
+    const exp = fmtExpiry(o.expires_at);
     const det = o.order_type === "buy"
-      ? `${status} Buy ${o.sol_amount||0.1}◎ @${mcapLabel}`
-      : `${status} Sell ${o.sell_pct||100}% @${mcapLabel}`;
+      ? `${status} Buy ${o.sol_amount||0.1}◎ @${mcapLabel} · ${exp}`
+      : `${status} Sell ${o.sell_pct||100}% @${mcapLabel} · ${exp}`;
     const isSelected = db.getSysConfig(`lo_selected_${userId}`) === String(o.id);
     kb.inline_keyboard.push([
       { text: det, callback_data: `lo_select_${o.id}` },
     ]);
+    const expiryExpanded = db.getSysConfig(`lo_expiry_expand_${userId}`) === String(o.id);
     if (isSelected) {
+      if (expiryExpanded) {
+        // Inline expiry buttons under this order
+        kb.inline_keyboard.push([
+          { text: "1h", callback_data: `lo_setexp_${o.id}_1h` },
+          { text: "12h", callback_data: `lo_setexp_${o.id}_12h` },
+          { text: "24h", callback_data: `lo_setexp_${o.id}_24h` },
+        ]);
+        kb.inline_keyboard.push([
+          { text: "48h", callback_data: `lo_setexp_${o.id}_48h` },
+          { text: "7d", callback_data: `lo_setexp_${o.id}_7d` },
+          { text: "30d", callback_data: `lo_setexp_${o.id}_30d` },
+        ]);
+        kb.inline_keyboard.push([
+          { text: "♾ Never", callback_data: `lo_setexp_${o.id}_never` },
+          { text: "✏️ Custom", callback_data: `lo_setexp_${o.id}_custom` },
+        ]);
+        kb.inline_keyboard.push([
+          { text: "▲ Close Expiry", callback_data: `lo_expiry_close_${o.id}` },
+        ]);
+      } else {
+        kb.inline_keyboard.push([
+          { text: "⏰ Set Expiry", callback_data: `lo_expiry_${o.id}` },
+        ]);
+      }
       kb.inline_keyboard.push([
         { text: o.paused ? "▶ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
         { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },

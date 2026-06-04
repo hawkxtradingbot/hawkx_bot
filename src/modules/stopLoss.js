@@ -266,6 +266,22 @@ async function checkLimitOrders(notifyFn) {
   for (const order of orders) {
     try {
       if (order.paused) continue;
+      // Check expiry — auto-cancel expired orders
+      if (order.expires_at) {
+        const expMs = new Date(order.expires_at).getTime();
+        if (Date.now() >= expMs) {
+          db.cancelLimitOrder(order.user_id, order.id);
+          if (notifyFn) {
+            notifyFn(order.user_id, "limit_order", {
+              message:
+                `⏰ *Order Expired*\n\n` +
+                `${order.order_type === "buy" ? "🟢 Buy" : "🔴 Sell"} *${order.token_name || order.token_ca.slice(0,8)}*\n` +
+                `This order expired and was cancelled.\n\nSet a new one anytime.`,
+            });
+          }
+          continue;
+        }
+      }
       // Don't trigger orders created less than 5 seconds ago
       const createdAt = new Date(order.created_at).getTime();
       if (Date.now() - createdAt < 5000) continue;

@@ -1037,6 +1037,33 @@ function setupMessages(bot) {
       db.setSysConfig(`rt_msg_${userId}`, String(s.message_id));
     }
 
+    if (pending === "lo_set_custom_expiry") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const id = parseInt(db.getSysConfig(`lo_expiry_pending_${userId}`) || "0");
+      const t = text.trim().toLowerCase();
+      let expiresAt = null;
+      if (t !== "never" && t !== "0") {
+        const num = parseInt(t);
+        const unit = t.slice(-1);
+        if (isNaN(num) || num <= 0) { await ctx.reply("❌ Invalid duration. Try 30m, 360h, 14d, or never."); return; }
+        let ms = 0;
+        if (unit === "h") ms = num * 3600000;
+        else if (unit === "d") ms = num * 86400000;
+        else if (unit === "m") ms = num * 60000;
+        else { await ctx.reply("❌ Use m, h, or d (e.g. 30m, 360h, 14d)."); return; }
+        expiresAt = new Date(Date.now() + ms).toISOString();
+      }
+      db.setLimitOrderExpiry(userId, id, expiresAt);
+      const ca = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
+      db.setSysConfig(`lo_selected_${userId}`, "");
+      const { buildTokenOrdersScreen } = require("./helpers.routes");
+      if (ca) return buildTokenOrdersScreen(ctx, userId, ca);
+      const { showLimitOrdersScreen } = require("./helpers.routes");
+      return showLimitOrdersScreen(ctx, userId);
+    }
+
     if (pending === "wl_alert_target") {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
