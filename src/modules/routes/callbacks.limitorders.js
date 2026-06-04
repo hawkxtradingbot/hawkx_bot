@@ -122,19 +122,10 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
     if (data === "lo_new_buy") {
       await ctx.answerCallbackQuery();
       db.setSysConfig(`lo_pending_ca_${userId}`, "");
-      const existingCa = db.getSysConfig(`lo_pending_ca_${userId}`) || "";
       db.setSysConfig(`lo_type_${userId}`, "buy");
-      if (existingCa) {
-        const { getMockPrice: gmp3 } = require("../executor");
-        const mp3 = gmp3(existingCa);
-        const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3.toFixed(8)}\n\nEnter price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
-        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-        db.setSysConfig(`pending_${userId}`, "lo_set_price");
-      } else {
-        const m = await ctx.reply("🟢 *New Limit Buy*\n\nPaste token CA:", { parse_mode: "Markdown" });
-        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-        db.setSysConfig(`pending_${userId}`, "lo_paste_ca");
-      }
+      const m = await ctx.reply("🟢 *New Limit Buy*\n\n━━━━━━━━━━━━━━━━━━━\nBuy a token automatically when it\ndrops to your target price.\n━━━━━━━━━━━━━━━━━━━\n\nPaste the token CA to begin:", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "lo_paste_ca");
       return true;
     }
 

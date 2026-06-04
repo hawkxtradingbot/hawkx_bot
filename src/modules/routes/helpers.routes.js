@@ -531,7 +531,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
   const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
-  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy when price drops to target\n🔴 Sell when price rises to target\nTap an order → pause, delete, or set expiry.\n⏰ Orders expire in 48h by default.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy executes at or below target price\n🔴 Sell executes at or above target price\n⏰ Orders expire in 48h (adjustable)\n\nTap any order to manage it.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
@@ -551,12 +551,8 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
       if (expiryExpanded) {
         // Inline expiry buttons under this order
         kb.inline_keyboard.push([
-          { text: "1h", callback_data: `lo_setexp_${o.id}_1h` },
           { text: "12h", callback_data: `lo_setexp_${o.id}_12h` },
           { text: "24h", callback_data: `lo_setexp_${o.id}_24h` },
-        ]);
-        kb.inline_keyboard.push([
-          { text: "48h", callback_data: `lo_setexp_${o.id}_48h` },
           { text: "7d", callback_data: `lo_setexp_${o.id}_7d` },
           { text: "30d", callback_data: `lo_setexp_${o.id}_30d` },
         ]);
@@ -567,15 +563,17 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
         kb.inline_keyboard.push([
           { text: "▲ Close Expiry", callback_data: `lo_expiry_close_${o.id}` },
         ]);
+        kb.inline_keyboard.push([
+          { text: o.paused ? "▶ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
+          { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },
+        ]);
       } else {
         kb.inline_keyboard.push([
           { text: "⏰ Set Expiry", callback_data: `lo_expiry_${o.id}` },
+          { text: o.paused ? "▶ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
+          { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },
         ]);
       }
-      kb.inline_keyboard.push([
-        { text: o.paused ? "▶ Resume" : "⏸ Pause", callback_data: `lo_pause_${o.id}` },
-        { text: "🗑 Delete", callback_data: `lo_del_${o.id}` },
-      ]);
     }
   });
   kb.inline_keyboard.push([
@@ -612,7 +610,7 @@ async function showLimitOrdersScreen(ctx, userId) {
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
   // Filter orders by selected wallet
   const walletOrders = orders.filter(o => o.wallet_id === selWalletId || (!o.wallet_id && selWalletId === parseInt(db.getUser(userId).active_wallet_id)));
-  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\nBuy or sell at your target price.\n💼 Pick a wallet, then tap a token.\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
+  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\nAutomate your entries and exits — set a\ntarget price and HawkX executes for you.\n\n🟢 Buy when price drops to your target\n🔴 Sell when price rises to your target\n\n💼 = in your wallet   🟢 = active order\n\nSelect a wallet, then choose a token.\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
   const kb = { inline_keyboard: [] };
   const loWalletExpanded = db.getSysConfig(`lo_wallet_expanded_${userId}`) === "1";
   if (loWalletExpanded) {
@@ -632,12 +630,16 @@ async function showLimitOrdersScreen(ctx, userId) {
   const tokenMap = {};
   allPos.forEach(p => { tokenMap[p.token_ca] = p; });
   walletOrders.forEach(o => { if (!tokenMap[o.token_ca]) tokenMap[o.token_ca] = { token_ca: o.token_ca, token_name: o.token_name }; });
+  const heldCas = new Set(allPos.map(p => p.token_ca));
   const tokenList = Object.values(tokenMap);
   for (let i = 0; i < tokenList.length; i += 3) {
     kb.inline_keyboard.push(tokenList.slice(i, i+3).map(p => {
       const tOrders = byToken[p.token_ca] || [];
+      const held = heldCas.has(p.token_ca);
       const allPaused = tOrders.length > 0 && tOrders.every(o => o.paused);
-      const icon = tOrders.length === 0 ? "" : allPaused ? " ⏸" : " 🟢";
+      const orderIcon = tOrders.length === 0 ? "" : allPaused ? "⏸" : "🟢";
+      const heldIcon = held ? "💼" : "";
+      const icon = (heldIcon || orderIcon) ? ` ${heldIcon}${orderIcon}` : "";
       const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
       const caKey2 = p.token_ca.slice(0,12);
       db.setSysConfig(`lo_ca_map_${userId}_${caKey2}`, p.token_ca);

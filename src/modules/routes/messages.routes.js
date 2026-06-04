@@ -243,13 +243,15 @@ function setupMessages(bot) {
       db.setSysConfig(`lo_pending_name_${userId}`, tName);
       const { getMockPrice: gmp2 } = require("../executor");
       const mockP = gmp2(text);
-      const priceStr = tInfo?.price ? `${formatPrice(tInfo.price)}` : `${mockP.toFixed(8)} [DEVNET]`;
-      const m = await ctx.reply(
-        `${loType === "buy" ? "🟢 Limit Buy" : "🔴 Limit Sell"} — *${tName}*\n\n` +
-        `💰 Current Price: ${priceStr}\n\n` +
-        `Enter price or MC (e.g. 0.0005 / 50K / 1M):`,
-        { parse_mode: "Markdown" }
-      );
+      const priceStr = tInfo?.price ? formatPrice(tInfo.price) : `${mockP.toFixed(8)} [DEVNET]`;
+      const dexUrl = `https://dexscreener.com/solana/${text}`;
+      let info = `${loType === "buy" ? "🟢 Limit Buy" : "🔴 Limit Sell"} — <a href="${dexUrl}"><b>${tName}</b></a>\n\n`;
+      info += `💲 Price: ${priceStr}\n`;
+      if (tInfo?.mcap) info += `📊 MCap: ${formatNum(tInfo.mcap)}\n`;
+      if (tInfo?.liquidity) info += `💧 Liquidity: ${formatNum(tInfo.liquidity)}\n`;
+      if (tInfo?.change24h) info += `📈 24h: ${tInfo.change24h > 0 ? "+" : ""}${tInfo.change24h.toFixed(1)}%\n`;
+      info += `\nEnter target price or MC (e.g. 0.0005 / 50K / 1M):`;
+      const m = await ctx.reply(info, { parse_mode: "HTML", disable_web_page_preview: true });
       db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_price");
       return;
