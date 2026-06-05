@@ -400,6 +400,12 @@ function getTradeHistory(userId, limit = 20) {
     .all(userId, limit);
 }
 
+function getCopyWalletTrades(userId, walletAddress, limit = 15) {
+  // Note: trades table has no source column yet. At mainnet, copy trades will be tagged.
+  // For now, return trades on the wallet_id linked to this copy wallet's target.
+  return getDb().prepare("SELECT * FROM trades WHERE user_id = ? AND platform LIKE '%copy%' ORDER BY timestamp DESC LIMIT ?").all(userId, limit);
+}
+
 function getTradeHistoryFiltered(userId, days = 1) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   return getDb().prepare("SELECT * FROM trades WHERE user_id = ? AND timestamp >= ? ORDER BY timestamp DESC")
@@ -992,7 +998,7 @@ module.exports = {
   getSettings, updateSettings,
   addWallet, getWallets, getWallet, getWalletById, countWallets, getWalletBalance,
   getWithdrawalWhitelist, addWithdrawalWhitelist, removeWithdrawalWhitelist,
-  recordTrade, getTradeHistory, getTradeHistoryFiltered,
+  recordTrade, getTradeHistory, getCopyWalletTrades, getTradeHistoryFiltered,
   getTodayStats, getUserStats, getWeeklyPnl, getMonthlyPnl,
   openPosition, getOpenPositions, getPositionsBySource,
   closePosition, getAllOpenPositions, setPositionNote, getPosition,

@@ -8,52 +8,117 @@ function buildCwScreen(cw, wallets, expanded = false) {
   const selWal = wallets.find(w => w.wallet_id === cw.wallet_id);
   const wIdx = selWal ? wallets.indexOf(selWal) + 1 : "—";
   const name = cw.label || cw.wallet_address.slice(0,16)+"...";
-  const msg =
-    `👛 *${name}*\n\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
-    `▸ All settings auto-save instantly\n` +
-    `▸ Copy Sell mirrors whale sells\n` +
-    `▸ Max/Min filters control trade size\n` +
-    `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `🎯 Address: \`${cw.wallet_address}\`\n\n` +
-    `💼 Wallet: *W${wIdx}*\n` +
-    `💰 Amount: *${cw.sol_amount} SOL*\n` +
-    `📉 Slippage: *${cw.slippage||50}%*\n` +
-    `⛽ Gas: *${cw.gas_fee||0.005} SOL*\n` +
-    `🛡 MEV: *${cw.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
-    `🔄 Copy Sell: *${cw.copy_sell ? "ON ✅" : "OFF ❌"}*\n` +
-    `🤖 Auto Sell: *${cw.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
-    `📊 Max: *${cw.max_sol||1} SOL* | Min: *${cw.min_sol||0} SOL*\n` +
-    `% Copy: *${cw.copy_pct||100}%* | ⏱ Delay: *${cw.delay_seconds||0}s*\n` +
-    `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${cw.trades_executed||0}*`;
+  const notifyOnly = cw.notify_only ? true : false;
+  let msg;
+  if (notifyOnly) {
+    msg =
+      `👛 *${name}*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `Mode: 🔔 *Notify Only*\n` +
+      `▸ Get alerts when this wallet trades\n` +
+      `▸ No auto-buying — just notifications\n` +
+      `━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🎯 Address: \`${cw.wallet_address}\`\n\n` +
+      `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}* | Alerts: *${cw.trades_executed||0}*`;
+  } else {
+    msg =
+      `👛 *${name}*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `Mode: 🤖 *Auto Copy*\n` +
+      `▸ Automatically mirrors this wallet's trades\n` +
+      `▸ All settings auto-save instantly\n` +
+      `━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🎯 Address: \`${cw.wallet_address}\`\n\n` +
+      `💼 Wallet: *W${wIdx}*\n` +
+      `💰 Amount: *${cw.sol_amount} SOL*\n` +
+      `📉 Slippage: *${cw.slippage||50}%*\n` +
+      `⛽ Gas: *${cw.gas_fee||0.005} SOL*\n` +
+      `🛡 MEV: *${cw.mev_protection ? "ON ✅" : "OFF ❌"}*\n` +
+      `🔄 Copy Sell: *${cw.copy_sell ? "ON ✅" : "OFF ❌"}*\n` +
+      `🤖 Auto Sell: *${cw.auto_sell_enabled ? "ON ✅" : "OFF ❌"}*\n` +
+      `📊 Max: *${cw.max_sol||1} SOL* | Min: *${cw.min_sol||0} SOL*\n` +
+      `% Copy: *${cw.copy_pct||100}%* | ⏱ Delay: *${cw.delay_seconds||0}s*\n` +
+      `Status: *${cw.active ? "🟢 Active" : "⏸ Paused"}* | Trades: *${cw.trades_executed||0}*`;
+  }
   const selWal2 = wallets.find(w => w.wallet_id === cw.wallet_id);
   const wIdx2 = selWal2 ? wallets.indexOf(selWal2) + 1 : "—";
   const wLabel2 = (selWal2?.label && !selWal2.label.match(/^W\d+$/)) ? ` ${selWal2.label}` : "";
   const wBtns = [];
-  if (expanded) {
-    for (let i = 0; i < wallets.length; i += 3) {
-      wBtns.push(wallets.slice(i,i+3).map((w,idx) => {
-        const num = i+idx+1;
-        const l = (w.label&&!w.label.match(/^W\d+$/))?  ` ${w.label}`:"";
-        return { text: w.wallet_id===cw.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20), callback_data: `cw_setwallet_edit_${cw.id}_${w.wallet_id}` };
-      }));
+  const kbRows = [];
+  // Mode toggle row (always shown)
+  kbRows.push([
+    { text: notifyOnly ? "🔔 Notify Only ✅" : "🔔 Notify Only", callback_data: `cw_mode_notify_${cw.id}` },
+    { text: !notifyOnly ? "🤖 Auto Copy ✅" : "🤖 Auto Copy", callback_data: `cw_mode_copy_${cw.id}` },
+  ]);
+  if (!notifyOnly) {
+    // Full settings only in Auto Copy mode
+    if (expanded) {
+      for (let i = 0; i < wallets.length; i += 3) {
+        wBtns.push(wallets.slice(i,i+3).map((w,idx) => {
+          const num = i+idx+1;
+          const l = (w.label&&!w.label.match(/^W\d+$/))?  ` ${w.label}`:"";
+          return { text: w.wallet_id===cw.wallet_id?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20), callback_data: `cw_setwallet_edit_${cw.id}_${w.wallet_id}` };
+        }));
+      }
+      wBtns.push([{ text: "▲ Close", callback_data: `cw_wallet_collapse_${cw.id}` }]);
+      kbRows.push(...wBtns);
+    } else {
+      kbRows.push([{ text: `💼 W${wIdx2}${wLabel2} ✅ ▼`, callback_data: `cw_wallet_expand_${cw.id}` }]);
     }
-    wBtns.push([{ text: "▲ Close", callback_data: `cw_wallet_collapse_${cw.id}` }]);
+    kbRows.push([{ text: `💰 ${cw.sol_amount}SOL`, callback_data: `cw_edit_amount_${cw.id}` }, { text: `📉 ${cw.slippage||50}%`, callback_data: `cw_edit_slip_${cw.id}` }, { text: `⛽ ${cw.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${cw.id}` }]);
+    kbRows.push([{ text: cw.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${cw.id}` }]);
+    kbRows.push([{ text: `📊 Max: ${cw.max_sol||1} SOL`, callback_data: `cw_edit_max_${cw.id}` }, { text: `📊 Min: ${cw.min_sol||0} SOL`, callback_data: `cw_edit_min_${cw.id}` }]);
+    kbRows.push([{ text: `% Copy: ${cw.copy_pct||100}%`, callback_data: `cw_edit_pct_${cw.id}` }, { text: `⏱ Delay: ${cw.delay_seconds||0}s`, callback_data: `cw_edit_delay_${cw.id}` }]);
+    kbRows.push([{ text: cw.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_copysell_screen_${cw.id}` }, { text: cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${cw.id}` }]);
   }
-  const kb = { inline_keyboard: [
-    expanded ? [] : [{ text: `💼 W${wIdx2}${wLabel2} ✅ ▼`, callback_data: `cw_wallet_expand_${cw.id}` }],
-    ...wBtns,
-    [{ text: `💰 ${cw.sol_amount}SOL`, callback_data: `cw_edit_amount_${cw.id}` }, { text: `📉 ${cw.slippage||50}%`, callback_data: `cw_edit_slip_${cw.id}` }, { text: `⛽ ${cw.gas_fee||0.005}SOL`, callback_data: `cw_edit_gas_${cw.id}` }],
-    [{ text: cw.mev_protection ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: `cw_edit_mev_${cw.id}` }],
-    [{ text: `📊 Max: ${cw.max_sol||1} SOL`, callback_data: `cw_edit_max_${cw.id}` }, { text: `📊 Min: ${cw.min_sol||0} SOL`, callback_data: `cw_edit_min_${cw.id}` }],
-    [{ text: `% Copy: ${cw.copy_pct||100}%`, callback_data: `cw_edit_pct_${cw.id}` }, { text: `⏱ Delay: ${cw.delay_seconds||0}s`, callback_data: `cw_edit_delay_${cw.id}` }],
-    [{ text: cw.copy_sell ? "🔄 Copy Sell: ON ✅" : "🔄 Copy Sell: OFF ❌", callback_data: `cw_edit_copysell_${cw.id}` }, { text: cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", callback_data: `cw_autosell_${cw.id}` }],
-    [{ text: "✏️ Rename", callback_data: `cw_rename_${cw.id}` }, { text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${cw.id}` }],
-    [{ text: "← Back", callback_data: "copy_wallet_menu" }, { text: "🗑 Delete", callback_data: `copy_wallet_delete_${cw.id}` }],
-  ]};
+  // Common rows
+  kbRows.push([{ text: "📜 History", callback_data: `cw_history_${cw.id}` }, { text: "✏️ Rename", callback_data: `cw_rename_${cw.id}` }, { text: cw.active ? "⏸ Pause" : "▶ Resume", callback_data: `copy_wallet_toggle_${cw.id}` }]);
+  kbRows.push([{ text: "← Back", callback_data: "copy_wallet_menu" }, { text: "🗑 Delete", callback_data: `copy_wallet_delete_${cw.id}` }]);
+  const kb = { inline_keyboard: kbRows };
   return { msg, kb };
 }
 
+
+
+function buildCopySellScreen(cw) {
+  const on = cw.copy_sell ? true : false;
+  const mode = cw.cs_mode || "default";
+  let msg = `🔄 *Copy Sell — ${cw.label || cw.wallet_address.slice(0,12)}*\n\n━━━━━━━━━━━━━━━━━━━\nAutomatically mirror this wallet's exits.\nWhen the whale sells, you sell too.\n━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg += `Status: ${on ? "🟢 ON" : "🔴 OFF"}\n`;
+  msg += `Mode: ${mode === "default" ? "🎯 Default — match their exact sell %" : "🔧 Custom Filters"}\n\n`;
+  if (mode === "default") {
+    msg += `📖 *How it works:*\n🎯 Default → whale sells 30%, you sell 30%\n🔧 Custom → add profit/loss safety rules`;
+  } else {
+    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n\n` +
+      `📈 Min Profit Lock: *${cw.cs_min_profit||0}%*\n` +
+      `🛑 Stop Loss Override: *${cw.cs_stop_loss||0}%*\n` +
+      `🧹 Ignore Dust: *${cw.cs_ignore_dust||0}%*\n` +
+      `⏱ Sell Delay: *${cw.cs_sell_delay||0}s*`;
+  }
+  const kb = { inline_keyboard: [] };
+  // Single toggle button
+  kb.inline_keyboard.push([
+    { text: on ? "🟢 Copy Sell: ON" : "🔴 Copy Sell: OFF", callback_data: `cw_cs_toggle_${cw.id}` },
+  ]);
+  // Mode buttons always visible
+  kb.inline_keyboard.push([
+    { text: mode === "default" ? "🎯 Default ✅" : "🎯 Default", callback_data: `cw_cs_default_${cw.id}` },
+    { text: mode === "custom" ? "🔧 Custom ✅" : "🔧 Custom", callback_data: `cw_cs_custom_${cw.id}` },
+  ]);
+  // Filter buttons only in custom mode
+  if (mode === "custom") {
+    kb.inline_keyboard.push([
+      { text: `📈 Min Profit: ${cw.cs_min_profit||0}%`, callback_data: `cw_cs_minprofit_${cw.id}` },
+      { text: `🛑 Stop Loss: ${cw.cs_stop_loss||0}%`, callback_data: `cw_cs_stoploss_${cw.id}` },
+    ]);
+    kb.inline_keyboard.push([
+      { text: `🧹 Dust: ${cw.cs_ignore_dust||0}%`, callback_data: `cw_cs_dust_${cw.id}` },
+      { text: `⏱ Delay: ${cw.cs_sell_delay||0}s`, callback_data: `cw_cs_delay_${cw.id}` },
+    ]);
+  }
+  kb.inline_keyboard.push([{ text: "← Back", callback_data: `copy_wallet_view_${cw.id}` }]);
+  return { msg, kb };
+}
 
 // ── Helper: build copy channel screen ──────────────────────────
 function buildChScreen(ch, expanded = false) {
@@ -142,6 +207,109 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_follow_address");
       return;
+    }
+
+    if (data.startsWith("cw_mode_notify_")) {
+      const id = parseInt(data.replace("cw_mode_notify_", ""));
+      db.getDb().prepare("UPDATE copy_wallets SET notify_only = 1 WHERE id = ? AND user_id = ?").run(id, userId);
+      await ctx.answerCallbackQuery("🔔 Notify Only mode");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(cw, wallets);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_mode_copy_")) {
+      const id = parseInt(data.replace("cw_mode_copy_", ""));
+      db.getDb().prepare("UPDATE copy_wallets SET notify_only = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+      await ctx.answerCallbackQuery("🤖 Auto Copy mode");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const wallets = db.getWallets(userId) || [];
+      const { msg, kb } = buildCwScreen(cw, wallets);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_copysell_screen_")) {
+      const id = parseInt(data.replace("cw_copysell_screen_", ""));
+      await ctx.answerCallbackQuery();
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      if (!cw) return;
+      const { msg, kb } = buildCopySellScreen(cw);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_toggle_")) {
+      const id = parseInt(data.replace("cw_cs_toggle_", ""));
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      if (!cw) return;
+      if (cw.copy_sell) {
+        db.getDb().prepare("UPDATE copy_wallets SET copy_sell = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+        await ctx.answerCallbackQuery("🔴 Copy Sell OFF");
+      } else {
+        db.getDb().prepare("UPDATE copy_wallets SET copy_sell = 1, auto_sell_enabled = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+        await ctx.answerCallbackQuery("🟢 Copy Sell ON");
+      }
+      const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const { msg, kb } = buildCopySellScreen(updated);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_default_")) {
+      const id = parseInt(data.replace("cw_cs_default_", ""));
+      db.getDb().prepare("UPDATE copy_wallets SET cs_mode = 'default' WHERE id = ? AND user_id = ?").run(id, userId);
+      await ctx.answerCallbackQuery("🎯 Default mode");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const { msg, kb } = buildCopySellScreen(cw);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_custom_")) {
+      const id = parseInt(data.replace("cw_cs_custom_", ""));
+      db.getDb().prepare("UPDATE copy_wallets SET cs_mode = 'custom' WHERE id = ? AND user_id = ?").run(id, userId);
+      await ctx.answerCallbackQuery("🔧 Custom Filters mode");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      const { msg, kb } = buildCopySellScreen(cw);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_minprofit_") || data.startsWith("cw_cs_stoploss_") || data.startsWith("cw_cs_dust_") || data.startsWith("cw_cs_delay_")) {
+      let field, label, id;
+      if (data.startsWith("cw_cs_minprofit_")) { field = "cs_min_profit"; label = "📈 Enter Min Profit Lock % (e.g. 20):"; id = parseInt(data.replace("cw_cs_minprofit_", "")); }
+      else if (data.startsWith("cw_cs_stoploss_")) { field = "cs_stop_loss"; label = "🛑 Enter Stop Loss Override % (e.g. 30):"; id = parseInt(data.replace("cw_cs_stoploss_", "")); }
+      else if (data.startsWith("cw_cs_dust_")) { field = "cs_ignore_dust"; label = "🧹 Enter Ignore Dust % (e.g. 10):"; id = parseInt(data.replace("cw_cs_dust_", "")); }
+      else { field = "cs_sell_delay"; label = "⏱ Enter Sell Delay seconds (e.g. 5):"; id = parseInt(data.replace("cw_cs_delay_", "")); }
+      await ctx.answerCallbackQuery();
+      // Save the Copy Sell screen message id to edit it back after input
+      const csMsgId = ctx.callbackQuery?.message?.message_id;
+      if (csMsgId) db.setSysConfig(`cs_screen_msg_${userId}`, String(csMsgId));
+      db.setSysConfig(`cs_pending_${userId}`, JSON.stringify({ id, field }));
+      const m = await ctx.reply(label, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_cs_setvalue");
+      return true;
+    }
+
+    if (data.startsWith("cw_history_")) {
+      const id = parseInt(data.replace("cw_history_", ""));
+      await ctx.answerCallbackQuery();
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
+      if (!cw) return;
+      const name = cw.label || cw.wallet_address.slice(0,12);
+      const trades = db.getCopyWalletTrades(userId, cw.wallet_address, 15);
+      let msg = `📜 *${name} — History*\n\n━━━━━━━━━━━━━━━━━━━\n`;
+      if (!trades.length) {
+        msg += "_No copy trades yet._\n\nWhen this wallet trades and HawkX copies it, the activity will show here.\n━━━━━━━━━━━━━━━━━━━";
+      } else {
+        trades.forEach(t => {
+          const icon = t.action === "buy" ? "🟢" : "🔴";
+          const when = t.timestamp ? new Date(t.timestamp).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
+          const tn = t.token_name || t.token_ca?.slice(0,8) || "Token";
+          msg += `${icon} ${t.action === "buy" ? "Bought" : "Sold"} *${tn}* · ${(t.sol_amount||0).toFixed(3)} SOL\n   ${when}\n`;
+        });
+        msg += "━━━━━━━━━━━━━━━━━━━";
+      }
+      msg += "\n\n💡 _Whale's own activity tracking coming at mainnet._";
+      return safeEdit(ctx, msg, { inline_keyboard: [[{ text: "← Back", callback_data: `copy_wallet_view_${id}` }]] });
     }
 
     if (data.startsWith("cw_wallet_expand_")) {
@@ -407,11 +575,13 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
           await ctx.answerCallbackQuery("Not found.");
           return;
         }
-        db.getDb()
-          .prepare(
-            "UPDATE copy_wallets SET auto_sell_enabled = ? WHERE id = ? AND user_id = ?",
-          )
-          .run(cw.auto_sell_enabled ? 0 : 1, id, userId);
+        const newAutoSell = cw.auto_sell_enabled ? 0 : 1;
+        if (newAutoSell) {
+          // Turning Auto Sell ON → turn Copy Sell OFF (mutual exclusion)
+          db.getDb().prepare("UPDATE copy_wallets SET auto_sell_enabled = 1, copy_sell = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+        } else {
+          db.getDb().prepare("UPDATE copy_wallets SET auto_sell_enabled = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+        }
         await ctx.answerCallbackQuery(
           cw.auto_sell_enabled ? "🤖 Auto Sell OFF" : "🤖 Auto Sell ON ✅",
         );
@@ -547,7 +717,13 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const id = parseInt(data.replace("cw_edit_copysell_", ""));
       const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
       if (!cw) { await ctx.answerCallbackQuery("Not found."); return; }
-      db.getDb().prepare("UPDATE copy_wallets SET copy_sell = ? WHERE id = ? AND user_id = ?").run(cw.copy_sell ? 0 : 1, id, userId);
+      const newCopySell = cw.copy_sell ? 0 : 1;
+      if (newCopySell) {
+        // Turning Copy Sell ON → turn Auto Sell OFF (mutual exclusion)
+        db.getDb().prepare("UPDATE copy_wallets SET copy_sell = 1, auto_sell_enabled = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+      } else {
+        db.getDb().prepare("UPDATE copy_wallets SET copy_sell = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+      }
       await ctx.answerCallbackQuery(cw.copy_sell ? "🔄 Copy Sell OFF" : "🔄 Copy Sell ON ✅");
       const updated = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(id, userId);
       const wallets = db.getWallets(userId) || [];
@@ -1249,4 +1425,4 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     return false;
 }
 
-module.exports = { handleCopyTradeCallbacks, buildCwScreen, buildChScreen };
+module.exports = { handleCopyTradeCallbacks, buildCwScreen, buildChScreen, buildCopySellScreen };

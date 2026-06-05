@@ -1066,6 +1066,28 @@ function setupMessages(bot) {
       return showLimitOrdersScreen(ctx, userId);
     }
 
+    if (pending === "cw_cs_setvalue") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      let cfg = {}; try { cfg = JSON.parse(db.getSysConfig(`cs_pending_${userId}`) || "{}"); } catch {}
+      const val = parseFloat(text);
+      if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid value. Enter a number."); return; }
+      const allowed = ["cs_min_profit", "cs_stop_loss", "cs_ignore_dust", "cs_sell_delay"];
+      if (!allowed.includes(cfg.field)) { await ctx.reply("❌ Error."); return; }
+      const finalVal = cfg.field === "cs_sell_delay" ? Math.floor(val) : val;
+      db.getDb().prepare(`UPDATE copy_wallets SET ${cfg.field} = ? WHERE id = ? AND user_id = ?`).run(finalVal, cfg.id, userId);
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cfg.id, userId);
+      const { buildCopySellScreen } = require("./callbacks.copytrade");
+      const { msg, kb } = buildCopySellScreen(cw);
+      const csMsgId = parseInt(db.getSysConfig(`cs_screen_msg_${userId}`) || "0");
+      if (csMsgId) {
+        try { await ctx.api.editMessageText(ctx.chat.id, csMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {}
+      }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+
     if (pending === "wl_alert_target") {
       await deleteMsg(ctx, promptId);
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
