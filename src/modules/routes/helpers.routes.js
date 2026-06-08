@@ -213,6 +213,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
   const mev = db.getSysConfig(`cw_pending_mev_${userId}`) !== "0";
   let copySell = db.getSysConfig(`cw_pending_copysell_${userId}`) !== "0";
   let autoSell = db.getSysConfig(`cw_pending_autosell_${userId}`) === "1";
+  const notifyOnly = db.getSysConfig(`cw_pending_notify_${userId}`) === "1";
   if (autoSell && copySell) { copySell = false; db.setSysConfig(`cw_pending_copysell_${userId}`, "0"); }
   const wallets = db.getWallets(userId) || [];
   const selWal = wallets.find((w) => w.wallet_id === walletId);
@@ -249,6 +250,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
     `⏱ *Delay* — wait X sec before copying\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
     `📋 *Current Settings:*\n` +
+    `🎮 Mode: ${notifyOnly ? "🔔 Notify Only" : "🤖 Auto Copy"}\n` +
     `🎯 Follow: ${addr ? `\`${addr}\`` : "❗ Not set"}\n` +
     `📝 Name: ${stripMd(name) || "Not set"}\n` +
     `💼 Wallet: W${walletIdx} ✅\n` +
@@ -267,6 +269,8 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
 
   const keyboard = {
     inline_keyboard: [
+      [{ text: notifyOnly ? "🔔 Notify Only ✅" : "🔔 Notify Only", callback_data: "cw_setup_mode_notify" },
+       { text: !notifyOnly ? "🤖 Auto Copy ✅" : "🤖 Auto Copy", callback_data: "cw_setup_mode_copy" }],
       [{ text: "🎯 Paste Follow Address", callback_data: "cw_paste_address" },
        { text: "📝 Set Name", callback_data: "cw_set_name" }],
       ...(expanded
@@ -277,7 +281,7 @@ async function showCwSetupScreen(ctx, userId, chatId = null) {
        { text: `📊 ${slippage}%`, callback_data: "cw_set_slippage" },
        { text: `⛽ ${gas}SOL`, callback_data: "cw_set_gas" }],
       [{ text: mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: "cw_toggle_mev" }],
-      [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_toggle_copysell" },
+      [{ text: `🔄 Copy Sell: ${copySell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_setup_copysell_screen" },
        { text: `🤖 Auto Sell: ${autoSell ? "ON ✅" : "OFF ❌"}`, callback_data: "cw_setup_autosell" }],
       [{ text: `📊 Max: ${db.getSysConfig(`cw_pending_max_${userId}`) || 1} SOL`, callback_data: "cw_set_max" }, { text: `📊 Min: ${db.getSysConfig(`cw_pending_min_${userId}`) || 0} SOL`, callback_data: "cw_set_min" }],
       [{ text: `% Copy: ${db.getSysConfig(`cw_pending_pct_${userId}`) || 100}%`, callback_data: "cw_set_pct" }, { text: `⏱ Delay: ${db.getSysConfig(`cw_pending_delay_${userId}`) || 0}s`, callback_data: "cw_set_delay" }],
@@ -666,21 +670,237 @@ async function showLimitOrdersScreen(ctx, userId) {
     db.setSysConfig(`lo_msg_${userId}`, String(s.message_id));
   }
 }
+
+// Launch metadata form — adapts per launchpad
+// SOL price for graduation $ estimates. At mainnet, fetch live.
+const SOL_PRICE_USD = 63;
+// SOL price for graduation $ estimates. At mainnet, fetch live.
+const LAUNCHPAD_INFO = {
+  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85 },
+  launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85 },
+  meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0 },
+  letsbonk:  { name: "LetsBonk", icon: "🟡", advanced: false, fee: "Free mint · small grad fee", gradSol: 85 },
+  moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · small grad fee", gradSol: 0 },
+};
+
+function buildLaunchForm(userId) {
+  const lp = db.getSysConfig(`launch_lp_${userId}`) || "pump";
+  const info = LAUNCHPAD_INFO[lp] || LAUNCHPAD_INFO.pump;
+  const name = db.getSysConfig(`launch_f_name_${userId}`) || "";
+  const symbol = db.getSysConfig(`launch_f_symbol_${userId}`) || "";
+  const desc = db.getSysConfig(`launch_f_desc_${userId}`) || "";
+  const image = db.getSysConfig(`launch_f_image_${userId}`) || "";
+  const xUrl = db.getSysConfig(`launch_f_x_${userId}`) || "";
+  const tg = db.getSysConfig(`launch_f_tg_${userId}`) || "";
+  const web = db.getSysConfig(`launch_f_web_${userId}`) || "";
+  const devBuy = db.getSysConfig(`launch_f_devbuy_${userId}`) || "0";
+  // advanced
+  const supply = db.getSysConfig(`launch_f_supply_${userId}`) || "1000000000";
+  const curve = db.getSysConfig(`launch_f_curve_${userId}`) || "justsendit";
+  const grad = db.getSysConfig(`launch_f_grad_${userId}`) || "85";
+  const vesting = db.getSysConfig(`launch_f_vesting_${userId}`) === "1";
+  const revokeMint = db.getSysConfig(`launch_f_revokemint_${userId}`) !== "0";
+  const revokeFreeze = db.getSysConfig(`launch_f_revokefreeze_${userId}`) !== "0";
+  const burnLp = db.getSysConfig(`launch_f_burnlp_${userId}`) === "1";
+  const maxWallet = db.getSysConfig(`launch_f_maxwallet_${userId}`) || "0";
+  const bundleWallets = db.getSysConfig(`launch_f_bundlewallets_${userId}`) || "0";
+  const bundlePer = db.getSysConfig(`launch_f_bundleper_${userId}`) || "0";
+  const discord = db.getSysConfig(`launch_f_discord_${userId}`) || "";
+  const vestingDays = db.getSysConfig(`launch_f_vestingdays_${userId}`) || "30";
+  const bundleIds = (db.getSysConfig(`launch_f_bundleids_${userId}`) || "").split(",").filter(Boolean);
+  const bundleExpanded = db.getSysConfig(`launch_f_bundle_exp_${userId}`) === "1";
+  const bundleMode = db.getSysConfig(`launch_f_bundlemode_${userId}`) || "same";
+  const advExpanded = db.getSysConfig(`launch_f_adv_exp_${userId}`) === "1";
+  const antisnipe = db.getSysConfig(`launch_f_antisnipe_${userId}`) || "0";
+  const buyback = db.getSysConfig(`launch_f_buyback_${userId}`) || "0";
+  const initPrice = db.getSysConfig(`launch_f_initprice_${userId}`) || "0";
+  const vestPct = db.getSysConfig(`launch_f_vestpct_${userId}`) || "0";
+  const vestCliff = db.getSysConfig(`launch_f_vestcliff_${userId}`) || "0";
+  let bundleAmounts = {};
+  try { bundleAmounts = JSON.parse(db.getSysConfig(`launch_f_bundleamounts_${userId}`) || "{}"); } catch {}
+
+  const ck = (v) => v ? "✅" : "⬜";
+  const bundleIds2 = (db.getSysConfig(`launch_f_bundleids_${userId}`) || "").split(",").filter(Boolean);
+  const sched2 = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
+  const gradStr = info.gradSol > 0 ? `graduates at ${info.gradSol} SOL (~${Math.round(info.gradSol * SOL_PRICE_USD / 1000)}K @ ${SOL_PRICE_USD}/SOL)` : "dynamic bonding curve";
+  let msg = `${info.icon} *Launch on ${info.name}*\n\n━━━━━━━━━━━━━━━━━━━\n💸 ${info.fee}\n🎓 ${gradStr}\n━━━━━━━━━━━━━━━━━━━\n\n📖 *How it works:* Tap each field below to\nset it — your values appear on the buttons.\nName & Symbol are required. Open ⚙️ Advanced\nfor supply, bundle buy, anti-snipe & more.\n`;
+  if (desc) msg += `\n📄 ${stripMd(desc).slice(0,150)}\n`;
+  if (bundleIds2.length) msg += `🎁 Bundle: ${bundleIds2.length} wallet(s) buy at launch\n`;
+  if (sched2) msg += `🕐 Scheduled: ${sched2}\n`;
+  if (info.advanced) {
+    msg += `\n⚙️ *Advanced:*\n`;
+    msg += `📦 Supply: *${supply}*\n`;
+    msg += `📈 Curve: *${curve}*\n`;
+    msg += `🎓 Graduation: *${grad} SOL*\n`;
+    msg += `💎 Vesting: *${vesting ? "ON" : "OFF"}*\n`;
+    if (vesting) msg += `   ↳ ${vestPct}% over ${vestingDays}d, cliff ${vestCliff}d\n`;
+    if (info.advanced) msg += `💲 Initial Price: *${initPrice > 0 ? initPrice : "auto"}*\n`;
+    msg += `🔒 Revoke Mint: *${revokeMint ? "ON" : "OFF"}* · 🔒 Freeze: *${revokeFreeze ? "ON" : "OFF"}*\n`;
+    msg += `🔥 Burn LP: *${burnLp ? "ON" : "OFF"}* · 👥 Max Wallet: *${maxWallet > 0 ? maxWallet+"%" : "OFF"}*\n`;
+  }
+  // Wallet selector
+  const wallets = db.getWallets(userId) || [];
+  const freshUser = db.getUser(userId);
+  const launchWalletId = parseInt(db.getSysConfig(`launch_f_wallet_${userId}`)) || freshUser.active_wallet_id;
+  const selWal = wallets.find(w => w.wallet_id === launchWalletId) || wallets[0];
+  const walletNum = selWal ? wallets.indexOf(selWal) + 1 : 1;
+  const balance = selWal ? parseFloat(db.getSysConfig(`mock_balance_${selWal.public_key}`) || "0") : 0;
+  const walletExpanded = db.getSysConfig(`launch_wallet_exp_${userId}`) === "1";
+  let totalBundle = 0;
+  if (bundleMode === "custom") {
+    bundleIds.forEach(id => { totalBundle += parseFloat(bundleAmounts[id] || 0); });
+  } else {
+    totalBundle = bundleIds.length * (parseFloat(bundlePer)||0);
+  }
+  const schedule = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
+  msg += `\n💰 Dev Buy: *${devBuy} SOL*\n`;
+  msg += `🎁 Bundle (${bundleMode}): *${bundleIds.length} wallets = ${totalBundle.toFixed(2)} SOL*\n`;
+  msg += `🕐 Schedule: *${schedule ? schedule : "Launch now"}*\n`;
+  msg += `🛡 Anti-Snipe: *${antisnipe > 0 ? antisnipe+"s" : "OFF"}* · 🔁 Buyback: *${buyback > 0 ? buyback+"%" : "OFF"}*\n`;
+  msg += `\n💼 Wallet: *W${walletNum}* — ${balance.toFixed(3)} SOL`;
+
+  const kb = { inline_keyboard: [] };
+  // Wallet selector row
+  if (walletExpanded) {
+    for (let i = 0; i < wallets.length; i += 3) {
+      kb.inline_keyboard.push(wallets.slice(i, i+3).map((w, idx) => {
+        const num = i+idx+1;
+        const l = (w.label && !w.label.match(/^W\d+$/)) ? ` ${w.label}` : "";
+        const wb = parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0");
+        return { text: (w.wallet_id === launchWalletId ? `W${num}${l} ✅ ${wb.toFixed(1)}◎` : `W${num}${l} ${wb.toFixed(1)}◎`).slice(0,20), callback_data: `launch_f_setwallet_${w.wallet_id}` };
+      }));
+    }
+    kb.inline_keyboard.push([{ text: "▲ Close", callback_data: "launch_f_wallet_close" }]);
+  } else {
+    kb.inline_keyboard.push([{ text: `💼 W${walletNum} — ${balance.toFixed(2)} SOL ▼`, callback_data: "launch_f_wallet_open" }, { text: "📖 Guide", callback_data: "launch_f_guide" }]);
+  }
+  // Name + Symbol show their values on the button
+  kb.inline_keyboard.push([
+    { text: name ? `📝 ${stripMd(name).slice(0,16)}` : "📝 Name", callback_data: "launch_f_name" },
+    { text: symbol ? `🔤 ${stripMd(symbol).slice(0,12)}` : "🔤 Symbol", callback_data: "launch_f_symbol" },
+  ]);
+  kb.inline_keyboard.push([
+    { text: `📄 Description ${ck(desc)}`, callback_data: "launch_f_desc" },
+    { text: `🖼 Image ${ck(image)}`, callback_data: "launch_f_image" },
+  ]);
+  kb.inline_keyboard.push([
+    { text: `🐦 X ${ck(xUrl)}`, callback_data: "launch_f_x" },
+    { text: `✈️ TG ${ck(tg)}`, callback_data: "launch_f_tg" },
+    { text: `🌐 Web ${ck(web)}`, callback_data: "launch_f_web" },
+    { text: `💬 ${ck(discord)}`, callback_data: "launch_f_discord" },
+  ]);
+  // Advanced toggle (collapsed by default)
+  const advCount = [name,symbol].filter(Boolean).length; // placeholder
+  kb.inline_keyboard.push([{ text: advExpanded ? "⚙️ Advanced ▲" : "⚙️ Advanced ▼", callback_data: "launch_f_adv_toggle" }]);
+  if (advExpanded && info.advanced) {
+    kb.inline_keyboard.push([
+      { text: `📦 Supply`, callback_data: "launch_f_supply" },
+      { text: curve === "justsendit" ? "📈 justsendit ✅" : "📈 Custom", callback_data: "launch_f_curve" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: `🎓 Grad: ${grad} SOL`, callback_data: "launch_f_grad" },
+      { text: vesting ? "💎 Vesting: ON" : "💎 Vesting: OFF", callback_data: "launch_f_vesting" },
+    ]);
+    if (vesting) {
+      kb.inline_keyboard.push([
+        { text: vestingDays === "30" ? "30d ✅" : "30d", callback_data: "launch_f_vd_30" },
+        { text: vestingDays === "60" ? "60d ✅" : "60d", callback_data: "launch_f_vd_60" },
+        { text: vestingDays === "90" ? "90d ✅" : "90d", callback_data: "launch_f_vd_90" },
+      ]);
+      kb.inline_keyboard.push([
+        { text: `💎 Vest %: ${vestPct}%`, callback_data: "launch_f_vestpct" },
+        { text: `⏳ Cliff: ${vestCliff}d`, callback_data: "launch_f_vestcliff" },
+      ]);
+    }
+    kb.inline_keyboard.push([
+      { text: `💲 Initial Price: ${initPrice > 0 ? initPrice : "auto"}`, callback_data: "launch_f_initprice" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: revokeMint ? "🔒 Mint: ON" : "🔒 Mint: OFF", callback_data: "launch_f_revokemint" },
+      { text: revokeFreeze ? "🔒 Freeze: ON" : "🔒 Freeze: OFF", callback_data: "launch_f_revokefreeze" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: burnLp ? "🔥 Burn LP: ON" : "🔥 Burn LP: OFF", callback_data: "launch_f_burnlp" },
+      { text: `👥 Max Wallet: ${maxWallet > 0 ? maxWallet+"%" : "OFF"}`, callback_data: "launch_f_maxwallet" },
+    ]);
+  }
+  // Bundle selector — inside Advanced
+  if (advExpanded && bundleExpanded) {
+    const devWalletId = parseInt(db.getSysConfig(`launch_f_wallet_${userId}`)) || (db.getUser(userId)||{}).active_wallet_id;
+    const bundleable = wallets.filter(w => w.wallet_id !== devWalletId);
+    // Mode toggle
+    kb.inline_keyboard.push([
+      { text: bundleMode === "same" ? "💰 Same Amount ✅" : "💰 Same Amount", callback_data: "launch_f_bundlemode_same" },
+      { text: bundleMode === "custom" ? "🔧 Custom Each ✅" : "🔧 Custom Each", callback_data: "launch_f_bundlemode_custom" },
+    ]);
+    // Wallet buttons 4 per row with real names
+    for (let i = 0; i < bundleable.length; i += 4) {
+      kb.inline_keyboard.push(bundleable.slice(i, i+4).map((w) => {
+        const num = wallets.indexOf(w) + 1;
+        const sel = bundleIds.includes(String(w.wallet_id));
+        const nm = (w.label && !w.label.match(/^W\d+$/)) ? w.label : `W${num}`;
+        const wBal = parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0");
+        const need = (bundleMode === "custom" ? (parseFloat(bundleAmounts[w.wallet_id]||0)) : (parseFloat(bundlePer)||0)) + 0.02;
+        const lowFunds = sel && wBal < need;
+        let label = sel ? `${nm} ✅` : nm;
+        if (sel && bundleMode === "custom") label = `${nm}:${bundleAmounts[w.wallet_id]||0}`;
+        if (lowFunds) label = "⚠️" + label;
+        return { text: label.slice(0,18), callback_data: `launch_f_bundletoggle_${w.wallet_id}` };
+      }));
+    }
+    if (bundleMode === "same") {
+      kb.inline_keyboard.push([{ text: `💰 Per Wallet: ${bundlePer} SOL`, callback_data: "launch_f_bundleper" }]);
+    }
+    kb.inline_keyboard.push([{ text: "▲ Close Bundle", callback_data: "launch_f_bundle_close" }]);
+  } else if (advExpanded) {
+    kb.inline_keyboard.push([
+      { text: `🎁 Bundle: ${bundleIds.length} wallets ▼`, callback_data: "launch_f_bundle_open" },
+    ]);
+  }
+  if (advExpanded) {
+    kb.inline_keyboard.push([
+      { text: schedule ? `🕐 ${schedule}` : "🕐 Schedule", callback_data: "launch_f_schedule" },
+      { text: `🛡 Anti-Snipe: ${antisnipe > 0 ? antisnipe+"s" : "OFF"}`, callback_data: "launch_f_antisnipe" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: `🔁 Buyback: ${buyback > 0 ? buyback+"%" : "OFF"}`, callback_data: "launch_f_buyback" },
+    ]);
+  }
+  // Launch wallet readiness check
+  const needToLaunch = (parseFloat(devBuy) || 0) + 0.04; // initial buy + launch fee + jito tip buffer
+  const launchWalletLow = balance < needToLaunch;
+  if (launchWalletLow) {
+    msg += `\n⚠️ *W${walletNum} has ${balance.toFixed(2)} SOL.* You need ~${needToLaunch.toFixed(2)} SOL (initial buy + fees + Jito tip) to launch. Top up or lower the initial buy.`;
+  }
+  kb.inline_keyboard.push([{ text: launchWalletLow ? `⚠️ 💰 Initial Buy: ${devBuy} SOL` : `💰 Initial Buy: ${devBuy} SOL`, callback_data: "launch_f_devbuy" }]);
+  const ready = name && symbol;
+  kb.inline_keyboard.push([{ text: ready ? "🚀 Launch Token" : "❗ Set name & symbol", callback_data: ready ? "launch_f_confirm" : "launch_f_noop" }]);
+  kb.inline_keyboard.push([{ text: "← Back", callback_data: "menu_launch" }]);
+  return { msg, kb };
+}
+
 async function showLaunchScreen(ctx, userId) {
-  const { buildLaunchPlatformScreen } = require("../launch");
-  const launchGuideMsg2 = 
+  const launches = db.getLaunches(userId);
+  const msg =
     `🚀 *Launch Token*\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `📚 *HOW IT WORKS:*\n` +
-    `🌊 *Pump.fun* — No liquidity needed\n` +
-    `Pay ~0.02 SOL + optional initial buy\n` +
-    `Token graduates to Raydium at ~$69K mcap\n\n` +
-    `🦅 *HawkX* — Internal DEX launch\n` +
-    `Full control over your token\n` +
+    `Create and launch your own token in\nseconds. Pick a launchpad to start.\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `Select platform:`;
-  try { await ctx.editMessageText(launchGuideMsg2, { parse_mode: "Markdown", reply_markup: buildLaunchPlatformScreen() }); }
-  catch { await ctx.reply(launchGuideMsg2, { parse_mode: "Markdown", reply_markup: buildLaunchPlatformScreen() }); }
+    `🌊 *pump.fun* — simplest, instant\n` +
+    `🔵 *Raydium LaunchLab* — advanced control\n` +
+    `🟣 *Meteora DBC* — dynamic curve\n` +
+    `🟡 *LetsBonk* — meme focused\n` +
+    `🌙 *Moonshot* — mobile first\n\n` +
+    `📜 My Launches: *${launches.length}*`;
+  const kb = { inline_keyboard: [
+    [{ text: "🌊 pump.fun", callback_data: "launch_lp_pump" }, { text: "🔵 Raydium LaunchLab", callback_data: "launch_lp_launchlab" }],
+    [{ text: "🟣 Meteora DBC", callback_data: "launch_lp_meteora" }, { text: "🟡 LetsBonk", callback_data: "launch_lp_letsbonk" }],
+    [{ text: "🌙 Moonshot", callback_data: "launch_lp_moonshot" }],
+    [{ text: `📜 My Launches (${launches.length})`, callback_data: "launch_my_list" }],
+    [{ text: "← Back", callback_data: "menu_main" }],
+  ]};
+  try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+  catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); }
 }
 
 
@@ -764,5 +984,5 @@ module.exports = {
   buildLaunchMsg,
   buildTokenOrdersScreen,
   showLimitOrdersScreen,
-  showLaunchScreen,
+  showLaunchScreen, buildLaunchForm,
 };

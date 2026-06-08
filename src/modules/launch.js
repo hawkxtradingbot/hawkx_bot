@@ -80,17 +80,17 @@ function buildLaunchSuccessScreen(ca, name, symbol) {
   const shareText = encodeURIComponent(`🚀 ${name} (${symbol}) just launched!\n\nCA: ${ca}\n\nTrade now 🦅`);
   return {
     inline_keyboard: [
-      [{ text: "🔗 DexScreener [DEVNET]", url: `https://dexscreener.com/solana/${ca}` },
-       { text: "🌊 Pump.fun [DEVNET]", url: `https://pump.fun/${ca}` }],
       [{ text: "🟢 0.1 SOL", callback_data: `launch_token_buy_${ca}_0.1` },
        { text: "🟢 0.5 SOL", callback_data: `launch_token_buy_${ca}_0.5` },
-       { text: "🟢 ✏️ Custom", callback_data: `launch_token_buy_custom_${ca}` }],
+       { text: "🟢 ✏️", callback_data: `launch_token_buy_custom_${ca}` }],
       [{ text: "🔴 25%", callback_data: `launch_token_sell_${ca}_25` },
        { text: "🔴 50%", callback_data: `launch_token_sell_${ca}_50` },
        { text: "🔴 100%", callback_data: `launch_token_sell_${ca}_100` },
        { text: "🔴 ✏️", callback_data: `launch_token_sell_custom_${ca}` }],
-      [{ text: "📢 Share", url: `https://t.me/share/url?url=https://pump.fun/${ca}&text=${shareText}` }],
-      [{ text: "← Back", callback_data: "menu_launch" },
+      [{ text: "🎁 Bundle Sell", callback_data: `launch_bundlesell_${ca}` }],
+      [{ text: "📊 Position", callback_data: "menu_portfolio" },
+       { text: "📢 Share", url: `https://t.me/share/url?url=https://pump.fun/${ca}&text=${shareText}` }],
+      [{ text: "← My Launches", callback_data: "launch_my_list" },
        { text: "🔄 Refresh", callback_data: `launch_chart_${ca}` }],
     ]
   };

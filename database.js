@@ -400,6 +400,53 @@ function getTradeHistory(userId, limit = 20) {
     .all(userId, limit);
 }
 
+
+
+// ── LAUNCHES ──────────────────────────────────────────────────
+function getLaunches(userId) {
+  return getDb().prepare("SELECT * FROM launches WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+}
+
+function getLaunch(userId, id) {
+  return getDb().prepare("SELECT * FROM launches WHERE id = ? AND user_id = ?").get(id, userId);
+}
+
+function createLaunch(userId, data) {
+  const r = getDb().prepare(`INSERT INTO launches (user_id, token_ca, name, symbol, description, image_url, launchpad, supply, curve_type, graduation_sol, vesting, x_url, telegram_url, website_url, dev_buy_sol, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(userId, data.tokenCa||'', data.name||'', data.symbol||'', data.description||'', data.imageUrl||'', data.launchpad||'pump', data.supply||'1000000000', data.curveType||'justsendit', data.graduationSol||85, data.vesting?1:0, data.xUrl||'', data.telegramUrl||'', data.websiteUrl||'', data.devBuySol||0, data.status||'pending');
+  return r.lastInsertRowid;
+}
+
+function updateLaunch(userId, id, fields) {
+  const keys = Object.keys(fields);
+  if (!keys.length) return;
+  const set = keys.map(k => k + ' = ?').join(', ');
+  getDb().prepare(`UPDATE launches SET ${set} WHERE id = ? AND user_id = ?`).run(...keys.map(k => fields[k]), id, userId);
+}
+
+function deleteLaunch(userId, id) {
+  getDb().prepare("DELETE FROM launches WHERE id = ? AND user_id = ?").run(id, userId);
+}
+
+// ── COPY SELL PRESETS ─────────────────────────────────────────
+function getCopySellPresets(userId) {
+  return getDb().prepare("SELECT * FROM copy_sell_presets WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+}
+
+function getCopySellPreset(userId, id) {
+  return getDb().prepare("SELECT * FROM copy_sell_presets WHERE id = ? AND user_id = ?").get(id, userId);
+}
+
+function saveCopySellPreset(userId, name, data) {
+  const r = getDb().prepare("INSERT INTO copy_sell_presets (user_id, name, min_profit, stop_loss, ignore_dust, sell_delay) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(userId, name, data.minProfit||0, data.stopLoss||0, data.ignoreDust||0, data.sellDelay||0);
+  return r.lastInsertRowid;
+}
+
+function deleteCopySellPreset(userId, id) {
+  getDb().prepare("DELETE FROM copy_sell_presets WHERE id = ? AND user_id = ?").run(id, userId);
+}
+
 function getCopyWalletTrades(userId, walletAddress, limit = 15) {
   // Note: trades table has no source column yet. At mainnet, copy trades will be tagged.
   // For now, return trades on the wallet_id linked to this copy wallet's target.
@@ -998,7 +1045,7 @@ module.exports = {
   getSettings, updateSettings,
   addWallet, getWallets, getWallet, getWalletById, countWallets, getWalletBalance,
   getWithdrawalWhitelist, addWithdrawalWhitelist, removeWithdrawalWhitelist,
-  recordTrade, getTradeHistory, getCopyWalletTrades, getTradeHistoryFiltered,
+  recordTrade, getTradeHistory, getCopyWalletTrades, getCopySellPresets, getCopySellPreset, saveCopySellPreset, deleteCopySellPreset, getLaunches, getLaunch, createLaunch, updateLaunch, deleteLaunch, getTradeHistoryFiltered,
   getTodayStats, getUserStats, getWeeklyPnl, getMonthlyPnl,
   openPosition, getOpenPositions, getPositionsBySource,
   closePosition, getAllOpenPositions, setPositionNote, getPosition,

@@ -80,6 +80,46 @@ function buildCwScreen(cw, wallets, expanded = false) {
 
 
 
+
+function buildSetupCopySellScreen(userId) {
+  const on = db.getSysConfig(`cw_pending_copysell_${userId}`) === "1";
+  const mode = db.getSysConfig(`cw_pending_csmode_${userId}`) || "default";
+  const mp = db.getSysConfig(`cw_pending_csminprofit_${userId}`) || "0";
+  const sl = db.getSysConfig(`cw_pending_csstoploss_${userId}`) || "0";
+  const dust = db.getSysConfig(`cw_pending_csdust_${userId}`) || "0";
+  const delay = db.getSysConfig(`cw_pending_csdelay_${userId}`) || "0";
+  let msg = `🔄 *Copy Sell Setup*\n\n━━━━━━━━━━━━━━━━━━━\nAutomatically mirror this wallet's exits.\n━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg += `Status: ${on ? "🟢 ON" : "🔴 OFF"}\n`;
+  msg += `Mode: ${mode === "default" ? "🎯 Default — match their exact sell %" : "🔧 Custom Filters"}\n\n`;
+  if (mode === "default") {
+    msg += `📖 *How it works:*\n🎯 Default → whale sells 30%, you sell 30%\n🔧 Custom → add profit/loss safety rules`;
+  } else {
+    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n\n` +
+      `📈 Min Profit Lock: *${mp}%*\n🛑 Stop Loss Override: *${sl}%*\n🧹 Ignore Dust: *${dust}%*\n⏱ Sell Delay: *${delay}s*`;
+  }
+  const kb = { inline_keyboard: [] };
+  kb.inline_keyboard.push([{ text: on ? "🟢 Copy Sell: ON" : "🔴 Copy Sell: OFF", callback_data: "cw_setup_cs_toggle" }]);
+  kb.inline_keyboard.push([
+    { text: mode === "default" ? "🎯 Default ✅" : "🎯 Default", callback_data: "cw_setup_cs_default" },
+    { text: mode === "custom" ? "🔧 Custom ✅" : "🔧 Custom", callback_data: "cw_setup_cs_custom" },
+  ]);
+  if (mode === "custom") {
+    kb.inline_keyboard.push([
+      { text: `📈 Min Profit: ${mp}%`, callback_data: "cw_setup_cs_minprofit" },
+      { text: `🛑 Stop Loss: ${sl}%`, callback_data: "cw_setup_cs_stoploss" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: `🧹 Dust: ${dust}%`, callback_data: "cw_setup_cs_dust" },
+      { text: `⏱ Delay: ${delay}s`, callback_data: "cw_setup_cs_delay" },
+    ]);
+    kb.inline_keyboard.push([
+      { text: "📋 Use Preset", callback_data: "cw_setup_cs_usepreset" },
+    ]);
+  }
+  kb.inline_keyboard.push([{ text: "← Back to Setup", callback_data: "cw_setup_back" }]);
+  return { msg, kb };
+}
+
 function buildCopySellScreen(cw) {
   const on = cw.copy_sell ? true : false;
   const mode = cw.cs_mode || "default";
@@ -114,6 +154,10 @@ function buildCopySellScreen(cw) {
     kb.inline_keyboard.push([
       { text: `🧹 Dust: ${cw.cs_ignore_dust||0}%`, callback_data: `cw_cs_dust_${cw.id}` },
       { text: `⏱ Delay: ${cw.cs_sell_delay||0}s`, callback_data: `cw_cs_delay_${cw.id}` },
+    ]);
+    kb.inline_keyboard.push([
+      { text: "💾 Save Preset", callback_data: `cw_cs_savepreset_${cw.id}` },
+      { text: "📋 Use Preset", callback_data: `cw_cs_usepreset_${cw.id}` },
     ]);
   }
   kb.inline_keyboard.push([{ text: "← Back", callback_data: `copy_wallet_view_${cw.id}` }]);
@@ -289,6 +333,82 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
 
+    if (data.startsWith("cw_cs_savepreset_")) {
+      const id = parseInt(data.replace("cw_cs_savepreset_", ""));
+      await ctx.answerCallbackQuery();
+      const csMsgId = ctx.callbackQuery?.message?.message_id;
+      if (csMsgId) db.setSysConfig(`cs_screen_msg_${userId}`, String(csMsgId));
+      db.setSysConfig(`cs_savepreset_id_${userId}`, String(id));
+      const m = await ctx.reply("💾 *Save Preset*\n\nEnter a name for these filter settings:\n(e.g. \"Safe Exit\", \"Aggressive\")", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_cs_savepreset_name");
+      return true;
+    }
+
+    if (data.startsWith("cw_cs_usepreset_")) {
+      const id = parseInt(data.replace("cw_cs_usepreset_", ""));
+      await ctx.answerCallbackQuery();
+      const presets = db.getCopySellPresets(userId);
+      let msg = `📋 *Use Preset*\n\n━━━━━━━━━━━━━━━━━━━\n`;
+      const kb = { inline_keyboard: [] };
+      if (!presets.length) {
+        msg += "_No saved presets yet._\n\nSet filters and tap 💾 Save Preset first.\n━━━━━━━━━━━━━━━━━━━";
+      } else {
+        msg += "Tap a preset to apply it to this wallet:\n━━━━━━━━━━━━━━━━━━━";
+        presets.forEach(p => {
+          kb.inline_keyboard.push([{ text: `${p.name} (P${p.min_profit}/SL${p.stop_loss})`, callback_data: `cw_cs_applypreset_${id}_${p.id}` }]);
+        });
+      }
+      kb.inline_keyboard.push([{ text: "🗑 Manage Presets", callback_data: `cw_cs_managepresets_${id}` }]);
+      kb.inline_keyboard.push([{ text: "← Back", callback_data: `cw_copysell_screen_${id}` }]);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_applypreset_")) {
+      const parts = data.replace("cw_cs_applypreset_", "").split("_");
+      const cwId = parseInt(parts[0]);
+      const presetId = parseInt(parts[1]);
+      const p = db.getCopySellPreset(userId, presetId);
+      if (p) {
+        db.getDb().prepare("UPDATE copy_wallets SET cs_min_profit = ?, cs_stop_loss = ?, cs_ignore_dust = ?, cs_sell_delay = ?, cs_mode = 'custom' WHERE id = ? AND user_id = ?")
+          .run(p.min_profit, p.stop_loss, p.ignore_dust, p.sell_delay, cwId, userId);
+      }
+      await ctx.answerCallbackQuery("✅ Preset applied!");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, userId);
+      const { msg, kb } = buildCopySellScreen(cw);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_managepresets_")) {
+      const id = parseInt(data.replace("cw_cs_managepresets_", ""));
+      await ctx.answerCallbackQuery();
+      const presets = db.getCopySellPresets(userId);
+      let msg = "🗑 *Manage Presets*\n\n━━━━━━━━━━━━━━━━━━━\nTap a preset to delete it:\n━━━━━━━━━━━━━━━━━━━";
+      const kb = { inline_keyboard: [] };
+      presets.forEach(p => {
+        kb.inline_keyboard.push([{ text: `🗑 ${p.name}`, callback_data: `cw_cs_delpreset_${id}_${p.id}` }]);
+      });
+      kb.inline_keyboard.push([{ text: "← Back", callback_data: `cw_cs_usepreset_${id}` }]);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_cs_delpreset_")) {
+      const parts = data.replace("cw_cs_delpreset_", "").split("_");
+      const cwId = parseInt(parts[0]);
+      const presetId = parseInt(parts[1]);
+      db.deleteCopySellPreset(userId, presetId);
+      await ctx.answerCallbackQuery("🗑 Preset deleted");
+      const presets = db.getCopySellPresets(userId);
+      let msg = "🗑 *Manage Presets*\n\n━━━━━━━━━━━━━━━━━━━\nTap a preset to delete it:\n━━━━━━━━━━━━━━━━━━━";
+      const kb = { inline_keyboard: [] };
+      if (!presets.length) msg = "🗑 *Manage Presets*\n\n_No presets left._";
+      presets.forEach(p => {
+        kb.inline_keyboard.push([{ text: `🗑 ${p.name}`, callback_data: `cw_cs_delpreset_${cwId}_${p.id}` }]);
+      });
+      kb.inline_keyboard.push([{ text: "← Back", callback_data: `cw_cs_usepreset_${cwId}` }]);
+      return safeEdit(ctx, msg, kb);
+    }
+
     if (data.startsWith("cw_history_")) {
       const id = parseInt(data.replace("cw_history_", ""));
       await ctx.answerCallbackQuery();
@@ -364,6 +484,100 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
       db.setSysConfig(`pending_${userId}`, "cw_amount");
       return;
+    }
+
+        if (data === "cw_setup_cs_usepreset") {
+      await ctx.answerCallbackQuery();
+      const presets = db.getCopySellPresets(userId);
+      let msg = "📋 *Use Preset*\n\n━━━━━━━━━━━━━━━━━━━\n";
+      const kb = { inline_keyboard: [] };
+      if (!presets.length) {
+        msg += "_No saved presets yet._\n\nCreate presets from an existing wallet's Copy Sell screen first.\n━━━━━━━━━━━━━━━━━━━";
+      } else {
+        msg += "Tap a preset to apply it:\n━━━━━━━━━━━━━━━━━━━";
+        presets.forEach(p => {
+          kb.inline_keyboard.push([{ text: `${p.name} (P${p.min_profit}/SL${p.stop_loss})`, callback_data: `cw_setup_cs_applypreset_${p.id}` }]);
+        });
+      }
+      kb.inline_keyboard.push([{ text: "← Back", callback_data: "cw_setup_copysell_screen" }]);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data.startsWith("cw_setup_cs_applypreset_")) {
+      const pid = parseInt(data.replace("cw_setup_cs_applypreset_", ""));
+      const p = db.getCopySellPreset(userId, pid);
+      if (p) {
+        db.setSysConfig(`cw_pending_csmode_${userId}`, "custom");
+        db.setSysConfig(`cw_pending_csminprofit_${userId}`, String(p.min_profit));
+        db.setSysConfig(`cw_pending_csstoploss_${userId}`, String(p.stop_loss));
+        db.setSysConfig(`cw_pending_csdust_${userId}`, String(p.ignore_dust));
+        db.setSysConfig(`cw_pending_csdelay_${userId}`, String(p.sell_delay));
+      }
+      await ctx.answerCallbackQuery("✅ Preset applied!");
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "cw_setup_copysell_screen") {
+      await ctx.answerCallbackQuery();
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "cw_setup_cs_toggle") {
+      const cur = db.getSysConfig(`cw_pending_copysell_${userId}`) === "1";
+      db.setSysConfig(`cw_pending_copysell_${userId}`, cur ? "0" : "1");
+      if (!cur) db.setSysConfig(`cw_pending_autosell_${userId}`, "0");
+      await ctx.answerCallbackQuery(cur ? "🔴 OFF" : "🟢 ON");
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "cw_setup_cs_default") {
+      db.setSysConfig(`cw_pending_csmode_${userId}`, "default");
+      await ctx.answerCallbackQuery("🎯 Default");
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "cw_setup_cs_custom") {
+      db.setSysConfig(`cw_pending_csmode_${userId}`, "custom");
+      await ctx.answerCallbackQuery("🔧 Custom");
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "cw_setup_cs_minprofit" || data === "cw_setup_cs_stoploss" || data === "cw_setup_cs_dust" || data === "cw_setup_cs_delay") {
+      let field, label;
+      if (data === "cw_setup_cs_minprofit") { field = "csminprofit"; label = "📈 Enter Min Profit Lock % (e.g. 20):"; }
+      else if (data === "cw_setup_cs_stoploss") { field = "csstoploss"; label = "🛑 Enter Stop Loss Override % (e.g. 30):"; }
+      else if (data === "cw_setup_cs_dust") { field = "csdust"; label = "🧹 Enter Ignore Dust % (e.g. 10):"; }
+      else { field = "csdelay"; label = "⏱ Enter Sell Delay seconds (e.g. 5):"; }
+      await ctx.answerCallbackQuery();
+      const csMsgId = ctx.callbackQuery?.message?.message_id;
+      if (csMsgId) db.setSysConfig(`cw_setup_cs_msg_${userId}`, String(csMsgId));
+      db.setSysConfig(`cw_setup_cs_field_${userId}`, field);
+      const m = await ctx.reply(label, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "cw_setup_cs_value");
+      return true;
+    }
+
+    if (data === "cw_setup_back") {
+      await ctx.answerCallbackQuery();
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_setup_mode_notify") {
+      db.setSysConfig(`cw_pending_notify_${userId}`, "1");
+      await ctx.answerCallbackQuery("🔔 Notify Only");
+      return showCwSetupScreen(ctx, userId);
+    }
+
+    if (data === "cw_setup_mode_copy") {
+      db.setSysConfig(`cw_pending_notify_${userId}`, "0");
+      await ctx.answerCallbackQuery("🤖 Auto Copy");
+      return showCwSetupScreen(ctx, userId);
     }
 
     if (data === "cw_toggle_copysell") {
@@ -827,17 +1041,23 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
       const minSol = parseFloat(db.getSysConfig(`cw_pending_min_${userId}`) || "0");
       const copyPct = parseFloat(db.getSysConfig(`cw_pending_pct_${userId}`) || "100");
       const delaySec = parseInt(db.getSysConfig(`cw_pending_delay_${userId}`) || "0");
+      const notifyOnly = db.getSysConfig(`cw_pending_notify_${userId}`) === "1";
+      const csMode = db.getSysConfig(`cw_pending_csmode_${userId}`) || "default";
+      const csMinProfit = parseFloat(db.getSysConfig(`cw_pending_csminprofit_${userId}`) || "0");
+      const csStopLoss = parseFloat(db.getSysConfig(`cw_pending_csstoploss_${userId}`) || "0");
+      const csDust = parseFloat(db.getSysConfig(`cw_pending_csdust_${userId}`) || "0");
+      const csDelay = parseInt(db.getSysConfig(`cw_pending_csdelay_${userId}`) || "0");
       if (!addr) {
         await ctx.answerCallbackQuery("❌ No address set.");
         return;
       }
       db.getDb()
         .prepare(
-          `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell, min_sol, copy_pct, delay_seconds)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO copy_wallets (user_id, wallet_address, label, sol_amount, mirror_sells, max_sol, active, wallet_id, slippage, gas_fee, copy_sell, min_sol, copy_pct, delay_seconds, notify_only, cs_mode, cs_min_profit, cs_stop_loss, cs_ignore_dust, cs_sell_delay)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          userId, addr, name, sol, copySell ? 1 : 0, maxSol, walletId || null, slippage, gas, copySell ? 1 : 0, minSol, copyPct, delaySec
+          userId, addr, name, sol, copySell ? 1 : 0, maxSol, walletId || null, slippage, gas, copySell ? 1 : 0, minSol, copyPct, delaySec, notifyOnly ? 1 : 0, csMode, csMinProfit, csStopLoss, csDust, csDelay
         );
 
       // Clear pending
@@ -849,6 +1069,16 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
         `cw_pending_copysell_`,
         `cw_pending_slippage_`,
         `cw_pending_gas_`,
+        `cw_pending_notify_`,
+        `cw_pending_csmode_`,
+        `cw_pending_csminprofit_`,
+        `cw_pending_csstoploss_`,
+        `cw_pending_csdust_`,
+        `cw_pending_csdelay_`,
+        `cw_pending_max_`,
+        `cw_pending_min_`,
+        `cw_pending_pct_`,
+        `cw_pending_delay_`,
       ].forEach((k) => db.setSysConfig(k + userId, ""));
       await ctx.answerCallbackQuery("✅ Copy wallet added!");
       return safeEdit(
@@ -1425,4 +1655,4 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
     return false;
 }
 
-module.exports = { handleCopyTradeCallbacks, buildCwScreen, buildChScreen, buildCopySellScreen };
+module.exports = { handleCopyTradeCallbacks, buildCwScreen, buildChScreen, buildCopySellScreen, buildSetupCopySellScreen };

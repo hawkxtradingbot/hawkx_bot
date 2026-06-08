@@ -111,7 +111,7 @@ function isAutoBuyEnabled(userId) {
   return (s?.auto_buy_enabled || s?.auto_buy || 0) === 1;
 }
 
-async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
+async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   if (killSwitch.isActive()) {
     await ctx.reply("🔴 *Trading Paused*\n\nAdmin has paused trading. Your positions are safe.", { parse_mode: "Markdown" });
     return null;
@@ -134,8 +134,8 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
     return null;
   }
 
-  // Show processing message
-  const processingMsg = await ctx.reply(
+  // Show processing message (skip if silent)
+  const processingMsg = opts.silent ? null : await ctx.reply(
     `🔄 *Processing buy...*\n\nToken: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*`,
     { parse_mode: "Markdown" }
   );
@@ -219,15 +219,17 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
   const { creditReferralEarnings } = require("./referrals");
   creditReferralEarnings(user.user_id, tradeId, feeSol);
 
-  // Update processing → confirmed
-  try {
-    await ctx.api.editMessageText(
-      ctx.chat.id,
-      processingMsg.message_id,
-      `✅ *Buy Confirmed!*\n\nToken: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*`,
-      { parse_mode: "Markdown" }
-    );
-  } catch {}
+  // Update processing → confirmed (skip if silent)
+  if (!opts.silent && processingMsg) {
+    try {
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        processingMsg.message_id,
+        `✅ *Buy Confirmed!*\n\nToken: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*`,
+        { parse_mode: "Markdown" }
+      );
+    } catch {}
+  }
 
   if (safety.status === "WARNING") {
     await ctx.reply(`⚠️ *Safety Warning:* ${String(safety.reason||"").replace(/[_*`[\]]/g,"")}`, { parse_mode: "Markdown" });
@@ -247,7 +249,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef) {
   return { tradeId, txHash, feeSol };
 }
 
-async function mockSell(ctx, user, position, pctToSell = 100) {
+async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   if (killSwitch.isActive()) {
     await ctx.reply("🔴 *Trading Paused*", { parse_mode: "Markdown" });
     return null;
@@ -286,7 +288,7 @@ async function mockSell(ctx, user, position, pctToSell = 100) {
   checkAndPromote(user.user_id, require("./notifications").notify);
 
   const sign = pnlPct >= 0 ? "+" : "";
-  await ctx.reply(
+  if (!opts.silent) await ctx.reply(
     `✅ *Sell Confirmed!* [DEVNET]\n\n` +
     `Token: *${position.token_name || position.token_ca.slice(0,8)}*\n` +
     `Sold: *${pctToSell}%*\n` +

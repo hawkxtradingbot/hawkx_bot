@@ -27,6 +27,22 @@ function setupMessages(bot) {
     const userId = ctx.from?.id;
     if (!userId) return;
     const pending = db.getSysConfig(`pending_${userId}`) || "";
+    if (pending === "launch_image_input") {
+      const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      try { if (promptId) await ctx.api.deleteMessage(ctx.chat.id, promptId); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const fileId = ctx.message.photo[ctx.message.photo.length-1].file_id;
+      db.setSysConfig(`launch_f_image_${userId}`, fileId);
+      const { buildLaunchForm } = require("./helpers.routes");
+      const { msg, kb } = buildLaunchForm(userId);
+      const fMsgId = parseInt(db.getSysConfig(`launch_form_msg_${userId}`) || "0");
+      try {
+        if (fMsgId) await ctx.api.editMessageText(ctx.chat.id, fMsgId, msg, { parse_mode: "Markdown", reply_markup: kb });
+        else await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      } catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+      return;
+    }
     if (pending === "launch_image") {
       const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
@@ -224,6 +240,110 @@ function setupMessages(bot) {
       if (!pos) { await ctx.reply("❌ No position found!"); return; }
       const { mockSell } = require("../executor");
       await mockSell(ctx, user, pos, pct);
+      return;
+    }
+
+    if (pending === "launch_bundle_amount") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const wId = db.getSysConfig(`launch_bundle_wid_${userId}`) || "";
+      const amt = parseFloat(text.replace(/[^0-9.]/g, ""));
+      if (isNaN(amt) || amt < 0) { await ctx.reply("❌ Enter a valid SOL amount."); return; }
+      let amounts = {}; try { amounts = JSON.parse(db.getSysConfig(`launch_f_bundleamounts_${userId}`) || "{}"); } catch {}
+      amounts[wId] = amt;
+      db.setSysConfig(`launch_f_bundleamounts_${userId}`, JSON.stringify(amounts));
+      const { buildLaunchForm } = require("./helpers.routes");
+      const { msg, kb } = buildLaunchForm(userId);
+      const fMsgId = parseInt(db.getSysConfig(`launch_form_msg_${userId}`) || "0");
+      if (fMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, fMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+
+    if (pending === "launch_schedule_input") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+const t = text.trim().toLowerCase();
+      let schedule = "";
+      let whenDate = null;
+      if (t === "now" || t === "0") {
+        schedule = "";
+      } else if (/^\d+[mhd]$/.test(t)) {
+        // Relative: 30m, 2h, 7d
+        const num = parseInt(t);
+        const unit = t.slice(-1);
+        const ms = unit === "h" ? num*3600000 : unit === "d" ? num*86400000 : num*60000;
+        whenDate = new Date(Date.now() + ms);
+      } else {
+        // Absolute date: normalize "6am"->"6:00 am", add current year if missing
+        let raw = text.trim().replace(/(\d)(am|pm)/i, "$1:00 $2");
+        let parsed = new Date(raw);
+        // If no year in input, default to current year (or next year if past)
+        if (!/\d{4}/.test(raw) && !isNaN(parsed.getTime())) {
+          const now = new Date();
+          parsed.setFullYear(now.getFullYear());
+          if (parsed.getTime() < now.getTime()) parsed.setFullYear(now.getFullYear() + 1);
+        }
+        if (!isNaN(parsed.getTime())) {
+          whenDate = parsed;
+        } else {
+          await ctx.reply("❌ Couldn't read that time.\n\nTry:\n• 2h or 30m (relative)\n• July 7 6am\n• Dec 25 8:00 PM\n• now"); return;
+        }
+      }
+      if (whenDate) {
+        if (whenDate.getTime() < Date.now()) { await ctx.reply("❌ That time is in the past. Pick a future time."); return; }
+        schedule = whenDate.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", hour12:true });
+      }
+      db.setSysConfig(`launch_f_schedule_${userId}`, schedule);
+      const { buildLaunchForm } = require("./helpers.routes");
+      const { msg, kb } = buildLaunchForm(userId);
+      const fMsgId = parseInt(db.getSysConfig(`launch_form_msg_${userId}`) || "0");
+      if (fMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, fMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+
+    if (pending === "launch_field_input") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const field = db.getSysConfig(`launch_field_${userId}`) || "";
+      let val = text.trim();
+      if (field === "symbol") val = val.replace(/[^A-Za-z0-9]/g, "").slice(0, 10).toUpperCase();
+      if (["supply","grad","devbuy","maxwallet","bundleper","antisnipe","buyback","initprice","vestpct","vestcliff"].includes(field)) {
+        const n = parseFloat(val.replace(/[^0-9.]/g, ""));
+        if (isNaN(n) || n < 0) { await ctx.reply("❌ Enter a valid number."); return; }
+        if (["supply","antisnipe","vestcliff"].includes(field)) val = String(Math.floor(n));
+        else val = String(n);
+      }
+      db.setSysConfig(`launch_f_${field}_${userId}`, val);
+      const { buildLaunchForm } = require("./helpers.routes");
+      const { msg, kb } = buildLaunchForm(userId);
+      const fMsgId = parseInt(db.getSysConfig(`launch_form_msg_${userId}`) || "0");
+      if (fMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, fMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+
+    if (pending === "launch_image_input") {
+      await deleteMsg(ctx, promptId);
+      db.setSysConfig(`pending_${userId}`, "");
+      let imgUrl = "";
+      if (ctx.message.photo && ctx.message.photo.length) {
+        imgUrl = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      } else if (text && text.trim().startsWith("http")) {
+        imgUrl = text.trim();
+      }
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      if (!imgUrl) { await ctx.reply("❌ Send an image or a valid image URL."); return; }
+      db.setSysConfig(`launch_f_image_${userId}`, imgUrl);
+      const { buildLaunchForm } = require("./helpers.routes");
+      const { msg, kb } = buildLaunchForm(userId);
+      const fMsgId = parseInt(db.getSysConfig(`launch_form_msg_${userId}`) || "0");
+      if (fMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, fMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
       return;
     }
 
@@ -1064,6 +1184,47 @@ function setupMessages(bot) {
       if (ca) return buildTokenOrdersScreen(ctx, userId, ca);
       const { showLimitOrdersScreen } = require("./helpers.routes");
       return showLimitOrdersScreen(ctx, userId);
+    }
+
+    if (pending === "cw_setup_cs_value") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const field = db.getSysConfig(`cw_setup_cs_field_${userId}`) || "";
+      const val = parseFloat(text);
+      if (isNaN(val) || val < 0) { await ctx.reply("❌ Invalid value."); return; }
+      const map = { csminprofit: "cw_pending_csminprofit_", csstoploss: "cw_pending_csstoploss_", csdust: "cw_pending_csdust_", csdelay: "cw_pending_csdelay_" };
+      if (!map[field]) { await ctx.reply("❌ Error."); return; }
+      const finalVal = field === "csdelay" ? String(Math.floor(val)) : String(val);
+      db.setSysConfig(map[field] + userId, finalVal);
+      const { buildSetupCopySellScreen } = require("./callbacks.copytrade");
+      const { msg, kb } = buildSetupCopySellScreen(userId);
+      const csMsgId = parseInt(db.getSysConfig(`cw_setup_cs_msg_${userId}`) || "0");
+      if (csMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, csMsgId, msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+
+    if (pending === "cw_cs_savepreset_name") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const cwId = parseInt(db.getSysConfig(`cs_savepreset_id_${userId}`) || "0");
+      const cw = db.getDb().prepare("SELECT * FROM copy_wallets WHERE id = ? AND user_id = ?").get(cwId, userId);
+      if (!cw) { await ctx.reply("❌ Wallet not found."); return; }
+      const name = text.trim().slice(0, 30) || "Preset";
+      db.saveCopySellPreset(userId, name, {
+        minProfit: cw.cs_min_profit || 0,
+        stopLoss: cw.cs_stop_loss || 0,
+        ignoreDust: cw.cs_ignore_dust || 0,
+        sellDelay: cw.cs_sell_delay || 0,
+      });
+      const { buildCopySellScreen } = require("./callbacks.copytrade");
+      const { msg, kb } = buildCopySellScreen(cw);
+      const csMsgId = parseInt(db.getSysConfig(`cs_screen_msg_${userId}`) || "0");
+      if (csMsgId) { try { await ctx.api.editMessageText(ctx.chat.id, csMsgId, `✅ Preset "${name}" saved!\n\n` + msg, { parse_mode: "Markdown", reply_markup: kb }); return; } catch {} }
+      await ctx.reply(`✅ Preset "${name}" saved!`, { parse_mode: "Markdown", reply_markup: kb });
+      return;
     }
 
     if (pending === "cw_cs_setvalue") {
