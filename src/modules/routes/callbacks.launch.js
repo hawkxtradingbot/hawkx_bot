@@ -39,8 +39,21 @@ async function refreshLaunchTradeScreen(ctx, userId, ca) {
   msg += `📈 24h: ${ch24>=0?"+":""}${ch24.toFixed(1)}%   🎯 PnL: ${pnl>=0?"+":""}${pnl.toFixed(1)}%\n`;
   msg += `💼 Holding: ${holding>0 ? fmtN(holding)+" (~"+holdingSol.toFixed(2)+" SOL)" : "none yet"}\n`;
   msg += `🎓 Bonding: ${gradPct}%   👑 Top 10: ${top10}%\n`;
+  // Graduation alert
+  if (gradPct >= 100) msg += `🎉 *GRADUATED!* Now trading on the DEX!\n`;
+  else if (gradPct >= 80) msg += `🔥 *Almost there!* ${100-gradPct}% to graduation\n`;
+  // Social logos as hyperlinks (only show ones they added)
+  const launchRow2 = db.getDb().prepare("SELECT x_url, telegram_url, website_url, discord_url FROM launches WHERE user_id = ? AND token_ca = ? ORDER BY id DESC LIMIT 1").get(userId, ca);
+  if (launchRow2) {
+    const socials = [];
+    if (launchRow2.x_url) socials.push(`<a href="${launchRow2.x_url}">𝕏</a>`);
+    if (launchRow2.telegram_url) socials.push(`<a href="${launchRow2.telegram_url}">✈️</a>`);
+    if (launchRow2.website_url) socials.push(`<a href="${launchRow2.website_url}">🌐</a>`);
+    if (launchRow2.discord_url) socials.push(`<a href="${launchRow2.discord_url}">💬</a>`);
+    if (socials.length) msg += `🔗 ${socials.join("  ")}\n`;
+  }
   if (ageStr) msg += `🚀 Launched: ${ageStr}\n`;
-  msg += `🔗 \`${ca}\`\n━━━━━━━━━━━━━━━━━━━\n🔄 Updated ${nowStr}`;
+  msg += `📋 \`${ca}\`\n━━━━━━━━━━━━━━━━━━━\n🔄 Updated ${nowStr}`;
   try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: buildLaunchSuccessScreen(ca, savedName, savedSymbol) }); } catch {}
 }
 
@@ -99,7 +112,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── ADVANCED INPUTS ──────────────────────────────────────
-    if (["launch_f_maxwallet","launch_f_bundleper","launch_f_antisnipe","launch_f_buyback","launch_f_initprice","launch_f_vestpct","launch_f_vestcliff"].includes(data)) {
+    if (["launch_f_maxwallet","launch_f_bundleper","launch_f_antisnipe","launch_f_buyback","launch_f_initprice","launch_f_vestpct","launch_f_vestcliff","launch_f_decimals","launch_f_teamalloc","launch_f_creatorfee"].includes(data)) {
       const map = {
         launch_f_maxwallet: { key: "maxwallet", label: "👥 Enter Max Wallet % (e.g. 2, or 0 for no limit):" },
         launch_f_bundleper: { key: "bundleper", label: "💰 Enter SOL per bundle wallet (e.g. 0.5):" },
@@ -108,6 +121,9 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         launch_f_initprice: { key: "initprice", label: "💲 Initial price in SOL (e.g. 0.0001, or 0 for auto):" },
         launch_f_vestpct: { key: "vestpct", label: "💎 % of supply to vest (e.g. 20):" },
         launch_f_vestcliff: { key: "vestcliff", label: "⏳ Cliff days before unlock starts (e.g. 7):" },
+        launch_f_decimals: { key: "decimals", label: "🔢 Token decimals (standard is 9):" },
+        launch_f_teamalloc: { key: "teamalloc", label: "👥 Team allocation % (e.g. 10, or 0 for none):" },
+        launch_f_creatorfee: { key: "creatorfee", label: "💵 Creator fee % on trades (e.g. 1, or 0):" },
       };
       const mm = map[data];
       await ctx.answerCallbackQuery();
@@ -204,7 +220,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const lp = data.replace("launch_lp_", "");
       await ctx.answerCallbackQuery();
       // Clear form for a fresh launch
-      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
+      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
       db.setSysConfig(`launch_lp_${userId}`, lp);
       const { msg, kb } = buildLaunchForm(userId);
       return safeEdit(ctx, msg, kb);
@@ -221,8 +237,12 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       g += "📄 *Description* — what your token is about\n";
       g += "🖼 *Image* — token logo (send photo or URL)\n\n";
       g += "*🔗 Socials:*\n";
-      g += "🐦 X · ✈️ Telegram · 🌐 Website · 💬 Discord\nLink your community so buyers trust you.\n\n";
+      g += "🐦 X · ✈️ Telegram · 🌐 Website · 💬 Discord\nLink your community so buyers trust you.\n";
+      g += "_Simple launchpads (pump.fun, letsBONK, Moonshot)\nhave fixed supply & decimals. Advanced ones\n(LaunchLab, Meteora) let you customize._\n\n";
       g += "*💰 Initial Buy* — you buy your own token at\nlaunch (1 wallet). Secures supply early.\n\n";
+      g += "⚠️ *IMPORTANT:* Once launched, token details\n(name, symbol, supply, decimals, image) CANNOT\nbe changed. Double-check before confirming.\n\n";
+      g += "*🎓 Graduation* — when your token's bonding curve\nfills, it 'graduates' to a full DEX (Raydium).\nThe trade screen shows live progress %.\n\n";
+      g += "*🔗 Socials* — X, Telegram, Website, Discord links\nappear as tappable logos on your token's trade\nscreen (only the ones you add show).\n\n";
       g += "*🎁 Bundle Buy* — multiple wallets buy in the\nSAME block as launch. Beats snipers, spreads\nsupply. Same amount for all OR custom each.\n\n";
       g += "*🕐 Schedule* — launch now or at a set time\n(2h, 30m, or a date like 'July 7 6am').\n\n";
       g += "*🛡 Anti-Snipe* — block buys for X seconds after\nlaunch so bots can't front-run your community.\n\n";
@@ -248,6 +268,17 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       const { msg, kb } = buildLaunchForm(userId);
       return safeEdit(ctx, msg, kb);
+    }
+
+    if (data === "launch_f_treasury") {
+      await ctx.answerCallbackQuery();
+      const msgId = ctx.callbackQuery?.message?.message_id;
+      if (msgId) db.setSysConfig(`launch_form_msg_${userId}`, String(msgId));
+      db.setSysConfig(`launch_field_${userId}`, "treasury");
+      const sent = await ctx.reply("🏦 *Treasury Wallet*\n\nPaste a Solana address for the treasury\n(buyback/team funds), or send 'skip':", { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(sent.message_id));
+      db.setSysConfig(`pending_${userId}`, "launch_field_input");
+      return true;
     }
 
     if (data === "launch_f_adv_toggle") {
@@ -316,6 +347,55 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── CONFIRM LAUNCH ───────────────────────────────────────
+    if (data === "launch_f_review") {
+      await ctx.answerCallbackQuery();
+      const lp = db.getSysConfig(`launch_lp_${userId}`) || "pump";
+      const lpName = { pump:"pump.fun", launchlab:"Raydium LaunchLab", meteora:"Meteora DBC", letsbonk:"LetsBonk", moonshot:"Moonshot" }[lp] || lp;
+      const g = (k) => db.getSysConfig(`launch_f_${k}_${userId}`) || "";
+      const name = g("name"), symbol = g("symbol"), desc = g("desc"), image = g("image");
+      const supply = g("supply") || "1000000000";
+      const devBuy = g("devbuy") || "0";
+      const bundleIds = (g("bundleids")).split(",").filter(Boolean);
+      const sched = g("schedule");
+      const antisnipe = g("antisnipe"), buyback = g("buyback"), maxwallet = g("maxwallet");
+      const revokeMint = db.getSysConfig(`launch_f_revokemint_${userId}`) !== "0";
+      const revokeFreeze = db.getSysConfig(`launch_f_revokefreeze_${userId}`) !== "0";
+      const burnLp = g("burnlp") === "1";
+      const vesting = db.getSysConfig(`launch_f_vesting_${userId}`) === "1";
+      // Build summary
+      let msg = `📋 *Review Launch*\n\n━━━━━━━━━━━━━━━━━━━\n📍 ${lpName}\n🚀 *${name}* (${symbol})\n`;
+      if (desc) msg += `📄 ${desc.slice(0,80)}\n`;
+      msg += `🖼 Image: ${image ? "✅" : "⬜ none"}\n`;
+      msg += `📦 Supply: ${supply}\n`;
+      msg += `💰 Initial Buy: ${devBuy} SOL\n`;
+      if (bundleIds.length) msg += `🎁 Bundle: ${bundleIds.length} wallets\n`;
+      if (sched) msg += `🕐 Scheduled: ${sched}\n`;
+      msg += `🔒 Mint: ${revokeMint?"revoked ✅":"KEPT ⚠️"} · Freeze: ${revokeFreeze?"revoked ✅":"ON ⚠️"}\n`;
+      if (antisnipe>0) msg += `🛡 Anti-Snipe: ${antisnipe}s\n`;
+      if (buyback>0) msg += `🔁 Buyback: ${buyback}%\n`;
+      if (maxwallet>0) msg += `👥 Max Wallet: ${maxwallet}%\n`;
+      if (burnLp) msg += `🔥 LP Burn: ON\n`;
+      if (vesting) msg += `💎 Vesting: ON\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━`;
+      // Soft warnings
+      const warns = [];
+      if (!revokeMint) warns.push("Mint authority kept — looks risky to buyers");
+      if (!revokeFreeze) warns.push("Freeze authority ON — scares buyers");
+      if (bundleIds.length) warns.push("Bundle buy enabled");
+      if (buyback>0) warns.push("Auto-buyback enabled");
+      if (!g("x") && !g("tg") && !g("web")) warns.push("No social links added");
+      if (warns.length) {
+        msg += `\n\n⚠️ *Warnings:*\n${warns.map(w=>"• "+w).join("\n")}`;
+      }
+      const { LAUNCHPAD_INFO } = require("./helpers.routes");
+      const cta = (LAUNCHPAD_INFO && LAUNCHPAD_INFO[lp]) ? LAUNCHPAD_INFO[lp].cta : "🚀 Confirm Launch";
+      const kb = { inline_keyboard: [
+        [{ text: cta, callback_data: "launch_f_confirm" }],
+        [{ text: "← Edit", callback_data: "launch_lp_back" }],
+      ]};
+      return safeEdit(ctx, msg, kb);
+    }
+
     if (data === "launch_f_confirm_force") { data = "launch_f_confirm"; }
     if (data === "launch_f_confirm") {
       const lp = db.getSysConfig(`launch_lp_${userId}`) || "pump";
@@ -406,6 +486,10 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         vesting_cliff: parseInt(db.getSysConfig(`launch_f_vestcliff_${userId}`) || "0"),
         bundle_mode: db.getSysConfig(`launch_f_bundlemode_${userId}`) || "same",
         bundle_amounts: db.getSysConfig(`launch_f_bundleamounts_${userId}`) || "",
+        decimals: parseInt(db.getSysConfig(`launch_f_decimals_${userId}`) || "9"),
+        team_alloc: parseFloat(db.getSysConfig(`launch_f_teamalloc_${userId}`) || "0"),
+        treasury_wallet: db.getSysConfig(`launch_f_treasury_${userId}`) || "",
+        creator_fee_bps: Math.round(parseFloat(db.getSysConfig(`launch_f_creatorfee_${userId}`) || "0") * 100),
       });
       // Save to sysconfig for the trade screen
       db.setSysConfig(`launched_name_${mockCa}`, name);
@@ -421,10 +505,12 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       if (isScheduled) {
         msg = `🕐 *Launch Scheduled!*\n\n━━━━━━━━━━━━━━━━━━━\n🚀 *${name}* (${symbol})\n📍 ${info}\n🕐 Launches: ${sched}\n━━━━━━━━━━━━━━━━━━━\n\n💡 _Will auto-launch at the scheduled time (mainnet)._`;
       } else {
-        msg = `✅ *${name} is LIVE!* [DEVNET]\n\n🔗 CA: \`${mockCa}\`\n💰 Price: *${price.toFixed(8)}*\n📍 ${info}\n\n💡 _Trade your token below_`;
+        const { LAUNCHPAD_INFO } = require("./helpers.routes");
+        const successTxt = (LAUNCHPAD_INFO && LAUNCHPAD_INFO[lp]) ? LAUNCHPAD_INFO[lp].success : "is LIVE!";
+        msg = `✅ *${name}* ${successTxt} [DEVNET]\n\n🔗 CA: \`${mockCa}\`\n💰 Price: *${price.toFixed(8)}*\n\n💡 _Trade your token below_`;
       }
       // Clear the form AFTER building (so launch is clean for next time)
-      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
+      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
       return safeEdit(ctx, msg, buildLaunchSuccessScreen(mockCa, name, symbol));
     }
 
@@ -452,45 +538,12 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       const l = db.getLaunch(userId, id);
       if (!l) { await ctx.answerCallbackQuery("Not found"); return true; }
-      const lpName = { pump:"pump.fun", launchlab:"Raydium LaunchLab", meteora:"Meteora DBC", letsbonk:"LetsBonk", moonshot:"Moonshot" }[l.launchpad] || l.launchpad;
-      let info = {};
-      try { const { getTokenInfo } = require("../tokenInfo"); info = await getTokenInfo(l.token_ca); } catch {}
-      const { getMockPrice } = require("../executor");
-      const price = info.price || getMockPrice(l.token_ca);
-      const dexUrl = "https://dexscreener.com/solana/" + l.token_ca;
-      const statusIcon = l.status === "launched" ? "🟢 Live" : l.status === "scheduled" ? "🕐 Scheduled" : "🟡 " + l.status;
-      let msg = `🚀 *${l.name}* (${l.symbol})\n\n━━━━━━━━━━━━━━━━━━━\n`;
-      msg += `📍 Launchpad: ${lpName}\n`;
-      msg += `📊 Status: ${statusIcon}\n`;
-      msg += `💲 Price: ${price ? price.toFixed(8) : "—"}\n`;
-      if (info.mcap) msg += `📈 MCap: ${(info.mcap/1000).toFixed(1)}K\n`;
-      msg += `🔗 CA: \`${l.token_ca}\`\n`;
-      msg += `━━━━━━━━━━━━━━━━━━━\n`;
-      if (l.description) msg += `📄 ${l.description.slice(0,100)}\n`;
-      const socials = [];
-      if (l.x_url) socials.push("🐦 X"); if (l.telegram_url) socials.push("✈️ TG");
-      if (l.website_url) socials.push("🌐 Web"); if (l.discord_url) socials.push("💬 Discord");
-      if (socials.length) msg += `🔗 ${socials.join(" · ")}\n`;
-      msg += `\n⚙️ *Launch Config:*\n`;
-      msg += `📦 Supply: ${l.supply}\n`;
-      if (l.launchpad === "launchlab" || l.launchpad === "meteora") {
-        msg += `📈 Curve: ${l.curve_type} · 🎓 ${l.graduation_sol} SOL\n`;
-        if (l.vesting) msg += `💎 Vesting: ${l.vesting_pct}% over ${l.vesting_days}d (cliff ${l.vesting_cliff}d)\n`;
-        if (l.initial_price > 0) msg += `💲 Init Price: ${l.initial_price}\n`;
-        msg += `🔒 Mint: ${l.revoke_mint?"revoked":"kept"} · Freeze: ${l.revoke_freeze?"revoked":"kept"}\n`;
-        if (l.burn_lp) msg += `🔥 LP Burned\n`;
-        if (l.max_wallet_pct > 0) msg += `👥 Max Wallet: ${l.max_wallet_pct}%\n`;
-      }
-      if (l.bundle_wallets > 0) msg += `🎁 Bundle: ${l.bundle_wallets} wallets (${l.bundle_mode})\n`;
-      if (l.dev_buy_sol > 0) msg += `💰 Dev Buy: ${l.dev_buy_sol} SOL\n`;
-      if (l.antisnipe_sec > 0) msg += `🛡 Anti-Snipe: ${l.antisnipe_sec}s\n`;
-      if (l.buyback_pct > 0) msg += `🔁 Buyback: ${l.buyback_pct}%\n`;
-      msg += `━━━━━━━━━━━━━━━━━━━`;
-      const kb = { inline_keyboard: [
-        [{ text: "📈 Chart", url: dexUrl }, { text: "💰 Buy More", callback_data: `launch_chart_${l.token_ca}` }],
-        [{ text: "🗑 Delete", callback_data: `launch_del_${id}` }, { text: "← Back", callback_data: "launch_my_list" }],
-      ]};
-      return safeEdit(ctx, msg, kb);
+      // Ensure trade screen has the name/symbol cached
+      db.setSysConfig(`launched_name_${l.token_ca}`, l.name);
+      db.setSysConfig(`launched_symbol_${l.token_ca}`, l.symbol);
+      // Go STRAIGHT to the trade screen
+      await refreshLaunchTradeScreen(ctx, userId, l.token_ca);
+      return true;
     }
 
     if (data.startsWith("launch_del_")) {
@@ -505,205 +558,6 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       else { launches.slice(0,15).forEach(l => { const icon = lpIcons[l.launchpad]||"🚀"; kb.inline_keyboard.push([{ text: `${icon} ${l.name} (${l.symbol})`, callback_data: `launch_view_${l.id}` }]); }); }
       kb.inline_keyboard.push([{ text: "← Back", callback_data: "menu_launch" }]);
       return safeEdit(ctx, msg, kb);
-    }
-
-    if (data === "launch_platform_hawkx") {
-      await ctx.answerCallbackQuery("🦅 HawkX Launch — Coming Soon!");
-      return true;
-    }
-
-    if (data === "launch_platform_pump" || data === "launch_platform_hawkx") {
-      await ctx.answerCallbackQuery();
-      const platform = data === "launch_platform_pump" ? "pump" : "hawkx";
-      db.setSysConfig(`launch_platform_${userId}`, platform);
-      const { getLaunchPending, buildLaunchScreen } = require("../launch");
-      const { msg: fMsg, kb: fKb } = await buildLaunchMsg(userId, false);
-      try { await ctx.editMessageText(fMsg, { parse_mode: "Markdown", reply_markup: fKb }); }
-      catch { await ctx.reply(fMsg, { parse_mode: "Markdown", reply_markup: fKb }); }
-      return true;
-    }
-
-    if (data.startsWith("launch_refresh_")) {
-      await ctx.answerCallbackQuery("🔄 Refreshed!");
-      const { msg, kb } = await buildLaunchMsg(userId, false);
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); } catch {}
-      return true;
-    }
-
-    if (data === "launch_wallet_expand") {
-      await ctx.answerCallbackQuery();
-      const { msg, kb } = await buildLaunchMsg(userId, true);
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); } catch {}
-      return true;
-    }
-
-    if (data === "launch_wallet_collapse") {
-      await ctx.answerCallbackQuery();
-      const { msg, kb } = await buildLaunchMsg(userId, false);
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); } catch {}
-      return true;
-    }
-
-    if (data.startsWith("launch_setwallet_")) {
-      const wId = parseInt(data.replace("launch_setwallet_", ""));
-      db.setSysConfig(`launch_wallet_${userId}`, String(wId));
-      await ctx.answerCallbackQuery("✅ Wallet selected!");
-      const { msg, kb } = await buildLaunchMsg(userId, false);
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); } catch {}
-      return true;
-    }
-
-    if (data === "launch_supply_locked") {
-      await ctx.answerCallbackQuery("🔒 Pump.fun fixes supply at 1,000,000,000. Cannot be changed!");
-      return true;
-    }
-
-    if (data === "launch_set_name" || data === "launch_set_symbol" || data === "launch_set_supply" ||
-        data === "launch_set_desc" || data === "launch_set_twitter" || data === "launch_set_telegram" ||
-        data === "launch_set_website") {
-      await ctx.answerCallbackQuery();
-      const fieldMap = {
-        launch_set_name: { key: `launch_name_${userId}`, msg: "📝 Enter token name (e.g. My Token):" },
-        launch_set_symbol: { key: `launch_symbol_${userId}`, msg: "🔤 Enter token symbol (e.g. MTK):" },
-        launch_set_supply: { key: `launch_supply_${userId}`, msg: "🔢 Enter total supply (e.g. 1000000000):" },
-        launch_set_desc: { key: `launch_desc_${userId}`, msg: "📄 Enter description:" },
-        launch_set_twitter: { key: `launch_twitter_${userId}`, msg: "🐦 Enter Twitter (e.g. @mytoken):" },
-        launch_set_telegram: { key: `launch_telegram_${userId}`, msg: "💬 Enter Telegram (e.g. t.me/mytoken):" },
-        launch_set_website: { key: `launch_website_${userId}`, msg: "🌍 Enter website URL:" },
-        launch_set_initial_buy: { key: `launch_initial_buy_${userId}`, msg: "💰 Enter initial buy in SOL (e.g. 0.5):" },
-      };
-      const f = fieldMap[data];
-      const m = await ctx.reply(f.msg);
-      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-      db.setSysConfig(`pending_${userId}`, `launch_field_${data.replace("launch_set_","")}_${userId}`);
-      return true;
-    }
-
-    if (data.startsWith("launch_buy_amt_")) {
-      const amt = data.replace("launch_buy_amt_", "");
-      db.setSysConfig(`launch_initial_buy_${userId}`, amt);
-      await ctx.answerCallbackQuery(`💰 Initial buy: ${amt} SOL`);
-      const { getLaunchPending, buildLaunchScreen } = require("../launch");
-      const p = getLaunchPending(userId);
-      const launchMsgId = parseInt(db.getSysConfig(`launch_msg_${userId}`) || "0");
-      const pName = p.platform === "pump" ? "🌊 Pump.fun" : "🦅 HawkX";
-      const launchMsgId2 = parseInt(db.getSysConfig(`launch_msg_${userId}`) || "0");
-      const { msg: lMsg3, kb: lKb3 } = await buildLaunchMsg(userId, false);
-      try {
-        if (launchMsgId2) await ctx.api.editMessageText(ctx.chat.id, launchMsgId2, lMsg3, { parse_mode: "Markdown", reply_markup: lKb3 });
-        else { const s = await ctx.reply(lMsg3, { parse_mode: "Markdown", reply_markup: lKb3 }); db.setSysConfig(`launch_msg_${userId}`, String(s.message_id)); }
-      } catch { const s = await ctx.reply(lMsg3, { parse_mode: "Markdown", reply_markup: lKb3 }); db.setSysConfig(`launch_msg_${userId}`, String(s.message_id)); }
-      return true;
-    }
-
-    if (data === "launch_set_image") {
-      await ctx.answerCallbackQuery();
-      const existingImg = db.getSysConfig(`launch_image_${userId}`) || "";
-      const platform = db.getSysConfig(`launch_platform_${userId}`) || "hawkx";
-      if (existingImg) {
-        const previewMsg = await ctx.api.sendPhoto(ctx.chat.id, existingImg, {
-          caption: "🖼 *Current token image*\n\nSend a new photo to replace it, or tap Back.",
-          parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: `launch_platform_${platform}` }]] }
-        });
-        // Auto delete after 5 seconds
-        setTimeout(async () => {
-          try { await ctx.api.deleteMessage(ctx.chat.id, previewMsg.message_id); } catch {}
-        }, 5000);
-        db.setSysConfig(`pending_${userId}`, "launch_image");
-        return true;
-      }
-      const m = await ctx.reply("🖼 Send your token image (JPG or PNG):", {
-        reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: `launch_platform_${platform}` }]] }
-      });
-      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
-      db.setSysConfig(`pending_${userId}`, "launch_image");
-      return true;
-    }
-
-    if (data === "launch_confirm") {
-      const { getLaunchPending, buildLaunchSuccessScreen } = require("../launch");
-      const p = getLaunchPending(userId);
-      const missing = [];
-      if (!p.name) missing.push("📝 Name");
-      if (!p.symbol) missing.push("🔤 Symbol");
-      if (!p.image) missing.push("🖼 Image");
-      if (missing.length > 0) {
-        await ctx.answerCallbackQuery("❌ Missing required fields!");
-        await ctx.reply(
-          `❌ *Missing Required Fields*\n\n` +
-          missing.map(m => `• ${m} is required`).join("\n") +
-          `\n\nPlease fill these before launching!`,
-          { parse_mode: "Markdown" }
-        );
-        return true;
-      }
-      await ctx.answerCallbackQuery("🚀 Launching...");
-      // Simulate token launch on devnet
-      const ca = `DEVNET_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
-      db.setSysConfig(`launch_ca_${userId}`, ca);
-      // Save launch info by CA for later reference
-      db.setSysConfig(`launched_name_${ca}`, p.name || "Unknown");
-      db.setSysConfig(`launched_symbol_${ca}`, p.symbol || "???");
-      // Clear pending settings for fresh next launch
-      db.setSysConfig(`launch_name_${userId}`, "");
-      db.setSysConfig(`launch_symbol_${userId}`, "");
-      db.setSysConfig(`launch_supply_${userId}`, "");
-      db.setSysConfig(`launch_desc_${userId}`, "");
-      db.setSysConfig(`launch_twitter_${userId}`, "");
-      db.setSysConfig(`launch_telegram_${userId}`, "");
-      db.setSysConfig(`launch_website_${userId}`, "");
-      db.setSysConfig(`launch_image_${userId}`, "");
-      db.setSysConfig(`launch_initial_buy_${userId}`, "0");
-      db.setSysConfig(`launch_platform_${userId}`, "");
-      const successMsg =
-        `✅ *Token Launched!* [DEVNET]\n\n` +
-        `📝 *${p.name}* (${p.symbol})\n\n` +
-        `📋 *Contract Address:*\n` +
-        `${ca}\n\n` +
-        `💰 Initial Price: *$0.000001*\n` +
-        `📊 MCap: *$1,000*\n` +
-        `💧 Liquidity: *$500*`;
-      try { await ctx.editMessageText(successMsg, { parse_mode: "Markdown", reply_markup: buildLaunchSuccessScreen(ca, p.name, p.symbol) }); }
-      catch { await ctx.reply(successMsg, { parse_mode: "Markdown", reply_markup: buildLaunchSuccessScreen(ca, p.name, p.symbol) }); }
-      return true;
-    }
-
-    if (data.startsWith("launch_bundlesell_")) {
-      const ca = data.replace("launch_bundlesell_", "");
-      await ctx.answerCallbackQuery();
-      const savedName = db.getSysConfig(`launched_name_${ca}`) || ca.slice(0,8);
-      // Find which launch this is + its bundle wallets
-      const launch = db.getDb().prepare("SELECT * FROM launches WHERE user_id = ? AND token_ca = ? ORDER BY id DESC LIMIT 1").get(userId, ca);
-      let msg = `🎁 *Bundle Sell — ${savedName}*\n\n━━━━━━━━━━━━━━━━━━━\nSell from the wallets that bought at launch.\nCoordinated exit avoids one big price crash.\n━━━━━━━━━━━━━━━━━━━\n\n`;
-      const kb = { inline_keyboard: [] };
-      const bundleIds = launch && launch.bundle_wallet_ids ? launch.bundle_wallet_ids.split(",").filter(Boolean) : [];
-      if (!bundleIds.length) {
-        msg += "_No bundle wallets for this launch._\nUse normal Sell instead.";
-      } else {
-        msg += `${bundleIds.length} bundle wallet(s) hold this token.\nChoose how much to sell from all:`;
-        kb.inline_keyboard.push([
-          { text: "🔴 Sell 25%", callback_data: `launch_bsell_${ca}_25` },
-          { text: "🔴 Sell 50%", callback_data: `launch_bsell_${ca}_50` },
-        ]);
-        kb.inline_keyboard.push([
-          { text: "🔴 Sell 100% (all)", callback_data: `launch_bsell_${ca}_100` },
-          { text: "🔴 ✏️ Custom", callback_data: `launch_bsell_custom_${ca}` },
-        ]);
-      }
-      kb.inline_keyboard.push([{ text: "← Back", callback_data: `launch_chart_${ca}` }]);
-      return safeEdit(ctx, msg, kb);
-    }
-
-    if (data.startsWith("launch_bsell_") && !data.includes("custom")) {
-      const rest = data.replace("launch_bsell_", "");
-      const idx = rest.lastIndexOf("_");
-      const ca = rest.slice(0, idx);
-      const pct = parseInt(rest.slice(idx+1));
-      await ctx.answerCallbackQuery({ text: `✅ Bundle sold ${pct}% from all wallets`, show_alert: false });
-      // Devnet: mock — at mainnet sells from each bundle wallet
-      await refreshLaunchTradeScreen(ctx, userId, ca);
-      return true;
     }
 
     if (data.startsWith("launch_chart_")) {

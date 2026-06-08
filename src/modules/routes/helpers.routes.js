@@ -676,13 +676,14 @@ async function showLimitOrdersScreen(ctx, userId) {
 const SOL_PRICE_USD = 63;
 // SOL price for graduation $ estimates. At mainnet, fetch live.
 const LAUNCHPAD_INFO = {
-  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85 },
-  launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85 },
-  meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0 },
-  letsbonk:  { name: "LetsBonk", icon: "🟡", advanced: false, fee: "Free mint · small grad fee", gradSol: 85 },
-  moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · small grad fee", gradSol: 0 },
+  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: ["creatorfee"] },
+  launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85, cta: "🚀 Launch on LaunchLab", success: "is LIVE on Raydium LaunchLab!", tagline: "Full control over your launch", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
+  meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0, cta: "🚀 Launch on Meteora", success: "is LIVE on Meteora!", tagline: "Dynamic bonding curve", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
+  letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "Free mint · BONK launchpad", gradSol: 85, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: ["creatorfee"] },
+  moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · simple", gradSol: 0, cta: "🚀 Launch on Moonshot", success: "is LIVE on Moonshot! 🌙", tagline: "Mobile-first simple launch", caps: [] },
 };
 
+function lpHas(info, cap) { return info.caps && info.caps.includes(cap); }
 function buildLaunchForm(userId) {
   const lp = db.getSysConfig(`launch_lp_${userId}`) || "pump";
   const info = LAUNCHPAD_INFO[lp] || LAUNCHPAD_INFO.pump;
@@ -711,6 +712,10 @@ function buildLaunchForm(userId) {
   const bundleExpanded = db.getSysConfig(`launch_f_bundle_exp_${userId}`) === "1";
   const bundleMode = db.getSysConfig(`launch_f_bundlemode_${userId}`) || "same";
   const advExpanded = db.getSysConfig(`launch_f_adv_exp_${userId}`) === "1";
+  const decimals = db.getSysConfig(`launch_f_decimals_${userId}`) || "9";
+  const teamAlloc = db.getSysConfig(`launch_f_teamalloc_${userId}`) || "0";
+  const treasuryW = db.getSysConfig(`launch_f_treasury_${userId}`) || "";
+  const creatorFee = db.getSysConfig(`launch_f_creatorfee_${userId}`) || "0";
   const antisnipe = db.getSysConfig(`launch_f_antisnipe_${userId}`) || "0";
   const buyback = db.getSysConfig(`launch_f_buyback_${userId}`) || "0";
   const initPrice = db.getSysConfig(`launch_f_initprice_${userId}`) || "0";
@@ -723,7 +728,8 @@ function buildLaunchForm(userId) {
   const bundleIds2 = (db.getSysConfig(`launch_f_bundleids_${userId}`) || "").split(",").filter(Boolean);
   const sched2 = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
   const gradStr = info.gradSol > 0 ? `graduates at ${info.gradSol} SOL (~${Math.round(info.gradSol * SOL_PRICE_USD / 1000)}K @ ${SOL_PRICE_USD}/SOL)` : "dynamic bonding curve";
-  let msg = `${info.icon} *Launch on ${info.name}*\n\n━━━━━━━━━━━━━━━━━━━\n💸 ${info.fee}\n🎓 ${gradStr}\n━━━━━━━━━━━━━━━━━━━\n\n📖 *How it works:* Tap each field below to\nset it — your values appear on the buttons.\nName & Symbol are required. Open ⚙️ Advanced\nfor supply, bundle buy, anti-snipe & more.\n`;
+  const fixedNote = !info.advanced ? "\n🔒 Supply, decimals & curve are FIXED by this\nlaunchpad. Token details CANNOT be changed\nafter launch — set them carefully." : "\n⚠️ Token details CANNOT be changed after launch.";
+  let msg = `${info.icon} *${info.name}*\n_${info.tagline}_\n\n━━━━━━━━━━━━━━━━━━━\n💸 ${info.fee}\n🎓 ${gradStr}${fixedNote}\n━━━━━━━━━━━━━━━━━━━\n\n📖 *How it works:* Tap each field below to\nset it — your values appear on the buttons.\nName & Symbol are required. Open ⚙️ Advanced\nfor supply, bundle buy, anti-snipe & more.\n`;
   if (desc) msg += `\n📄 ${stripMd(desc).slice(0,150)}\n`;
   if (bundleIds2.length) msg += `🎁 Bundle: ${bundleIds2.length} wallet(s) buy at launch\n`;
   if (sched2) msg += `🕐 Scheduled: ${sched2}\n`;
@@ -792,16 +798,20 @@ function buildLaunchForm(userId) {
   // Advanced toggle (collapsed by default)
   const advCount = [name,symbol].filter(Boolean).length; // placeholder
   kb.inline_keyboard.push([{ text: advExpanded ? "⚙️ Advanced ▲" : "⚙️ Advanced ▼", callback_data: "launch_f_adv_toggle" }]);
-  if (advExpanded && info.advanced) {
-    kb.inline_keyboard.push([
-      { text: `📦 Supply`, callback_data: "launch_f_supply" },
-      { text: curve === "justsendit" ? "📈 justsendit ✅" : "📈 Custom", callback_data: "launch_f_curve" },
-    ]);
-    kb.inline_keyboard.push([
-      { text: `🎓 Grad: ${grad} SOL`, callback_data: "launch_f_grad" },
-      { text: vesting ? "💎 Vesting: ON" : "💎 Vesting: OFF", callback_data: "launch_f_vesting" },
-    ]);
-    if (vesting) {
+  if (advExpanded) {
+    if (lpHas(info, "supply") || lpHas(info, "curve")) {
+      const row = [];
+      if (lpHas(info, "supply")) row.push({ text: `📦 Supply`, callback_data: "launch_f_supply" });
+      if (lpHas(info, "curve")) row.push({ text: curve === "justsendit" ? "📈 justsendit ✅" : "📈 Custom", callback_data: "launch_f_curve" });
+      if (row.length) kb.inline_keyboard.push(row);
+    }
+    if (lpHas(info, "grad") || lpHas(info, "vesting")) {
+      const row = [];
+      if (lpHas(info, "grad")) row.push({ text: `🎓 Grad: ${grad} SOL`, callback_data: "launch_f_grad" });
+      if (lpHas(info, "vesting")) row.push({ text: vesting ? "💎 Vesting: ON" : "💎 Vesting: OFF", callback_data: "launch_f_vesting" });
+      if (row.length) kb.inline_keyboard.push(row);
+    }
+    if (lpHas(info, "vesting") && vesting) {
       kb.inline_keyboard.push([
         { text: vestingDays === "30" ? "30d ✅" : "30d", callback_data: "launch_f_vd_30" },
         { text: vestingDays === "60" ? "60d ✅" : "60d", callback_data: "launch_f_vd_60" },
@@ -812,17 +822,21 @@ function buildLaunchForm(userId) {
         { text: `⏳ Cliff: ${vestCliff}d`, callback_data: "launch_f_vestcliff" },
       ]);
     }
-    kb.inline_keyboard.push([
-      { text: `💲 Initial Price: ${initPrice > 0 ? initPrice : "auto"}`, callback_data: "launch_f_initprice" },
-    ]);
-    kb.inline_keyboard.push([
-      { text: revokeMint ? "🔒 Mint: ON" : "🔒 Mint: OFF", callback_data: "launch_f_revokemint" },
-      { text: revokeFreeze ? "🔒 Freeze: ON" : "🔒 Freeze: OFF", callback_data: "launch_f_revokefreeze" },
-    ]);
-    kb.inline_keyboard.push([
-      { text: burnLp ? "🔥 Burn LP: ON" : "🔥 Burn LP: OFF", callback_data: "launch_f_burnlp" },
-      { text: `👥 Max Wallet: ${maxWallet > 0 ? maxWallet+"%" : "OFF"}`, callback_data: "launch_f_maxwallet" },
-    ]);
+    if (lpHas(info, "initprice")) {
+      kb.inline_keyboard.push([{ text: `💲 Initial Price: ${initPrice > 0 ? initPrice : "auto"}`, callback_data: "launch_f_initprice" }]);
+    }
+    if (lpHas(info, "mintfreeze")) {
+      kb.inline_keyboard.push([
+        { text: revokeMint ? "🔒 Mint: ON" : "🔒 Mint: OFF", callback_data: "launch_f_revokemint" },
+        { text: revokeFreeze ? "🔒 Freeze: ON" : "🔒 Freeze: OFF", callback_data: "launch_f_revokefreeze" },
+      ]);
+    }
+    if (lpHas(info, "burnlp") || lpHas(info, "maxwallet")) {
+      const row = [];
+      if (lpHas(info, "burnlp")) row.push({ text: burnLp ? "🔥 Burn LP: ON" : "🔥 Burn LP: OFF", callback_data: "launch_f_burnlp" });
+      if (lpHas(info, "maxwallet")) row.push({ text: `👥 Max Wallet: ${maxWallet > 0 ? maxWallet+"%" : "OFF"}`, callback_data: "launch_f_maxwallet" });
+      if (row.length) kb.inline_keyboard.push(row);
+    }
   }
   // Bundle selector — inside Advanced
   if (advExpanded && bundleExpanded) {
@@ -858,13 +872,25 @@ function buildLaunchForm(userId) {
     ]);
   }
   if (advExpanded) {
+    // Bot-side features — available on ALL launchpads
     kb.inline_keyboard.push([
       { text: schedule ? `🕐 ${schedule}` : "🕐 Schedule", callback_data: "launch_f_schedule" },
       { text: `🛡 Anti-Snipe: ${antisnipe > 0 ? antisnipe+"s" : "OFF"}`, callback_data: "launch_f_antisnipe" },
     ]);
-    kb.inline_keyboard.push([
-      { text: `🔁 Buyback: ${buyback > 0 ? buyback+"%" : "OFF"}`, callback_data: "launch_f_buyback" },
-    ]);
+    kb.inline_keyboard.push([{ text: `🔁 Buyback: ${buyback > 0 ? buyback+"%" : "OFF"}`, callback_data: "launch_f_buyback" }]);
+    // Native fields — gated by launchpad capability
+    if (lpHas(info, "decimals")) {
+      kb.inline_keyboard.push([{ text: `🔢 Decimals: ${decimals}`, callback_data: "launch_f_decimals" }]);
+    }
+    if (lpHas(info, "teamalloc") || lpHas(info, "creatorfee")) {
+      const row = [];
+      if (lpHas(info, "teamalloc")) row.push({ text: `👥 Team Alloc: ${teamAlloc > 0 ? teamAlloc+"%" : "OFF"}`, callback_data: "launch_f_teamalloc" });
+      if (lpHas(info, "creatorfee")) row.push({ text: `💵 Creator Fee: ${creatorFee > 0 ? creatorFee+"%" : "OFF"}`, callback_data: "launch_f_creatorfee" });
+      if (row.length) kb.inline_keyboard.push(row);
+    }
+    if (lpHas(info, "teamalloc") || lpHas(info, "creatorfee")) {
+      kb.inline_keyboard.push([{ text: treasuryW ? "🏦 Treasury ✅" : "🏦 Treasury Wallet", callback_data: "launch_f_treasury" }]);
+    }
   }
   // Launch wallet readiness check
   const needToLaunch = (parseFloat(devBuy) || 0) + 0.04; // initial buy + launch fee + jito tip buffer
@@ -874,7 +900,8 @@ function buildLaunchForm(userId) {
   }
   kb.inline_keyboard.push([{ text: launchWalletLow ? `⚠️ 💰 Initial Buy: ${devBuy} SOL` : `💰 Initial Buy: ${devBuy} SOL`, callback_data: "launch_f_devbuy" }]);
   const ready = name && symbol;
-  kb.inline_keyboard.push([{ text: ready ? "🚀 Launch Token" : "❗ Set name & symbol", callback_data: ready ? "launch_f_confirm" : "launch_f_noop" }]);
+  kb.inline_keyboard.push([{ text: ready ? "📋 Review & Launch" : "❗ Set name & symbol", callback_data: ready ? "launch_f_review" : "launch_f_noop" }]);
+  // (CTA uses platform branding on confirm)
   kb.inline_keyboard.push([{ text: "← Back", callback_data: "menu_launch" }]);
   return { msg, kb };
 }
@@ -972,6 +999,7 @@ async function showWatchlistScreen(ctx, userId) {
 }
 
 module.exports = {
+  LAUNCHPAD_INFO,
   showWatchlistScreen,
   handlePnlCard,
   safeEdit,

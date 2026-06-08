@@ -312,11 +312,17 @@ const t = text.trim().toLowerCase();
       const field = db.getSysConfig(`launch_field_${userId}`) || "";
       let val = text.trim();
       if (field === "symbol") val = val.replace(/[^A-Za-z0-9]/g, "").slice(0, 10).toUpperCase();
-      if (["supply","grad","devbuy","maxwallet","bundleper","antisnipe","buyback","initprice","vestpct","vestcliff"].includes(field)) {
+      if (field === "treasury") {
+        const tw = text.trim();
+        if (tw.toLowerCase() === "skip") val = "";
+        else if (tw.length < 32 || tw.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(tw)) { await ctx.reply("❌ Invalid Solana address (or send 'skip')."); return; }
+        else val = tw;
+      } else if (["supply","grad","devbuy","maxwallet","bundleper","antisnipe","buyback","initprice","vestpct","vestcliff","decimals","teamalloc","creatorfee"].includes(field)) {
         const n = parseFloat(val.replace(/[^0-9.]/g, ""));
         if (isNaN(n) || n < 0) { await ctx.reply("❌ Enter a valid number."); return; }
-        if (["supply","antisnipe","vestcliff"].includes(field)) val = String(Math.floor(n));
+        if (["supply","antisnipe","vestcliff","decimals"].includes(field)) val = String(Math.floor(n));
         else val = String(n);
+        if (field === "decimals" && (parseInt(val) > 18)) { await ctx.reply("❌ Decimals must be 0-18 (9 is standard)."); return; }
       }
       db.setSysConfig(`launch_f_${field}_${userId}`, val);
       const { buildLaunchForm } = require("./helpers.routes");
