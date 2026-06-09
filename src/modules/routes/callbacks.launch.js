@@ -123,7 +123,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         launch_f_vestcliff: { key: "vestcliff", label: "⏳ Cliff days before unlock starts (e.g. 7):" },
         launch_f_decimals: { key: "decimals", label: "🔢 Token decimals (standard is 9):" },
         launch_f_teamalloc: { key: "teamalloc", label: "👥 Team allocation % (e.g. 10, or 0 for none):" },
-        launch_f_creatorfee: { key: "creatorfee", label: "💵 Creator fee % on trades (e.g. 1, or 0):" },
+        launch_f_creatorfee: { key: "creatorfee", label: "💵 *Creator Fee*\n\nYou earn this % on every trade of your token\n— passive income from volume.\n\n✅ *Trust range:* 0.5%–1% (buyers accept this)\n⚠️ 2%+ looks greedy and scares buyers\n🚩 5%+ is a red flag\n\n_Only LaunchLab & Meteora let you set this.\npump.fun, letsBONK & Moonshot use their own\nfixed creator-reward systems._\n\nEnter % (e.g. 1, or 0 for none):" },
       };
       const mm = map[data];
       await ctx.answerCallbackQuery();
@@ -216,7 +216,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── LAUNCHPAD SELECTION ──────────────────────────────────
-    if (data.startsWith("launch_lp_")) {
+    if (data.startsWith("launch_lp_") && data !== "launch_lp_back") {
       const lp = data.replace("launch_lp_", "");
       await ctx.answerCallbackQuery();
       // Clear form for a fresh launch
@@ -313,7 +313,13 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const msgId = ctx.callbackQuery?.message?.message_id;
       if (msgId) db.setSysConfig(`launch_form_msg_${userId}`, String(msgId));
       db.setSysConfig(`launch_field_${userId}`, m.key);
-      const sent = await ctx.reply(m.label, { parse_mode: "Markdown" });
+      // Show "already added" notice if this field is already set
+      const curVal = db.getSysConfig(`launch_f_${m.key}_${userId}`) || "";
+      let promptLabel = m.label;
+      if (curVal && !["supply","grad","devbuy","decimals","antisnipe","buyback","initprice","vestpct","vestcliff","maxwallet","teamalloc","creatorfee","bundleper"].includes(m.key)) {
+        promptLabel = `✅ Already set: *${curVal.slice(0,40)}*\n\nSend a new value to change it, or ignore to keep.\n\n` + m.label;
+      }
+      const sent = await ctx.reply(promptLabel, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(sent.message_id));
       db.setSysConfig(`pending_${userId}`, "launch_field_input");
       return true;
@@ -323,7 +329,11 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       const msgId = ctx.callbackQuery?.message?.message_id;
       if (msgId) db.setSysConfig(`launch_form_msg_${userId}`, String(msgId));
-      const sent = await ctx.reply("🖼 *Set Token Image*\n\nSend an image, or paste an image URL:", { parse_mode: "Markdown" });
+      const hasImg = db.getSysConfig(`launch_f_image_${userId}`) || "";
+      const imgLabel = hasImg
+        ? "🖼 *Image already added* ✅\n\nSend a new image to replace it, or ignore to keep the current one."
+        : "🖼 *Set Token Image*\n\nSend an image, or paste an image URL:";
+      const sent = await ctx.reply(imgLabel, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(sent.message_id));
       db.setSysConfig(`pending_${userId}`, "launch_image_input");
       return true;
@@ -391,7 +401,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const cta = (LAUNCHPAD_INFO && LAUNCHPAD_INFO[lp]) ? LAUNCHPAD_INFO[lp].cta : "🚀 Confirm Launch";
       const kb = { inline_keyboard: [
         [{ text: cta, callback_data: "launch_f_confirm" }],
-        [{ text: "← Edit", callback_data: "launch_lp_back" }],
+        [{ text: "← Edit (data kept)", callback_data: "launch_lp_back" }],
       ]};
       return safeEdit(ctx, msg, kb);
     }

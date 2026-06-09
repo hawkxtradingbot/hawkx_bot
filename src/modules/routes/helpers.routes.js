@@ -676,10 +676,10 @@ async function showLimitOrdersScreen(ctx, userId) {
 const SOL_PRICE_USD = 63;
 // SOL price for graduation $ estimates. At mainnet, fetch live.
 const LAUNCHPAD_INFO = {
-  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: ["creatorfee"] },
+  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: [] },
   launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85, cta: "🚀 Launch on LaunchLab", success: "is LIVE on Raydium LaunchLab!", tagline: "Full control over your launch", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
   meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0, cta: "🚀 Launch on Meteora", success: "is LIVE on Meteora!", tagline: "Dynamic bonding curve", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
-  letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "Free mint · BONK launchpad", gradSol: 85, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: ["creatorfee"] },
+  letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "Free mint · BONK launchpad", gradSol: 85, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: [] },
   moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · simple", gradSol: 0, cta: "🚀 Launch on Moonshot", success: "is LIVE on Moonshot! 🌙", tagline: "Mobile-first simple launch", caps: [] },
 };
 
@@ -838,6 +838,10 @@ function buildLaunchForm(userId) {
       if (row.length) kb.inline_keyboard.push(row);
     }
   }
+  // ⚡ HawkX Tools separator (bundle/schedule/antisnipe/buyback work on ALL launchpads)
+  if (advExpanded) {
+    kb.inline_keyboard.push([{ text: "⚡ ── HawkX Tools ── ⚡", callback_data: "launch_f_noop" }]);
+  }
   // Bundle selector — inside Advanced
   if (advExpanded && bundleExpanded) {
     const devWalletId = parseInt(db.getSysConfig(`launch_f_wallet_${userId}`)) || (db.getUser(userId)||{}).active_wallet_id;
@@ -872,24 +876,22 @@ function buildLaunchForm(userId) {
     ]);
   }
   if (advExpanded) {
-    // Bot-side features — available on ALL launchpads
-    kb.inline_keyboard.push([
+    // All HawkX tools + native fields — strictly 2 per row
+    const toolBtns = [
       { text: schedule ? `🕐 ${schedule}` : "🕐 Schedule", callback_data: "launch_f_schedule" },
       { text: `🛡 Anti-Snipe: ${antisnipe > 0 ? antisnipe+"s" : "OFF"}`, callback_data: "launch_f_antisnipe" },
-    ]);
-    kb.inline_keyboard.push([{ text: `🔁 Buyback: ${buyback > 0 ? buyback+"%" : "OFF"}`, callback_data: "launch_f_buyback" }]);
-    // Native fields — gated by launchpad capability
-    if (lpHas(info, "decimals")) {
-      kb.inline_keyboard.push([{ text: `🔢 Decimals: ${decimals}`, callback_data: "launch_f_decimals" }]);
+      { text: `🔁 Buyback: ${buyback > 0 ? buyback+"%" : "OFF"}`, callback_data: "launch_f_buyback" },
+    ];
+    if (lpHas(info, "decimals")) toolBtns.push({ text: `🔢 Decimals: ${decimals}`, callback_data: "launch_f_decimals" });
+    if (lpHas(info, "teamalloc")) toolBtns.push({ text: `👥 Team Alloc: ${teamAlloc > 0 ? teamAlloc+"%" : "OFF"}`, callback_data: "launch_f_teamalloc" });
+    if (lpHas(info, "creatorfee")) toolBtns.push({ text: `💵 Creator Fee: ${creatorFee > 0 ? creatorFee+"%" : "OFF"}`, callback_data: "launch_f_creatorfee" });
+    for (let i = 0; i < toolBtns.length; i += 2) {
+      kb.inline_keyboard.push(toolBtns.slice(i, i + 2));
     }
-    if (lpHas(info, "teamalloc") || lpHas(info, "creatorfee")) {
-      const row = [];
-      if (lpHas(info, "teamalloc")) row.push({ text: `👥 Team Alloc: ${teamAlloc > 0 ? teamAlloc+"%" : "OFF"}`, callback_data: "launch_f_teamalloc" });
-      if (lpHas(info, "creatorfee")) row.push({ text: `💵 Creator Fee: ${creatorFee > 0 ? creatorFee+"%" : "OFF"}`, callback_data: "launch_f_creatorfee" });
-      if (row.length) kb.inline_keyboard.push(row);
-    }
-    if (lpHas(info, "teamalloc") || lpHas(info, "creatorfee")) {
-      kb.inline_keyboard.push([{ text: treasuryW ? "🏦 Treasury ✅" : "🏦 Treasury Wallet", callback_data: "launch_f_treasury" }]);
+    // Treasury — only show when it's actually used (buyback or team alloc active)
+    const treasuryNeeded = (parseFloat(buyback) > 0) || (parseFloat(teamAlloc) > 0);
+    if (treasuryNeeded) {
+      kb.inline_keyboard.push([{ text: treasuryW ? "🏦 Treasury ✅" : "🏦 Treasury Wallet (for buyback/team funds)", callback_data: "launch_f_treasury" }]);
     }
   }
   // Launch wallet readiness check
