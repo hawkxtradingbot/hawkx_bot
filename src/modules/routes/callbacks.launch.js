@@ -522,6 +522,14 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       // Save to sysconfig for the trade screen
       db.setSysConfig(`launched_name_${mockCa}`, name);
       db.setSysConfig(`launched_symbol_${mockCa}`, symbol);
+      // Fire the INITIAL BUY automatically (creates the position) — only if not scheduled
+      const initBuyAmt = parseFloat(db.getSysConfig(`launch_f_devbuy_${userId}`) || "0");
+      const schedCheck = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
+      const willSchedule = schedCheck && schedCheck !== "Launch now";
+      if (initBuyAmt > 0 && !willSchedule) {
+        try { await mockBuy(ctx, user, mockCa, initBuyAmt, "launch", "", { silent: true }); }
+        catch (e) { console.error("[Launch initial buy] failed:", e.message); }
+      }
       const info = { pump:"pump.fun", launchlab:"Raydium LaunchLab", meteora:"Meteora DBC", letsbonk:"LetsBonk", moonshot:"Moonshot" }[lp] || lp;
       const { buildLaunchSuccessScreen } = require("../launch");
       const { getMockPrice } = require("../executor");
@@ -539,7 +547,12 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       }
       // Clear the form AFTER building (so launch is clean for next time)
       ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","startmc","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
-      return safeEdit(ctx, msg, buildLaunchSuccessScreen(mockCa, name, symbol));
+      // Scheduled launches show the schedule message; live launches go STRAIGHT to the full trade screen
+      if (isScheduled) {
+        return safeEdit(ctx, msg, buildLaunchSuccessScreen(mockCa, name, symbol));
+      }
+      await refreshLaunchTradeScreen(ctx, userId, mockCa);
+      return true;
     }
 
     if (data === "launch_my_list") {
