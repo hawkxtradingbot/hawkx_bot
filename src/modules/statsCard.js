@@ -49,6 +49,35 @@ function getOverlayOpacity(pnlPct) {
 }
 
 
+// Generates a mini price-chart SVG (up-trend for profit, down for loss)
+function generateChartSVG(width, height, isProfit) {
+  const pts = [];
+  const n = 24;
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * width;
+    // base trend line + noise; profit trends up, loss trends down
+    const trend = isProfit ? (i / (n - 1)) : (1 - i / (n - 1));
+    const noise = Math.sin(i * 0.9) * 0.08 + (Math.random() - 0.5) * 0.06;
+    const yNorm = 1 - Math.max(0, Math.min(1, trend * 0.7 + 0.15 + noise));
+    const y = yNorm * height;
+    pts.push([x, y]);
+  }
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = line + ' L' + width + ' ' + height + ' L0 ' + height + ' Z';
+  const color = isProfit ? '#14F195' : '#ff4444';
+  const fillId = isProfit ? 'chartUp' : 'chartDown';
+  return `
+    <defs>
+      <linearGradient id="${fillId}" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" style="stop-color:${color}" stop-opacity="0.35"/>
+        <stop offset="100%" style="stop-color:${color}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${area}" fill="url(#${fillId})"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>
+  `;
+}
+
 async function generateTradeCard(opts) {
   const {
     username = 'Trader',

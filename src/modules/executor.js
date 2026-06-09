@@ -299,7 +299,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   );
   // Auto PnL card on every sell
   let exitMcap = 0;
-  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 4000 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
+  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 1500 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
   try {
     console.log("[PnL Card] Generating for user:", user.user_id);
     const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
