@@ -112,7 +112,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── ADVANCED INPUTS ──────────────────────────────────────
-    if (["launch_f_maxwallet","launch_f_bundleper","launch_f_antisnipe","launch_f_buyback","launch_f_initprice","launch_f_vestpct","launch_f_vestcliff","launch_f_decimals","launch_f_teamalloc","launch_f_creatorfee"].includes(data)) {
+    if (["launch_f_maxwallet","launch_f_bundleper","launch_f_antisnipe","launch_f_buyback","launch_f_initprice","launch_f_vestpct","launch_f_vestcliff","launch_f_decimals","launch_f_teamalloc","launch_f_creatorfee","launch_f_startmc"].includes(data)) {
       const map = {
         launch_f_maxwallet: { key: "maxwallet", label: "👥 Enter Max Wallet % (e.g. 2, or 0 for no limit):" },
         launch_f_bundleper: { key: "bundleper", label: "💰 Enter SOL per bundle wallet (e.g. 0.5):" },
@@ -123,6 +123,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         launch_f_vestcliff: { key: "vestcliff", label: "⏳ Cliff days before unlock starts (e.g. 7):" },
         launch_f_decimals: { key: "decimals", label: "🔢 Token decimals (standard is 9):" },
         launch_f_teamalloc: { key: "teamalloc", label: "👥 Team allocation % (e.g. 10, or 0 for none):" },
+        launch_f_startmc: { key: "startmc", label: "🎯 *Starting Market Cap*\n\nSet your token's starting MC in SOL.\nTypical range: 1–50 SOL. Lower = cheaper entry\nfor buyers, higher = premium start.\n\nEnter SOL (e.g. 10):" },
         launch_f_creatorfee: { key: "creatorfee", label: "💵 *Creator Fee*\n\nYou earn this % on every trade of your token\n— passive income from volume.\n\n✅ *Trust range:* 0.5%–1% (buyers accept this)\n⚠️ 2%+ looks greedy and scares buyers\n🚩 5%+ is a red flag\n\n_Only LaunchLab & Meteora let you set this.\npump.fun, letsBONK & Moonshot use their own\nfixed creator-reward systems._\n\nEnter % (e.g. 1, or 0 for none):" },
       };
       const mm = map[data];
@@ -220,7 +221,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const lp = data.replace("launch_lp_", "");
       await ctx.answerCallbackQuery();
       // Clear form for a fresh launch
-      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
+      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","startmc","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
       db.setSysConfig(`launch_lp_${userId}`, lp);
       const { msg, kb } = buildLaunchForm(userId);
       return safeEdit(ctx, msg, kb);
@@ -248,16 +249,26 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       g += "*🛡 Anti-Snipe* — block buys for X seconds after\nlaunch so bots can't front-run your community.\n\n";
       g += "*🔁 Auto-Buyback* — % of your token's trading\nfees used to buy back & support price (separate\nfrom your HawkX fees).\n";
       if (isAdv) {
-        g += "\n*⚙️ Advanced (this launchpad):*\n";
+        const lpLabel = lp === "meteora" ? "Meteora DBC" : "Raydium LaunchLab";
+        g += `\n*⚙️ Advanced (${lpLabel}):*\n`;
         g += "📦 *Supply* — total tokens created\n";
-        g += "📈 *Curve* — justsendit (85 SOL preset) or custom\n";
-        g += "🎓 *Graduation* — SOL needed to graduate to DEX\n";
-        g += "💎 *Vesting* — lock dev tokens, release over\ntime (% + days + cliff). Builds trust.\n";
-        g += "💲 *Initial Price* — starting price (custom curve)\n";
+        g += "🔢 *Decimals* — token divisibility (6 standard)\n";
+        if (lp === "meteora") {
+          g += "📈 *DBC Curve* — configurable curve shape (linear,\nexponential). Sets how price rises as people buy.\n";
+          g += "🎯 *Migration* — dynamic threshold; when hit, token\nmigrates to a Meteora DAMM pool automatically.\n";
+        } else {
+          g += "📈 *Curve* — justsendit (85 SOL preset) or custom\n";
+          g += "🎓 *Graduation* — SOL raise target (min 30 SOL).\nAt target, LP migrates to Raydium & is burned.\n";
+        }
+        g += "💎 *Vesting* — lock dev/team tokens, release over\ntime (% + days + cliff). Builds buyer trust.\n";
+        g += "👥 *Team Alloc* — % of supply reserved for team\n(pair with vesting or buyers distrust it).\n";
+        g += "💵 *Creator Fee* — you earn % on every trade\n(0.5–1% is the trust range).\n";
         g += "🔒 *Revoke Mint* — no more tokens can be made (safe)\n";
         g += "🔒 *Revoke Freeze* — can't freeze wallets (safe)\n";
-        g += "🔥 *Burn LP* — lock liquidity forever (anti-rug)\n";
+        g += "🔥 *Burn LP* — liquidity locked/burned automatically\nat graduation (anti-rug).\n";
         g += "👥 *Max Wallet* — cap how much one wallet can hold\n";
+      } else {
+        g += `\n_This launchpad uses fixed supply, decimals &\ncurve — auto-graduation handled for you. Just\nset identity + use HawkX tools above._\n`;
       }
       g += "━━━━━━━━━━━━━━━━━━━";
       const kb = { inline_keyboard: [[{ text: "← Back to Form", callback_data: `launch_lp_back` }]] };
@@ -341,8 +352,13 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
 
     // ── TOGGLES (curve, vesting) ─────────────────────────────
     if (data === "launch_f_curve") {
-      const cur = db.getSysConfig(`launch_f_curve_${userId}`) || "justsendit";
-      db.setSysConfig(`launch_f_curve_${userId}`, cur === "justsendit" ? "custom" : "justsendit");
+      const lpKey = db.getSysConfig(`launch_lp_${userId}`) || "pump";
+      const cur = db.getSysConfig(`launch_f_curve_${userId}`) || (lpKey === "meteora" ? "dbc" : "justsendit");
+      if (lpKey === "meteora") {
+        db.setSysConfig(`launch_f_curve_${userId}`, cur === "dbc" ? "custom" : "dbc");
+      } else {
+        db.setSysConfig(`launch_f_curve_${userId}`, cur === "justsendit" ? "custom" : "justsendit");
+      }
       await ctx.answerCallbackQuery();
       const { msg, kb } = buildLaunchForm(userId);
       return safeEdit(ctx, msg, kb);
@@ -384,6 +400,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       if (antisnipe>0) msg += `🛡 Anti-Snipe: ${antisnipe}s\n`;
       if (buyback>0) msg += `🔁 Buyback: ${buyback}%\n`;
       if (maxwallet>0) msg += `👥 Max Wallet: ${maxwallet}%\n`;
+      const smc = g("startmc"); if (smc > 0) msg += `🎯 Starting MC: ${smc} SOL\n`;
       if (burnLp) msg += `🔥 LP Burn: ON\n`;
       if (vesting) msg += `💎 Vesting: ON\n`;
       msg += `━━━━━━━━━━━━━━━━━━━`;
@@ -500,6 +517,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         team_alloc: parseFloat(db.getSysConfig(`launch_f_teamalloc_${userId}`) || "0"),
         treasury_wallet: db.getSysConfig(`launch_f_treasury_${userId}`) || "",
         creator_fee_bps: Math.round(parseFloat(db.getSysConfig(`launch_f_creatorfee_${userId}`) || "0") * 100),
+        initial_price: parseFloat(db.getSysConfig(`launch_f_startmc_${userId}`) || "0"),
       });
       // Save to sysconfig for the trade screen
       db.setSysConfig(`launched_name_${mockCa}`, name);
@@ -520,7 +538,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         msg = `✅ *${name}* ${successTxt} [DEVNET]\n\n🔗 CA: \`${mockCa}\`\n💰 Price: *${price.toFixed(8)}*\n\n💡 _Trade your token below_`;
       }
       // Clear the form AFTER building (so launch is clean for next time)
-      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
+      ["name","symbol","desc","image","x","tg","web","supply","curve","grad","vesting","devbuy","revokemint","revokefreeze","burnlp","maxwallet","bundlewallets","bundleper","wallet","discord","vestingdays","bundleids","bundle_exp","wallet_exp","schedule","antisnipe","buyback","initprice","vestpct","vestcliff","bundlemode","bundleamounts","decimals","teamalloc","treasury","creatorfee","startmc","adv_exp"].forEach(k => db.setSysConfig(`launch_f_${k}_${userId}`, ""));
       return safeEdit(ctx, msg, buildLaunchSuccessScreen(mockCa, name, symbol));
     }
 

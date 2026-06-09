@@ -677,8 +677,8 @@ const SOL_PRICE_USD = 63;
 // SOL price for graduation $ estimates. At mainnet, fetch live.
 const LAUNCHPAD_INFO = {
   pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: [] },
-  launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85, cta: "🚀 Launch on LaunchLab", success: "is LIVE on Raydium LaunchLab!", tagline: "Full control over your launch", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
-  meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0, cta: "🚀 Launch on Meteora", success: "is LIVE on Meteora!", tagline: "Dynamic bonding curve", caps: ["supply","decimals","curve","grad","initprice","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
+  launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85, cta: "🚀 Launch on LaunchLab", success: "is LIVE on Raydium LaunchLab!", tagline: "Full control over your launch", caps: ["supply","decimals","curve","grad","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
+  meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0, cta: "🚀 Launch on Meteora", success: "is LIVE on Meteora!", tagline: "Dynamic bonding curve", caps: ["supply","decimals","curve","migthreshold","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
   letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "Free mint · BONK launchpad", gradSol: 85, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: [] },
   moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · simple", gradSol: 0, cta: "🚀 Launch on Moonshot", success: "is LIVE on Moonshot! 🌙", tagline: "Mobile-first simple launch", caps: [] },
 };
@@ -716,6 +716,7 @@ function buildLaunchForm(userId) {
   const teamAlloc = db.getSysConfig(`launch_f_teamalloc_${userId}`) || "0";
   const treasuryW = db.getSysConfig(`launch_f_treasury_${userId}`) || "";
   const creatorFee = db.getSysConfig(`launch_f_creatorfee_${userId}`) || "0";
+  const startMc = db.getSysConfig(`launch_f_startmc_${userId}`) || "0";
   const antisnipe = db.getSysConfig(`launch_f_antisnipe_${userId}`) || "0";
   const buyback = db.getSysConfig(`launch_f_buyback_${userId}`) || "0";
   const initPrice = db.getSysConfig(`launch_f_initprice_${userId}`) || "0";
@@ -729,21 +730,13 @@ function buildLaunchForm(userId) {
   const sched2 = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
   const gradStr = info.gradSol > 0 ? `graduates at ${info.gradSol} SOL (~${Math.round(info.gradSol * SOL_PRICE_USD / 1000)}K @ ${SOL_PRICE_USD}/SOL)` : "dynamic bonding curve";
   const fixedNote = !info.advanced ? "\n🔒 Supply, decimals & curve are FIXED by this\nlaunchpad. Token details CANNOT be changed\nafter launch — set them carefully." : "\n⚠️ Token details CANNOT be changed after launch.";
-  let msg = `${info.icon} *${info.name}*\n_${info.tagline}_\n\n━━━━━━━━━━━━━━━━━━━\n💸 ${info.fee}\n🎓 ${gradStr}${fixedNote}\n━━━━━━━━━━━━━━━━━━━\n\n📖 *How it works:* Tap each field below to\nset it — your values appear on the buttons.\nName & Symbol are required. Open ⚙️ Advanced\nfor supply, bundle buy, anti-snipe & more.\n`;
+  const initBuyNum = parseFloat(devBuy) || 0;
+  const needNum = (initBuyNum + 0.04).toFixed(2);
+  let msg = `${info.icon} *${info.name}*\n_${info.tagline}_\n\n💸 ${info.fee}  ·  🎓 ${gradStr}\n\n💰 *Cost to you:* ~${needNum} SOL (initial buy ${initBuyNum} + ~0.04 fees/Jito tip). The graduation target is raised by ALL buyers — not your money.\n\n_Tap fields to set them. Name & Symbol required.\nTap 📖 Guide for help. Details can't change after launch._\n`;
   if (desc) msg += `\n📄 ${stripMd(desc).slice(0,150)}\n`;
   if (bundleIds2.length) msg += `🎁 Bundle: ${bundleIds2.length} wallet(s) buy at launch\n`;
   if (sched2) msg += `🕐 Scheduled: ${sched2}\n`;
-  if (info.advanced) {
-    msg += `\n⚙️ *Advanced:*\n`;
-    msg += `📦 Supply: *${supply}*\n`;
-    msg += `📈 Curve: *${curve}*\n`;
-    msg += `🎓 Graduation: *${grad} SOL*\n`;
-    msg += `💎 Vesting: *${vesting ? "ON" : "OFF"}*\n`;
-    if (vesting) msg += `   ↳ ${vestPct}% over ${vestingDays}d, cliff ${vestCliff}d\n`;
-    if (info.advanced) msg += `💲 Initial Price: *${initPrice > 0 ? initPrice : "auto"}*\n`;
-    msg += `🔒 Revoke Mint: *${revokeMint ? "ON" : "OFF"}* · 🔒 Freeze: *${revokeFreeze ? "ON" : "OFF"}*\n`;
-    msg += `🔥 Burn LP: *${burnLp ? "ON" : "OFF"}* · 👥 Max Wallet: *${maxWallet > 0 ? maxWallet+"%" : "OFF"}*\n`;
-  }
+  // (advanced values are shown on the buttons themselves — no need to repeat in text)
   // Wallet selector
   const wallets = db.getWallets(userId) || [];
   const freshUser = db.getUser(userId);
@@ -797,17 +790,32 @@ function buildLaunchForm(userId) {
   ]);
   // Advanced toggle (collapsed by default)
   const advCount = [name,symbol].filter(Boolean).length; // placeholder
-  kb.inline_keyboard.push([{ text: advExpanded ? "⚙️ Advanced ▲" : "⚙️ Advanced ▼", callback_data: "launch_f_adv_toggle" }]);
+  const advLabel = info.advanced
+    ? (advExpanded ? "🔧 Custom Settings ▲" : "🔧 Custom Settings ▼")
+    : (advExpanded ? "⚙️ More Options ▲" : "⚙️ More Options ▼");
+  kb.inline_keyboard.push([{ text: advLabel, callback_data: "launch_f_adv_toggle" }]);
   if (advExpanded) {
-    if (lpHas(info, "supply") || lpHas(info, "curve")) {
+    if (lpHas(info, "supply")) {
+      kb.inline_keyboard.push([
+        { text: `📦 Supply: ${supply}`, callback_data: "launch_f_supply" },
+        { text: `🎯 Start MC: ${startMc > 0 ? startMc + " SOL" : "auto"}`, callback_data: "launch_f_startmc" },
+      ]);
+    }
+    if (lpHas(info, "curve")) {
       const row = [];
-      if (lpHas(info, "supply")) row.push({ text: `📦 Supply`, callback_data: "launch_f_supply" });
-      if (lpHas(info, "curve")) row.push({ text: curve === "justsendit" ? "📈 justsendit ✅" : "📈 Custom", callback_data: "launch_f_curve" });
+      if (lpHas(info, "curve")) {
+        const lpKey = db.getSysConfig(`launch_lp_${userId}`) || "pump";
+        let curveLabel;
+        if (lpKey === "meteora") curveLabel = curve === "dbc" ? "📈 DBC Curve ✅" : "📈 Curve Shape";
+        else curveLabel = curve === "justsendit" ? "📈 justsendit ✅" : "📈 Custom";
+        row.push({ text: curveLabel, callback_data: "launch_f_curve" });
+      }
       if (row.length) kb.inline_keyboard.push(row);
     }
-    if (lpHas(info, "grad") || lpHas(info, "vesting")) {
+    if (lpHas(info, "grad") || lpHas(info, "migthreshold") || lpHas(info, "vesting")) {
       const row = [];
       if (lpHas(info, "grad")) row.push({ text: `🎓 Grad: ${grad} SOL`, callback_data: "launch_f_grad" });
+      if (lpHas(info, "migthreshold")) row.push({ text: `🎯 Migration: ${grad > 0 ? grad + " SOL" : "auto"}`, callback_data: "launch_f_grad" });
       if (lpHas(info, "vesting")) row.push({ text: vesting ? "💎 Vesting: ON" : "💎 Vesting: OFF", callback_data: "launch_f_vesting" });
       if (row.length) kb.inline_keyboard.push(row);
     }
