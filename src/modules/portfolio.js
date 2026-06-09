@@ -51,11 +51,10 @@ function formatSol(val) {
 // ── Main portfolio screen ─────────────────────────────────────
 async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
   const allPositions = db.getPositionsBySource(user.user_id, filter === "launch" ? "all" : filter);
-  const launchCa = db.getSysConfig(`launch_ca_${user.user_id}`) || "";
   const positions = allPositions.filter((p) => {
     if (p.wallet_id !== user.active_wallet_id) return false;
-    if (filter === "launch") return p.source === "launch" || p.token_ca === launchCa;
-    if (filter === "manual") return p.source === "manual" && p.token_ca !== launchCa;
+    if (filter === "launch") return p.source === "launch";
+    if (filter === "manual") return p.source === "manual";
     return true;
   });
 
