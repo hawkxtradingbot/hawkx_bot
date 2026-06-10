@@ -151,7 +151,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   let entryMcap = 0;
   try {
     const axiosMcap = require("axios");
-    const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 4000 });
+    const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1500 });
     const pairs  = dexRes.data?.pairs;
     if (pairs && pairs.length > 0) entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
   } catch {}
