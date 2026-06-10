@@ -219,25 +219,13 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   const { creditReferralEarnings } = require("./referrals");
   creditReferralEarnings(user.user_id, tradeId, feeSol);
 
-  // Update processing → confirmed (skip if silent)
-  if (!opts.silent && processingMsg) {
-    try {
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        processingMsg.message_id,
-        `✅ *Buy Confirmed!*\n\nToken: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*`,
-        { parse_mode: "Markdown" }
-      );
-    } catch {}
-  }
-
+  // (skip the "Confirmed" edit — we delete this msg and open the position screen immediately)
   if (safety.status === "WARNING") {
     await ctx.reply(`⚠️ *Safety Warning:* ${String(safety.reason||"").replace(/[_*`[\]]/g,"")}`, { parse_mode: "Markdown" });
   }
 
   // Wait 100ms then delete confirmed message and open position screen
-  await new Promise((r) => setTimeout(r, 100));
-  try { await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id); } catch {}
+  try { if (processingMsg) await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id); } catch {}
 
   // Open position screen
   if (positionId) {
