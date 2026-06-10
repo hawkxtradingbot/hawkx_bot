@@ -704,7 +704,7 @@ function buildRankUpBanner(user, rankName, fee) {
     `💎 New Fee: *${fee}%*\n\n` +
     `_${tags[user.rank]||"Keep climbing."}_\n\n` +
     `👥 Refer & earn 30%:\n` +
-    `🔗 t.me/YourBot?start=REF_${user.user_id}`
+    `🔗 t.me/${global.BOT_USERNAME || "hawkx_test_replit_bot"}?start=REF_${user.user_id}_${user.username || "user"}`
   );
 }
 

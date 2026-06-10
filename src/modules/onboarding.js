@@ -84,6 +84,24 @@ async function handleStart(ctx, bot) {
         },
       }
     );
+    // Fund prompt — new users have an empty wallet
+    try {
+      const wallets = db.getWallets(userId) || [];
+      const w = wallets[0];
+      if (w) {
+        let fundMsg =
+          "💰 *Fund Your Wallet*\n" +
+          "━━━━━━━━━━━━━━━━━━\n\n" +
+          "Your wallet is ready! Send SOL to this address\nto start trading.\n\n" +
+          "📋 Your address (tap to copy):\n" +
+          "`" + w.public_key + "`\n\n" +
+          "🔐 Your keys, your coins — HawkX is non-custodial.\nOnly you control your wallet.";
+        const fundKb = { inline_keyboard: [] };
+        fundKb.inline_keyboard.push([{ text: "🔐 Set Security PIN", callback_data: "set_sap" }]);
+        fundKb.inline_keyboard.push([{ text: "✅ Start Trading", callback_data: "menu_main" }]);
+        await ctx.reply(fundMsg, { parse_mode: "Markdown", reply_markup: fundKb });
+      }
+    } catch (e) { console.error("[Onboard fund prompt]", e.message); }
   }
 }
 
