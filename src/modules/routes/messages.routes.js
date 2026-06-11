@@ -6,7 +6,7 @@ const { handleTextInput } = require("../settings/index");
 const { handleAdminTextInput, isAdmin } = require("../admin");
 const { isSolanaAddress } = require("../walletVault");
 const { buildMainMenu, buildSniperMainMenu, buildSniperConfigMenu, buildRealtimeSnipeMenu, buildMigrationSniperMenu, getGuide, buildCopyChannelSettingsMenu } = require("../keyboards");
-const { getTokenInfo, formatNum, formatPrice } = require("../tokenInfo");
+const { getTokenInfo, getTokenSafety, formatSafetyCard, formatNum, formatPrice } = require("../tokenInfo");
 const { handleAutoBuy, executeRealtimeSnipe, mockBuy, mockSell } = require("../executor");
 
 async function deleteMsg(ctx, msgId) {
@@ -537,20 +537,28 @@ const t = text.trim().toLowerCase();
       db.setSysConfig(`pending_ca_${userId}`, text);
       db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
       const tInfo = await getTokenInfo(text);
+      const safety = await getTokenSafety(text);
+      if (safety && tInfo.holders) safety.holders = tInfo.holders;
       const dexUrl = `https://dexscreener.com/solana/${text}`;
       const tName = tInfo.name
-        ? `<a href="${dexUrl}"><b>${tInfo.name}</b></a>`
+        ? `<a href="${dexUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
         : `<a href="${dexUrl}"><b>${text.slice(0, 8)}...</b></a>`;
-      let infoLines = `🔍 ${tName}\n\n<code>${text}</code>\n\n`;
-      if (tInfo.price) infoLines += `💲 Price: ${formatPrice(tInfo.price)}\n`;
-      if (tInfo.mcap) infoLines += `📊 MCap: ${formatNum(tInfo.mcap)}\n`;
-      if (tInfo.liquidity)
-        infoLines += `💧 Liq: ${formatNum(tInfo.liquidity)}\n`;
-      if (tInfo.volume24h)
-        infoLines += `📈 Vol 24h: ${formatNum(tInfo.volume24h)}\n`;
-      if (tInfo.holders)
-        infoLines += `👥 Holders: ${tInfo.holders.toLocaleString()}\n`;
-      infoLines += `🛡 Safety: ✅ Checking...\n\nSelect amount to buy:`;
+      const ch24 = tInfo.change24h !== undefined ? ` ${tInfo.change24h >= 0 ? "📈 +" : "📉 "}${tInfo.change24h}% (24h)` : "";
+      let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
+      if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
+      const sizeBits = [];
+      if (tInfo.mcap) sizeBits.push(`MC ${formatNum(tInfo.mcap)}`);
+      if (tInfo.liquidity) sizeBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
+      if (sizeBits.length) infoLines += `💧 ${sizeBits.join(" · ")}\n`;
+      const actBits = [];
+      if (tInfo.volume24h) actBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
+      if (tInfo.holders) actBits.push(`👥 ${tInfo.holders.toLocaleString()}`);
+      if (actBits.length) infoLines += `📊 ${actBits.join(" · ")}\n`;
+      // 2-line safety card
+      const sc = formatSafetyCard(safety);
+      infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n${sc.l1}\n${sc.l2}\n`;
+      if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${text}</code>\n\nSelect amount to buy:`;
       await ctx.reply(infoLines, {
         parse_mode: "HTML",
         reply_markup: {
@@ -1369,20 +1377,27 @@ const t = text.trim().toLowerCase();
       db.setSysConfig(`pending_ca_${userId}`, text);
       db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
       const tInfo = await getTokenInfo(text);
+      const safety = await getTokenSafety(text);
+      if (safety && tInfo.holders) safety.holders = tInfo.holders;
       const dexUrl = `https://dexscreener.com/solana/${text}`;
       const tName = tInfo.name
-        ? `<a href="${dexUrl}"><b>${tInfo.name}</b></a>`
+        ? `<a href="${dexUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
         : `<a href="${dexUrl}"><b>${text.slice(0, 8)}...</b></a>`;
-      let infoLines = `🔍 ${tName}\n\n<code>${text}</code>\n\n`;
-      if (tInfo.price) infoLines += `💲 Price: ${formatPrice(tInfo.price)}\n`;
-      if (tInfo.mcap) infoLines += `📊 MCap: ${formatNum(tInfo.mcap)}\n`;
-      if (tInfo.liquidity)
-        infoLines += `💧 Liq: ${formatNum(tInfo.liquidity)}\n`;
-      if (tInfo.volume24h)
-        infoLines += `📈 Vol 24h: ${formatNum(tInfo.volume24h)}\n`;
-      if (tInfo.holders)
-        infoLines += `👥 Holders: ${tInfo.holders.toLocaleString()}\n`;
-      infoLines += `🛡 Safety: ✅ Checking...\n\nSelect amount to buy:`;
+      const ch24 = tInfo.change24h !== undefined ? ` ${tInfo.change24h >= 0 ? "📈 +" : "📉 "}${tInfo.change24h}% (24h)` : "";
+      let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
+      if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
+      const sizeBits = [];
+      if (tInfo.mcap) sizeBits.push(`MC ${formatNum(tInfo.mcap)}`);
+      if (tInfo.liquidity) sizeBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
+      if (sizeBits.length) infoLines += `💧 ${sizeBits.join(" · ")}\n`;
+      const actBits = [];
+      if (tInfo.volume24h) actBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
+      if (tInfo.holders) actBits.push(`👥 ${tInfo.holders.toLocaleString()}`);
+      if (actBits.length) infoLines += `📊 ${actBits.join(" · ")}\n`;
+      const sc = formatSafetyCard(safety);
+      infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n${sc.l1}\n${sc.l2}\n`;
+      if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${text}</code>\n\nSelect amount to buy:`;
       await ctx.reply(infoLines, {
         parse_mode: "HTML",
         reply_markup: {

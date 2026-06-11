@@ -82,4 +82,64 @@ function formatPrice(p) {
   return `$${p.toFixed(4)}`;
 }
 
-module.exports = { getTokenInfo, formatNum, formatPrice };
+// Token safety checks — mint/freeze authority, top holder, LP
+// Real RPC on mainnet; mock fallback on devnet/mock tokens
+async function getTokenSafety(ca) {
+  // Devnet/mock tokens — return mock "safe" values
+  if (ca.startsWith("DEVNET_") || ca.startsWith("MOCK_") || ca.startsWith("LAUNCH")) {
+    return { mintRevoked: true, freezeRevoked: true, lpLocked: true, topHolderPct: 8, holders: 0, isMock: true };
+  }
+
+  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, isMock: false };
+
+  try {
+    const rpcUrl = config.HELIUS_API_KEY
+      ? `https://mainnet.helius-rpc.com/?api-key=${config.HELIUS_API_KEY}`
+      : "https://api.mainnet-beta.solana.com";
+
+    // 1. Mint + freeze authority via getAccountInfo (parsed)
+    const mintRes = await axios.post(rpcUrl, {
+      jsonrpc: "2.0", id: 1, method: "getAccountInfo",
+      params: [ca, { encoding: "jsonParsed" }],
+    }, { timeout: 4000 });
+    const parsed = mintRes.data?.result?.value?.data?.parsed?.info;
+    if (parsed) {
+      safety.mintRevoked = parsed.mintAuthority === null;
+      safety.freezeRevoked = parsed.freezeAuthority === null;
+    }
+
+    // 2. Top holder % via getTokenLargestAccounts
+    const largeRes = await axios.post(rpcUrl, {
+      jsonrpc: "2.0", id: 2, method: "getTokenLargestAccounts", params: [ca],
+    }, { timeout: 4000 });
+    const accounts = largeRes.data?.result?.value || [];
+    const supplyRes = await axios.post(rpcUrl, {
+      jsonrpc: "2.0", id: 3, method: "getTokenSupply", params: [ca],
+    }, { timeout: 4000 });
+    const totalSupply = parseFloat(supplyRes.data?.result?.value?.uiAmount || 0);
+    if (accounts.length && totalSupply > 0) {
+      const topAmount = parseFloat(accounts[0]?.uiAmount || 0);
+      safety.topHolderPct = Math.round((topAmount / totalSupply) * 100);
+    }
+  } catch {}
+
+  return safety;
+}
+
+// Builds the 2-line safety card text from a safety object
+function formatSafetyCard(safety) {
+  const mark = (v) => v === true ? "✅" : v === false ? "🔴" : "⬜";
+  // Line 1: Mint, Freeze, LP
+  let l1 = `${mark(safety.mintRevoked)} Mint  ${mark(safety.freezeRevoked)} Freeze  ${mark(safety.lpLocked)} LP locked`;
+  // Line 2: Top holder %, holders
+  let topMark = "⬜", topTxt = "Top holder —";
+  if (safety.topHolderPct !== null && safety.topHolderPct !== undefined) {
+    topMark = safety.topHolderPct < 20 ? "✅" : safety.topHolderPct < 35 ? "⚠️" : "🔴";
+    topTxt = `Top ${safety.topHolderPct}%`;
+  }
+  const holdersTxt = safety.holders ? `✅ ${safety.holders.toLocaleString()} holders` : "";
+  let l2 = `${topMark} ${topTxt}` + (holdersTxt ? `  ${holdersTxt}` : "");
+  return { l1, l2 };
+}
+
+module.exports = { getTokenInfo, getTokenSafety, formatSafetyCard, formatNum, formatPrice };
