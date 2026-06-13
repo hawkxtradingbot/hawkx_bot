@@ -41,6 +41,9 @@ async function getTokenInfo(ca) {
       data.change6h    = pair.priceChange?.h6   || 0;
       data.change1h    = pair.priceChange?.h1   || 0;
       data.change5m    = pair.priceChange?.m5   || 0;
+      data.pairCreatedAt = pair.pairCreatedAt   || 0;
+      data.buys24h     = pair.txns?.h24?.buys    || 0;
+      data.sells24h    = pair.txns?.h24?.sells   || 0;
     }
   } catch {}
 
@@ -126,20 +129,39 @@ async function getTokenSafety(ca) {
   return safety;
 }
 
+// Formats token age from a created timestamp (ms) — real-time granular
+function formatAge(createdMs) {
+  if (!createdMs) return null;
+  const diff = Date.now() - createdMs;
+  if (diff < 0) return null;
+  const mins = Math.floor(diff / 60000);
+  const hrs  = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  const yrs  = Math.floor(days / 365);
+  if (yrs >= 1) return `${yrs}y ${days % 365}d`;
+  if (days >= 1) return `${days}d ${hrs % 24}h`;
+  if (hrs >= 1) return `${hrs}h ${mins % 60}m`;
+  return `${mins}m`;
+}
+
 // Builds the 2-line safety card text from a safety object
 function formatSafetyCard(safety) {
-  const mark = (v) => v === true ? "✅" : v === false ? "🔴" : "⬜";
-  // Line 1: Mint, Freeze, LP
-  let l1 = `${mark(safety.mintRevoked)} Mint  ${mark(safety.freezeRevoked)} Freeze  ${mark(safety.lpLocked)} LP locked`;
-  // Line 2: Top holder %, holders
-  let topMark = "⬜", topTxt = "Top holder —";
+  const mark = (v) => v === true ? "✅" : v === false ? "🔴" : null;
+  const bits1 = [];
+  // Only include checks we could actually verify (not null)
+  if (mark(safety.mintRevoked)) bits1.push(`${mark(safety.mintRevoked)} Mint`);
+  if (mark(safety.freezeRevoked)) bits1.push(`${mark(safety.freezeRevoked)} Freeze`);
+  if (mark(safety.lpLocked)) bits1.push(`${mark(safety.lpLocked)} LP locked`);
+  const bits2 = [];
   if (safety.topHolderPct !== null && safety.topHolderPct !== undefined) {
-    topMark = safety.topHolderPct < 20 ? "✅" : safety.topHolderPct < 35 ? "⚠️" : "🔴";
-    topTxt = `Top ${safety.topHolderPct}%`;
+    const tm = safety.topHolderPct < 20 ? "✅" : safety.topHolderPct < 35 ? "⚠️" : "🔴";
+    bits2.push(`${tm} Top ${safety.topHolderPct}%`);
   }
-  const holdersTxt = safety.holders ? `✅ ${safety.holders.toLocaleString()} holders` : "";
-  let l2 = `${topMark} ${topTxt}` + (holdersTxt ? `  ${holdersTxt}` : "");
+  if (safety.holders) bits2.push(`✅ ${safety.holders.toLocaleString()} holders`);
+  // Build lines — skip empty
+  const l1 = bits1.length ? bits1.join("  ") : null;
+  const l2 = bits2.length ? bits2.join("  ") : null;
   return { l1, l2 };
 }
 
-module.exports = { getTokenInfo, getTokenSafety, formatSafetyCard, formatNum, formatPrice };
+module.exports = { getTokenInfo, getTokenSafety, formatSafetyCard, formatAge, formatNum, formatPrice };

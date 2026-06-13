@@ -6,7 +6,7 @@ const { handleTextInput } = require("../settings/index");
 const { handleAdminTextInput, isAdmin } = require("../admin");
 const { isSolanaAddress } = require("../walletVault");
 const { buildMainMenu, buildSniperMainMenu, buildSniperConfigMenu, buildRealtimeSnipeMenu, buildMigrationSniperMenu, getGuide, buildCopyChannelSettingsMenu } = require("../keyboards");
-const { getTokenInfo, getTokenSafety, formatSafetyCard, formatNum, formatPrice } = require("../tokenInfo");
+const { getTokenInfo, getTokenSafety, formatSafetyCard, formatAge, formatNum, formatPrice } = require("../tokenInfo");
 const { handleAutoBuy, executeRealtimeSnipe, mockBuy, mockSell } = require("../executor");
 
 async function deleteMsg(ctx, msgId) {
@@ -543,33 +543,58 @@ const t = text.trim().toLowerCase();
       const tName = tInfo.name
         ? `<a href="${dexUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
         : `<a href="${dexUrl}"><b>${text.slice(0, 8)}...</b></a>`;
-      const ch24 = tInfo.change24h !== undefined ? ` ${tInfo.change24h >= 0 ? "📈 +" : "📉 "}${tInfo.change24h}% (24h)` : "";
+      const _chP = [];
+      const _fmtC = (v) => (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
+      if (tInfo.change5m !== undefined && tInfo.change5m !== 0) _chP.push("5m " + _fmtC(tInfo.change5m));
+      if (tInfo.change1h !== undefined && tInfo.change1h !== 0) _chP.push("1h " + _fmtC(tInfo.change1h));
+      if (tInfo.change24h !== undefined) _chP.push("24h " + _fmtC(tInfo.change24h));
+      const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
       let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
       if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
-      const sizeBits = [];
-      if (tInfo.mcap) sizeBits.push(`MC ${formatNum(tInfo.mcap)}`);
-      if (tInfo.liquidity) sizeBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
-      if (sizeBits.length) infoLines += `💧 ${sizeBits.join(" · ")}\n`;
-      const actBits = [];
-      if (tInfo.volume24h) actBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
-      if (tInfo.holders) actBits.push(`👥 ${tInfo.holders.toLocaleString()}`);
-      if (actBits.length) infoLines += `📊 ${actBits.join(" · ")}\n`;
+      const statBits = [];
+      if (tInfo.mcap) statBits.push(`MC ${formatNum(tInfo.mcap)}`);
+      if (tInfo.liquidity) statBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
+      if (tInfo.volume24h) statBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
+      if (statBits.length) infoLines += `📊 ${statBits.join(" · ")}\n`;
+      if (tInfo.holders) infoLines += `👥 ${tInfo.holders.toLocaleString()} holders\n`;
+      // Age + buys/sells
+      const ageStr = formatAge(tInfo.pairCreatedAt);
+      if (ageStr) {
+        const isNew = (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
+        infoLines += `🕐 Age: ${ageStr}${isNew ? " 🆕" : ""}`;
+        if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  🟢 ${tInfo.buys24h} / 🔴 ${tInfo.sells24h}`;
+        infoLines += `\n`;
+        if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
+      }
+      if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
       // 2-line safety card
       const sc = formatSafetyCard(safety);
-      infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n${sc.l1}\n${sc.l2}\n`;
-      if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      if (sc.l1 || sc.l2) {
+        infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n`;
+        if (sc.l1) infoLines += `${sc.l1}\n`;
+        if (sc.l2) infoLines += `${sc.l2}\n`;
+        if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      }
       infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${text}</code>\n\nSelect amount to buy:`;
       await ctx.reply(infoLines, {
         parse_mode: "HTML",
+        disable_web_page_preview: true,
         reply_markup: {
           inline_keyboard: [
             [
               { text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` },
               { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
               { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
+              { text: "✏️ Custom", callback_data: "buy_ca_custom" },
             ],
-            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
-            [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
+            [
+              { text: "📉 DCA", callback_data: "scanner_dca" },
+              { text: "🎯 Limit Order", callback_data: "scanner_limit" },
+            ],
+            [
+              { text: "← Back", callback_data: "menu_main" },
+              { text: "🔄 Refresh", callback_data: "trade_refresh_ca" },
+            ],
           ],
         },
       });
@@ -1383,32 +1408,56 @@ const t = text.trim().toLowerCase();
       const tName = tInfo.name
         ? `<a href="${dexUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
         : `<a href="${dexUrl}"><b>${text.slice(0, 8)}...</b></a>`;
-      const ch24 = tInfo.change24h !== undefined ? ` ${tInfo.change24h >= 0 ? "📈 +" : "📉 "}${tInfo.change24h}% (24h)` : "";
+      const _chP = [];
+      const _fmtC = (v) => (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
+      if (tInfo.change5m !== undefined && tInfo.change5m !== 0) _chP.push("5m " + _fmtC(tInfo.change5m));
+      if (tInfo.change1h !== undefined && tInfo.change1h !== 0) _chP.push("1h " + _fmtC(tInfo.change1h));
+      if (tInfo.change24h !== undefined) _chP.push("24h " + _fmtC(tInfo.change24h));
+      const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
       let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
       if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
-      const sizeBits = [];
-      if (tInfo.mcap) sizeBits.push(`MC ${formatNum(tInfo.mcap)}`);
-      if (tInfo.liquidity) sizeBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
-      if (sizeBits.length) infoLines += `💧 ${sizeBits.join(" · ")}\n`;
-      const actBits = [];
-      if (tInfo.volume24h) actBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
-      if (tInfo.holders) actBits.push(`👥 ${tInfo.holders.toLocaleString()}`);
-      if (actBits.length) infoLines += `📊 ${actBits.join(" · ")}\n`;
+      const statBits = [];
+      if (tInfo.mcap) statBits.push(`MC ${formatNum(tInfo.mcap)}`);
+      if (tInfo.liquidity) statBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
+      if (tInfo.volume24h) statBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
+      if (statBits.length) infoLines += `📊 ${statBits.join(" · ")}\n`;
+      if (tInfo.holders) infoLines += `👥 ${tInfo.holders.toLocaleString()} holders\n`;
+      const ageStr = formatAge(tInfo.pairCreatedAt);
+      if (ageStr) {
+        const isNew = (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
+        infoLines += `🕐 Age: ${ageStr}${isNew ? " 🆕" : ""}`;
+        if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  🟢 ${tInfo.buys24h} / 🔴 ${tInfo.sells24h}`;
+        infoLines += `\n`;
+        if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
+      }
+      if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
       const sc = formatSafetyCard(safety);
-      infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n${sc.l1}\n${sc.l2}\n`;
-      if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      if (sc.l1 || sc.l2) {
+        infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n`;
+        if (sc.l1) infoLines += `${sc.l1}\n`;
+        if (sc.l2) infoLines += `${sc.l2}\n`;
+        if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+      }
       infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${text}</code>\n\nSelect amount to buy:`;
       await ctx.reply(infoLines, {
         parse_mode: "HTML",
+        disable_web_page_preview: true,
         reply_markup: {
           inline_keyboard: [
             [
               { text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` },
               { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
               { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
+              { text: "✏️ Custom", callback_data: "buy_ca_custom" },
             ],
-            [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
-            [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
+            [
+              { text: "📉 DCA", callback_data: "scanner_dca" },
+              { text: "🎯 Limit Order", callback_data: "scanner_limit" },
+            ],
+            [
+              { text: "← Back", callback_data: "menu_main" },
+              { text: "🔄 Refresh", callback_data: "trade_refresh_ca" },
+            ],
           ],
         },
       });
