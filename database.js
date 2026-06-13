@@ -200,6 +200,22 @@ function runMigrations(d) {
       sell_pct REAL DEFAULT 100,
       active INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS dca_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_ca TEXT NOT NULL,
+      token_name TEXT DEFAULT '',
+      sol_per_buy REAL DEFAULT 0.1,
+      total_buys INTEGER DEFAULT 5,
+      buys_done INTEGER DEFAULT 0,
+      interval_sec INTEGER DEFAULT 3600,
+      next_buy_at TEXT DEFAULT (datetime('now')),
+      avg_price REAL DEFAULT 0,
+      total_spent REAL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      paused INTEGER DEFAULT 0,
+      wallet_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS auto_sell_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -842,6 +858,40 @@ function setLimitOrderExpiry(userId, id, expiresAt) {
 function cancelLimitOrder(userId, id) {
   getDb().prepare("UPDATE limit_orders SET active = -1 WHERE id = ? AND user_id = ?").run(id, userId);
 }
+// ── DCA ORDERS ───────────────────────────────────────
+function getDcaOrders(userId, tokenCa) {
+  if (tokenCa) return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND token_ca = ? AND active = 1 ORDER BY created_at DESC").all(userId, tokenCa);
+  return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND active = 1 ORDER BY created_at DESC").all(userId);
+}
+function addDcaOrder(userId, data) {
+  const nextBuy = new Date(Date.now()).toISOString(); // first buy fires on next tick
+  const result = getDb().prepare(
+    "INSERT INTO dca_orders (user_id, token_ca, token_name, sol_per_buy, total_buys, buys_done, interval_sec, next_buy_at, active, paused, wallet_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1, 0, ?)"
+  ).run(userId, data.tokenCa, data.tokenName || "", data.solPerBuy || 0.1, data.totalBuys || 5, data.intervalSec || 3600, nextBuy, data.walletId || null);
+  return result.lastInsertRowid;
+}
+function pauseDcaOrder(userId, id) {
+  const o = getDb().prepare("SELECT paused FROM dca_orders WHERE id = ? AND user_id = ?").get(id, userId);
+  if (!o) return;
+  getDb().prepare("UPDATE dca_orders SET paused = ? WHERE id = ? AND user_id = ?").run(o.paused ? 0 : 1, id, userId);
+}
+function cancelDcaOrder(userId, id) {
+  getDb().prepare("UPDATE dca_orders SET active = -1 WHERE id = ? AND user_id = ?").run(id, userId);
+}
+function getAllActiveDca() {
+  return getDb().prepare("SELECT * FROM dca_orders WHERE active = 1 AND paused = 0 AND buys_done < total_buys").all();
+}
+function recordDcaBuy(id, price, spent) {
+  const o = getDb().prepare("SELECT * FROM dca_orders WHERE id = ?").get(id);
+  if (!o) return;
+  const newDone = o.buys_done + 1;
+  const newSpent = o.total_spent + spent;
+  const newAvg = o.avg_price > 0 ? ((o.avg_price * o.buys_done) + price) / newDone : price;
+  const nextAt = new Date(Date.now() + o.interval_sec * 1000).toISOString();
+  const stillActive = newDone < o.total_buys ? 1 : 0;
+  getDb().prepare("UPDATE dca_orders SET buys_done = ?, total_spent = ?, avg_price = ?, next_buy_at = ?, active = ? WHERE id = ?")
+    .run(newDone, newSpent, newAvg, nextAt, stillActive, id);
+}
 // ── AUTO SELL TEMPLATES ───────────────────────────────────────
 function getAutoSellTemplates(userId) {
   return getDb().prepare("SELECT * FROM auto_sell_templates WHERE user_id = ? ORDER BY created_at DESC").all(userId);
@@ -1059,6 +1109,7 @@ module.exports = {
   getSniperConfigs, createSniperConfig, updateSniperConfig, deleteSniperConfig,
   getSniperConfig, pauseAllSnipes, getActiveSnipes, addSnipe, getRealtimeSniperConfig, updateRealtimeSniperConfig, cancelSnipe,
   getLimitOrders, addLimitOrder, setLimitOrderExpiry, cancelLimitOrder, pauseLimitOrder,
+  getDcaOrders, addDcaOrder, pauseDcaOrder, cancelDcaOrder, getAllActiveDca, recordDcaBuy,
   getAutoSellTemplates, getAutoSellTemplate, createAutoSellTemplate,
     updateAutoSellTemplate, deleteAutoSellTemplate,
     getAutoSellRules, addAutoSellRule, deleteAutoSellRule,

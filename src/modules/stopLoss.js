@@ -21,6 +21,7 @@ async function monitorPositions(notifyFn) {
 
   // Also check limit orders
   await checkLimitOrders(notifyFn);
+  await checkDcaOrders(notifyFn);
 }
 
 async function checkPosition(pos, notifyFn) {
@@ -448,4 +449,40 @@ async function checkLimitOrders(notifyFn) {
   }
 }
 
-module.exports = { monitorPositions };
+async function checkDcaOrders(notifyFn) {
+  const orders = db.getDb()
+    .prepare("SELECT * FROM dca_orders WHERE active = 1 AND paused = 0 AND buys_done < total_buys")
+    .all();
+  for (const o of orders) {
+    try {
+      const dueMs = new Date(o.next_buy_at).getTime();
+      if (Date.now() < dueMs) continue; // not due yet
+      const user = db.getUser(o.user_id);
+      if (!user) continue;
+      const { mockBuy, getMockPrice } = require("./executor");
+      const price = getMockPrice(o.token_ca) || 0;
+      // Fire one DCA chunk buy (silent)
+      try {
+        await mockBuy({ chat: { id: o.user_id }, api: globalBotApi, reply: async()=>{} }, user, o.token_ca, o.sol_per_buy, "dca", String(o.id), { silent: true });
+      } catch (e) { /* keep going; record anyway so it advances */ }
+      db.recordDcaBuy(o.id, price, o.sol_per_buy);
+      const fresh = db.getDb().prepare("SELECT * FROM dca_orders WHERE id = ?").get(o.id);
+      if (notifyFn) {
+        const done = fresh.buys_done, total = fresh.total_buys;
+        const finished = done >= total;
+        notifyFn(o.user_id, "dca", {
+          message:
+            `📉 *DCA Buy ${done}/${total}* — ${o.token_name || o.token_ca.slice(0,8)}\n\n` +
+            `Bought ${o.sol_per_buy} SOL` + (price ? ` @ ${price.toFixed(8)}` : "") + `\n` +
+            `Spent: ${(fresh.total_spent||0).toFixed(3)} SOL` +
+            (finished ? `\n\n✅ DCA complete!` : `\n⏱ Next in ${Math.round(o.interval_sec/3600)}h`),
+        });
+      }
+    } catch (e) { console.error("[DCA tick]", e.message); }
+  }
+}
+
+let globalBotApi = null;
+function setDcaBotApi(api) { globalBotApi = api; }
+
+module.exports = { monitorPositions, checkDcaOrders, setDcaBotApi };

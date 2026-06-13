@@ -9,7 +9,7 @@ const { startRankCron } = require("./src/modules/ranks");
 const { startPayoutCron } = require("./src/modules/referrals");
 const { startHealthMonitor }   = require("./src/modules/rpcFailover");
 const { setBotRef, notify }    = require("./src/modules/notifications");
-const { monitorPositions }     = require("./src/modules/stopLoss");
+const { monitorPositions, setDcaBotApi } = require("./src/modules/stopLoss");
 const { isActive: killSwitchActive } = require("./src/modules/killSwitch");
 
 // ── STARTUP LOG ───────────────────────────────────────────────
@@ -170,6 +170,8 @@ startRankCron(notifyCallback);
 startPayoutCron(bot);
 startHealthMonitor();
 
+// Give DCA cron access to the bot API for buy notifications
+try { setDcaBotApi(bot.api); } catch {}
 // Position monitor every 30s (#34 — retry on fail)
 let positionMonitorErrors = 0;
 setInterval(async () => {

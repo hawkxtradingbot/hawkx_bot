@@ -455,6 +455,55 @@ const t = text.trim().toLowerCase();
       return;
     }
 
+    // ── DCA SETUP FLOW ──
+    if (pending === "dca_paste_ca") {
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      await deleteMsg(ctx, promptId);
+      const ca = text.trim();
+      db.setSysConfig(`dca_setup_ca_${userId}`, ca);
+      let tName = ca.slice(0,8);
+      try { const { getTokenInfo } = require("../tokenInfo"); const ti = await getTokenInfo(ca); if (ti?.name) tName = ti.name; } catch {}
+      db.setSysConfig(`dca_setup_name_${userId}`, tName);
+      const m1 = await ctx.reply(`📉 *DCA Setup — ${tName}*\n\n💰 Enter SOL amount *per buy* (e.g. 0.1):`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m1.message_id));
+      db.setSysConfig(`pending_${userId}`, "dca_set_amount");
+      return;
+    }
+    if (pending === "dca_set_amount") {
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      await deleteMsg(ctx, promptId);
+      const amt = parseFloat(text);
+      if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Invalid amount."); return; }
+      db.setSysConfig(`dca_setup_amount_${userId}`, String(amt));
+      const m2 = await ctx.reply(`💰 ${amt} SOL per buy.\n\n🔁 How many buys total? (e.g. 10):`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m2.message_id));
+      db.setSysConfig(`pending_${userId}`, "dca_set_count");
+      return;
+    }
+    if (pending === "dca_set_count") {
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      await deleteMsg(ctx, promptId);
+      const cnt = parseInt(text);
+      if (isNaN(cnt) || cnt < 2) { await ctx.reply("❌ Enter a number of 2 or more."); return; }
+      db.setSysConfig(`dca_setup_count_${userId}`, String(cnt));
+      const amt = parseFloat(db.getSysConfig(`dca_setup_amount_${userId}`) || "0.1");
+      const m3 = await ctx.reply(`🔁 ${cnt} buys × ${amt} SOL = *${(cnt*amt).toFixed(2)} SOL* total.\n\n⏱ Pick interval between buys:`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+        [{ text: "1h", callback_data: "dca_int_3600" }, { text: "6h", callback_data: "dca_int_21600" }, { text: "1d", callback_data: "dca_int_86400" }],
+        [{ text: "✏️ Custom (hours)", callback_data: "dca_int_custom" }],
+      ]}});
+      db.setSysConfig(`dca_msg_${userId}`, String(m3.message_id));
+      db.setSysConfig(`pending_${userId}`, "");
+      return;
+    }
+    if (pending === "dca_set_interval_custom") {
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      await deleteMsg(ctx, promptId);
+      const hrs = parseFloat(text);
+      if (isNaN(hrs) || hrs <= 0) { await ctx.reply("❌ Invalid hours."); return; }
+      db.setSysConfig(`pending_${userId}`, "");
+      const { finalizeDca } = require("./callbacks.dca");
+      return finalizeDca(ctx, userId, Math.round(hrs * 3600));
+    }
     if (pending === "lo_set_amount") {
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       await deleteMsg(ctx, promptId);

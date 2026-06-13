@@ -25,6 +25,7 @@ const { handleWalletCallbacks } = require("./routes/callbacks.wallet");
 const { handleCopyTradeCallbacks } = require("./routes/callbacks.copytrade");
 const { handleSniperCallbacks } = require("./routes/callbacks.sniper");
 const { handleLimitOrderCallbacks } = require("./routes/callbacks.limitorders");
+const { handleDcaCallbacks } = require("./routes/callbacks.dca");
 const { handleLaunchCallbacks } = require("./routes/callbacks.launch");
 const { handleWatchlistCallbacks } = require("./routes/callbacks.watchlist");
 const { handleReferralCallbacks } = require("./routes/callbacks.referrals");
@@ -73,6 +74,7 @@ function setupRouter(bot) {
     if (await handleSniperCallbacks(ctx, data, userId, user, bot, ks)) return;
 
     if (await handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks)) return;
+    if (await handleDcaCallbacks(ctx, data, userId, user)) return;
 
     if (await handleLaunchCallbacks(ctx, data, userId, user, bot, ks)) return;
 

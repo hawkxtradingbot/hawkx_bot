@@ -92,6 +92,8 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
   if (isProMode) {
     kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
     kb.text('📋 Limit Orders', 'menu_limit_orders').text('🔔 Watchlist', 'menu_watchlist').row();
+    kb.text('📉 DCA', 'menu_dca').row();
+    kb.text('📉 DCA', 'menu_dca').row();
     kb.text('🚀 Launch Token', 'menu_launch').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('❓ Help', 'menu_help').row();
