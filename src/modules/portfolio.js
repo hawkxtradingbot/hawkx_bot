@@ -255,6 +255,23 @@ async function getTokenPosition(ctx, user, positionId) {
   if (tokenData.liquidity) parts.push(`💧 ${formatNum(tokenData.liquidity)}`);
   if (tokenData.price)     parts.push(`💲 ${formatPrice(tokenData.price)}`);
   if (parts.length > 0)    marketLine = parts.join(" | ") + "\n";
+  // Condensed scanner: age + 1-line safety
+  let scannerLine = "";
+  try {
+    const safety = await getTokenSafety(pos.token_ca);
+    if (safety && tokenData.holders) safety.holders = tokenData.holders;
+    const ageStr = formatAge(tokenData.pairCreatedAt);
+    if (ageStr) scannerLine += `🕐 Age: ${ageStr}\n`;
+    const mk = (v) => v === true ? "✅" : v === false ? "🔴" : null;
+    const sb = [];
+    if (mk(safety.mintRevoked)) sb.push(`${mk(safety.mintRevoked)} Mint`);
+    if (mk(safety.freezeRevoked)) sb.push(`${mk(safety.freezeRevoked)} Freeze`);
+    const config = require("../config"); const showTop = config.HELIUS_API_KEY && !config.MOCK_TRADES; if (showTop && safety.topHolderPct !== null && safety.topHolderPct !== undefined) {
+      const tm = safety.topHolderPct < 20 ? "✅" : safety.topHolderPct < 35 ? "⚠️" : "🔴";
+      sb.push(`${tm} Top ${safety.topHolderPct}%`);
+    }
+    if (sb.length) scannerLine += `🛡 ${sb.join("  ")}\n`;
+  } catch {}
 
   let autoSellLine = "";
   if (pos.auto_sell_template_id) {
@@ -291,6 +308,7 @@ async function getTokenPosition(ctx, user, positionId) {
     `P&L: <b>${sign}${formatPnl(pnlPct)}</b> | ${sign}${formatSol(pnlSol)} SOL | $${pnlUsd.toFixed(2)}\n` +
     `⏱ Hold: <b>${holdTime}</b>\n` +
     (marketLine ? `\n${marketLine}` : "") +
+    (scannerLine ? scannerLine : "") +
     (autoSellLine || "") +
     `\n💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>`;
 

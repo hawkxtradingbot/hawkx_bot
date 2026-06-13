@@ -636,19 +636,27 @@ async function showLimitOrdersScreen(ctx, userId) {
   walletOrders.forEach(o => { if (!tokenMap[o.token_ca]) tokenMap[o.token_ca] = { token_ca: o.token_ca, token_name: o.token_name }; });
   const heldCas = new Set(allPos.map(p => p.token_ca));
   const tokenList = Object.values(tokenMap);
-  for (let i = 0; i < tokenList.length; i += 3) {
-    kb.inline_keyboard.push(tokenList.slice(i, i+3).map(p => {
-      const tOrders = byToken[p.token_ca] || [];
-      const held = heldCas.has(p.token_ca);
-      const allPaused = tOrders.length > 0 && tOrders.every(o => o.paused);
-      const orderIcon = tOrders.length === 0 ? "" : allPaused ? "⏸" : "🟢";
-      const heldIcon = held ? "💼" : "";
-      const icon = (heldIcon || orderIcon) ? ` ${heldIcon}${orderIcon}` : "";
-      const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
-      const caKey2 = p.token_ca.slice(0,12);
-      db.setSysConfig(`lo_ca_map_${userId}_${caKey2}`, p.token_ca);
-      return { text: `📊 ${name}${icon}`, callback_data: `lo_token_ca_${caKey2}` };
-    }));
+  // Build a button for one token
+  const makeTokenBtn = (p) => {
+    const tOrders = byToken[p.token_ca] || [];
+    const held = heldCas.has(p.token_ca);
+    const allPaused = tOrders.length > 0 && tOrders.every(o => o.paused);
+    const orderIcon = tOrders.length === 0 ? "" : allPaused ? "⏸" : "🟢";
+    const heldIcon = held ? "💼" : "";
+    const icon = (heldIcon || orderIcon) ? ` ${heldIcon}${orderIcon}` : "";
+    const name = p.token_name || p.token_ca?.slice(0,8) || "Token";
+    const caKey2 = p.token_ca.slice(0,12);
+    db.setSysConfig(`lo_ca_map_${userId}_${caKey2}`, p.token_ca);
+    return { text: `📊 ${name}${icon}`, callback_data: `lo_token_ca_${caKey2}`, _len: name.length };
+  };
+  // Adaptive rows: short names (<=5 chars) 3 per row, longer names 2 per row
+  let idx = 0;
+  while (idx < tokenList.length) {
+    const first = makeTokenBtn(tokenList[idx]);
+    const perRow = first._len > 5 ? 2 : 3;
+    const row = tokenList.slice(idx, idx + perRow).map(makeTokenBtn).map(b => { delete b._len; return b; });
+    kb.inline_keyboard.push(row);
+    idx += perRow;
   }
   kb.inline_keyboard.push([
     { text: "➕ New Buy", callback_data: "lo_new_buy" }

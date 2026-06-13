@@ -119,6 +119,24 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       return buildTokenOrdersScreen(ctx, userId, ca4, false);
     }
 
+    if (data === "scanner_limit") {
+      await ctx.answerCallbackQuery();
+      const ca = db.getSysConfig(`pending_ca_${userId}`) || "";
+      if (!ca) { await ctx.answerCallbackQuery({ text: "Paste a token first", show_alert: true }); return true; }
+      // Pre-fill the limit order with the scanned token
+      db.setSysConfig(`lo_pending_ca_${userId}`, ca);
+      db.setSysConfig(`lo_type_${userId}`, "buy");
+      let tName = ca.slice(0,8);
+      try { const { getTokenInfo } = require("../tokenInfo"); const ti = await getTokenInfo(ca); if (ti?.name) tName = ti.name; } catch {}
+      db.setSysConfig(`lo_pending_name_${userId}`, tName);
+      const { getMockPrice } = require("../executor");
+      const mp = getMockPrice(ca);
+      const m = await ctx.reply(`🎯 *Limit Buy — ${tName}*\n\n━━━━━━━━━━━━━━━━━━━\nBuy automatically when it hits your\ntarget price.\n━━━━━━━━━━━━━━━━━━━\n\nCurrent: ${mp.toFixed(8)}\n\nEnter target price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "lo_set_price");
+      return true;
+    }
+
     if (data === "lo_new_buy") {
       await ctx.answerCallbackQuery();
       db.setSysConfig(`lo_pending_ca_${userId}`, "");

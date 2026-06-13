@@ -486,15 +486,19 @@ const t = text.trim().toLowerCase();
       if (existing.length) {
         await ctx.reply("⚠️ You already have a similar order for this token at this target. Order still saved — cancel duplicates if not needed.");
       }
+      const tMcap = parseFloat(db.getSysConfig(`lo_mcap_${userId}`) || "0");
       db.addLimitOrder(userId, {
         tokenCa: ca3, tokenName: name3, orderType: loType3,
         targetPrice: price3,
         solAmount: loType3 === "buy" ? val : 0,
         sellPct: loType3 === "sell" ? val : 100,
-        targetMcap: parseFloat(db.getSysConfig(`lo_mcap_${userId}`) || "0"),
+        targetMcap: tMcap,
         walletId: parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || db.getUser(userId).active_wallet_id),
       });
-      return buildTokenOrdersScreen(ctx, userId, ca3, false);
+      // Clear stale msg id so the screen does a FRESH reply (not edit a deleted msg)
+      db.setSysConfig(`lo_msg_${userId}`, "");
+      const { showLimitOrdersScreen } = require("./helpers.routes");
+      return showLimitOrdersScreen(ctx, userId);
     }
 
     
