@@ -327,7 +327,7 @@ async function getTokenPosition(ctx, user, positionId) {
       .text("🔴 75%",  `sell_pct_75_${positionId}`)
       .text("🔴 100%", `sell_pct_100_${positionId}`)
       .row();
-    kb.text("📋 Limit Orders", "menu_limit_orders").row();
+    kb.text("🎯 Limit", "menu_limit_orders").text("📉 DCA", "scanner_dca").row();
   } else {
     const s1 = settings.sell_pct_1 || 25;
     const s2 = settings.sell_pct_2 || 50;

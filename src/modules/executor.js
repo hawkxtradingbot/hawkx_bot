@@ -126,7 +126,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   // Safety check
   const safety = await checkSafety(ca, user.mode || "beginner");
-  if (safety.status === "BLOCK") {
+  if (safety.status === "BLOCK" && !opts.skipSafety) {
     await ctx.reply(
       `🚫 *Trade Blocked — Safety Check*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${String(safety.reason||"").replace(/[_*`[\]]/g,"")}*\n\n_Blocked to protect you._`,
       { parse_mode: "Markdown" }
@@ -147,13 +147,18 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   const txHash      = `DEVNET_BUY_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
   const feeRate     = getEffectiveFeeRate(user);
   const feeSol      = solAmount * feeRate;
-  const tokenName   = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
+  let tokenName = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
   let entryMcap = 0;
   try {
     const axiosMcap = require("axios");
     const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1500 });
     const pairs  = dexRes.data?.pairs;
-    if (pairs && pairs.length > 0) entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+    if (pairs && pairs.length > 0) {
+      entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+      // Store the SYMBOL as the token name (e.g. JitoSOL, BONK)
+      const sym = pairs[0].baseToken?.symbol;
+      if (sym) tokenName = sym;
+    }
   } catch {}
   
   const tradeId = db.recordTrade({
