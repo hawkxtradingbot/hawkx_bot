@@ -119,6 +119,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   // ── Build message ────────────────────────────────────────────
   let msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n`;
   msg += `💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
+  msg += `🤖 auto-sell · 📉 DCA · 📍 limit\n`;
   msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
   let totalInvested = 0, totalCurrent = 0;
@@ -136,14 +137,21 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const isSel    = selPos && pos.position_id === selPos.position_id;
     const holdTime = formatHoldTime(pos.created_at || Date.now());
 
-    // Auto sell status
+    // Automation status icons (🤖 auto-sell · 📉 DCA · 📍 limit)
     let autoTag = "";
     if (pos.auto_sell_template_id) {
       const t = db.getAutoSellTemplate(pos.user_id, pos.auto_sell_template_id);
       if (t) autoTag = ` 🤖 ${t.name}`;
     }
+    let autoIcons = "";
+    try {
+      const dcaActive = (db.getDcaOrders(pos.user_id, pos.token_ca) || []).some(o => !o.paused && o.buys_done < o.total_buys);
+      const limitActive = (db.getLimitOrders(pos.user_id, pos.token_ca) || []).length > 0;
+      if (dcaActive) autoIcons += " 📉";
+      if (limitActive) autoIcons += " 📍";
+    } catch {}
 
-    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}\n`;
+    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}${autoIcons}\n`;
     msg += `${formatPnl(pnlPct)} | ${formatSol(pnlSol)} SOL\n`;
     msg += `Bought: ${pos.sol_invested.toFixed(4)} → Now: ${currentValue.toFixed(4)} SOL\n`;
     msg += `Holdings: ${(pos.token_amount||0).toLocaleString()} ${name} | Hold: ${holdTime}\n`;
@@ -198,7 +206,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .text("🔴 75%",  `sell_pct_75_${selPos.position_id}`)
         .text("🔴 100%", `sell_pct_100_${selPos.position_id}`)
         .row();
-      kb.text("📋 Limit Orders", "menu_limit_orders")
+      kb.text("📍 Limit", "menu_limit_orders")
+        .text("📉 DCA", "scanner_dca")
         .text("📌 Auto Sell", `pos_autosell_${selPos.position_id}`)
         .row();
     } else {
@@ -272,6 +281,18 @@ async function getTokenPosition(ctx, user, positionId) {
     }
     if (sb.length) scannerLine += `🛡 ${sb.join("  ")}\n`;
   } catch {}
+  // Automation summary line
+  let autoSummary = "";
+  try {
+    const dcaOrders = db.getDcaOrders(pos.user_id, pos.token_ca) || [];
+    const dcaActive = dcaOrders.find(o => !o.paused && o.buys_done < o.total_buys);
+    const limitOrders = db.getLimitOrders(pos.user_id, pos.token_ca) || [];
+    const parts = [];
+    if (pos.auto_sell_template_id) parts.push("🤖 Auto-sell ON");
+    if (dcaActive) parts.push(`📉 DCA ${dcaActive.buys_done}/${dcaActive.total_buys}`);
+    if (limitOrders.length) parts.push(`📍 Limit ${limitOrders.length}`);
+    if (parts.length) autoSummary = parts.join(" · ") + "\n";
+  } catch {}
 
   let autoSellLine = "";
   if (pos.auto_sell_template_id) {
@@ -309,6 +330,7 @@ async function getTokenPosition(ctx, user, positionId) {
     `⏱ Hold: <b>${holdTime}</b>\n` +
     (marketLine ? `\n${marketLine}` : "") +
     (scannerLine ? scannerLine : "") +
+    (autoSummary ? autoSummary : "") +
     (autoSellLine || "") +
     `\n💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>`;
 
@@ -327,7 +349,7 @@ async function getTokenPosition(ctx, user, positionId) {
       .text("🔴 75%",  `sell_pct_75_${positionId}`)
       .text("🔴 100%", `sell_pct_100_${positionId}`)
       .row();
-    kb.text("🎯 Limit", "menu_limit_orders").text("📉 DCA", "scanner_dca").row();
+    kb.text("📍 Limit", "menu_limit_orders").text("📉 DCA", "scanner_dca").text("🤖 Auto-Sell", `pos_autosell_${positionId}`).row();
   } else {
     const s1 = settings.sell_pct_1 || 25;
     const s2 = settings.sell_pct_2 || 50;

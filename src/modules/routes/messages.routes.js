@@ -635,7 +635,7 @@ const t = text.trim().toLowerCase();
             ],
             [
               { text: "📉 DCA", callback_data: "scanner_dca" },
-              { text: "🎯 Limit Order", callback_data: "scanner_limit" },
+              { text: "📍 Limit Order", callback_data: "scanner_limit" },
             ],
             [
               { text: "← Back", callback_data: "menu_main" },
@@ -1498,7 +1498,7 @@ const t = text.trim().toLowerCase();
             ],
             [
               { text: "📉 DCA", callback_data: "scanner_dca" },
-              { text: "🎯 Limit Order", callback_data: "scanner_limit" },
+              { text: "📍 Limit Order", callback_data: "scanner_limit" },
             ],
             [
               { text: "← Back", callback_data: "menu_main" },

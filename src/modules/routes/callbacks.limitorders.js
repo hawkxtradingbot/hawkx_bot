@@ -131,7 +131,7 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       db.setSysConfig(`lo_pending_name_${userId}`, tName);
       const { getMockPrice } = require("../executor");
       const mp = getMockPrice(ca);
-      const m = await ctx.reply(`🎯 *Limit Buy — ${tName}*\n\n━━━━━━━━━━━━━━━━━━━\nBuy automatically when it hits your\ntarget price.\n━━━━━━━━━━━━━━━━━━━\n\nCurrent: ${mp.toFixed(8)}\n\nEnter target price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
+      const m = await ctx.reply(`📍 *Limit Buy — ${tName}*\n\n━━━━━━━━━━━━━━━━━━━\nBuy automatically when it hits your\ntarget price.\n━━━━━━━━━━━━━━━━━━━\n\nCurrent: ${mp.toFixed(8)}\n\nEnter target price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_price");
       return true;

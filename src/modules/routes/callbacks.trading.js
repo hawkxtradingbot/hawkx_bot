@@ -97,7 +97,7 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       info2 += `━━━━━━━━━━━━━━━\n📋 <code>${ca2}</code>\n\nSelect amount to buy:`;
       try { await ctx.editMessageText(info2, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: { inline_keyboard: [
         [{ text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` }, { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` }, { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` }, { text: "✏️ Custom", callback_data: "buy_ca_custom" }],
-        [{ text: "📉 DCA", callback_data: "scanner_dca" }, { text: "🎯 Limit Order", callback_data: "scanner_limit" }],
+        [{ text: "📉 DCA", callback_data: "scanner_dca" }, { text: "📍 Limit Order", callback_data: "scanner_limit" }],
         [{ text: "← Back", callback_data: "menu_main" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
       ]}}); } catch {}
       return true;

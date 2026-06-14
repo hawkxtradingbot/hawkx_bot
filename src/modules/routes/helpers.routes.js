@@ -535,7 +535,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
   const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
-  const msg = `📋 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy executes at or below target price\n🔴 Sell executes at or above target price\n⏰ Orders expire in 48h (adjustable)\n\nTap any order to manage it.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+  const msg = `📍 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy executes at or below target price\n🔴 Sell executes at or above target price\n⏰ Orders expire in 48h (adjustable)\n\nTap any order to manage it.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
@@ -614,7 +614,7 @@ async function showLimitOrdersScreen(ctx, userId) {
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
   // Filter orders by selected wallet
   const walletOrders = orders.filter(o => o.wallet_id === selWalletId || (!o.wallet_id && selWalletId === parseInt(db.getUser(userId).active_wallet_id)));
-  const msg = `📋 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\nAutomate your entries and exits — set a\ntarget price and HawkX executes for you.\n\n🟢 Buy when price drops to your target\n🔴 Sell when price rises to your target\n\n💼 = in your wallet   🟢 = active order\n\nSelect a wallet, then choose a token.\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
+  const msg = `📍 *Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\nAutomate your entries and exits — set a\ntarget price and HawkX executes for you.\n\n🟢 Buy when price drops to your target\n🔴 Sell when price rises to your target\n\n💼 = in your wallet   🟢 = active order\n\nSelect a wallet, then choose a token.\n━━━━━━━━━━━━━━━━━━━\n\n*Tokens: ${Object.keys({...Object.fromEntries(allPos.map(p=>[p.token_ca,1])), ...Object.fromEntries(walletOrders.map(o=>[o.token_ca,1]))}).length}*`;
   const kb = { inline_keyboard: [] };
   const loWalletExpanded = db.getSysConfig(`lo_wallet_expanded_${userId}`) === "1";
   if (loWalletExpanded) {
