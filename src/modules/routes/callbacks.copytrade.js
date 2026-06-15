@@ -94,7 +94,7 @@ function buildSetupCopySellScreen(userId) {
   if (mode === "default") {
     msg += `📖 *How it works:*\n🎯 Default → whale sells 30%, you sell 30%\n🔧 Custom → add profit/loss safety rules`;
   } else {
-    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n\n` +
+    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n💾 *Tip:* Save these as a preset to reuse on other wallets.\n\n` +
       `📈 Min Profit Lock: *${mp}%*\n🛑 Stop Loss Override: *${sl}%*\n🧹 Ignore Dust: *${dust}%*\n⏱ Sell Delay: *${delay}s*`;
   }
   const kb = { inline_keyboard: [] };
@@ -129,7 +129,7 @@ function buildCopySellScreen(cw) {
   if (mode === "default") {
     msg += `📖 *How it works:*\n🎯 Default → whale sells 30%, you sell 30%\n🔧 Custom → add profit/loss safety rules`;
   } else {
-    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n\n` +
+    msg += `📖 *Your safety rules:*\n📈 Min Profit — only sell if up this much\n🛑 Stop Loss — force exit at this loss\n🧹 Ignore Dust — skip tiny whale sells\n⏱ Delay — wait before mirroring\n💾 *Tip:* Save these as a preset to reuse on other wallets.\n\n` +
       `📈 Min Profit Lock: *${cw.cs_min_profit||0}%*\n` +
       `🛑 Stop Loss Override: *${cw.cs_stop_loss||0}%*\n` +
       `🧹 Ignore Dust: *${cw.cs_ignore_dust||0}%*\n` +
