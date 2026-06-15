@@ -522,18 +522,28 @@ function buildLimitOrderSetupMenu(pos, hasBuy, hasSell) {
     .row();
   return kb;
 }
+// Shared: render template buttons in adaptive rows (3 short / 2 long), ✅ on selected
+function renderTemplateRows(kb, templates, activeId, usePrefix) {
+  if (!templates?.length) { kb.text("No templates yet", "noop").row(); return; }
+  let i = 0;
+  while (i < templates.length) {
+    const first = templates[i];
+    const perRow = (first.name || "").length > 5 ? 2 : 3;
+    const slice = templates.slice(i, i + perRow);
+    slice.forEach(t => {
+      const sel = t.id === activeId;
+      kb.text(`${sel ? "✅ " : ""}${t.name}`, `${usePrefix}_${t.id}`);
+    });
+    kb.row();
+    i += perRow;
+  }
+}
+
 function buildSniperAutoSellScreen(cfg, templates) {
   const kb = new InlineKeyboard();
   kb.text(cfg?.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `sniper_autosell_toggle_${cfg.id}`).row();
-  kb.text("━━━ Select Template ━━━", "noop").row();
-  if (!templates?.length) {
-    kb.text("No templates yet", "noop").row();
-  } else {
-    templates.forEach((t) => {
-      const active = cfg.auto_sell_template_id === t.id;
-      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `sniper_autosell_use_${cfg.id}_${t.id}`).row();
-    });
-  }
+  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
+  renderTemplateRows(kb, templates, cfg.auto_sell_template_id, `sniper_autosell_use_${cfg.id}`);
   kb.text("➕ New Template", `sniper_autosell_new_${cfg.id}`).row();
   kb.text("← Back", `sniper_config_view_${cfg.id}`).row();
   return kb;
@@ -541,15 +551,8 @@ function buildSniperAutoSellScreen(cfg, templates) {
 function buildWalletAutoSellScreen(cw, templates) {
   const kb = new InlineKeyboard();
   kb.text(cw.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cw_autosell_toggle_${cw.id}`).row();
-  kb.text("━━━ Select Template ━━━", "noop").row();
-  if (!templates?.length) {
-    kb.text("No templates yet", "noop").row();
-  } else {
-    templates.forEach((t) => {
-      const active = cw.auto_sell_template_id === t.id;
-      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `cw_autosell_use_${cw.id}_${t.id}`).row();
-    });
-  }
+  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
+  renderTemplateRows(kb, templates, cw.auto_sell_template_id, `cw_autosell_use_${cw.id}`);
   kb.text("➕ New Template", `cw_autosell_new_${cw.id}`).row();
   kb.text("← Back", `copy_wallet_view_${cw.id}`).row();
   return kb;
@@ -557,15 +560,8 @@ function buildWalletAutoSellScreen(cw, templates) {
 function buildChannelAutoSellScreen(ch, templates) {
   const kb = new InlineKeyboard();
   kb.text(ch.auto_sell_enabled ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", `cch_autosell_toggle_${ch.id}`).row();
-  kb.text("━━━ Select Template ━━━", "noop").row();
-  if (!templates?.length) {
-    kb.text("No templates yet", "noop").row();
-  } else {
-    templates.forEach((t) => {
-      const active = ch.auto_sell_template_id === t.id;
-      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `cch_autosell_use_${ch.id}_${t.id}`).row();
-    });
-  }
+  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
+  renderTemplateRows(kb, templates, ch.auto_sell_template_id, `cch_autosell_use_${ch.id}`);
   kb.text("➕ New Template", `cch_autosell_new_${ch.id}`).row();
   kb.text("← Back", ch.id === "setup" ? "cch_autosell_setup" : `copy_channel_view_${ch.id}`).row();
   return kb;
@@ -575,15 +571,8 @@ function buildSettingsAutoSellScreen(s, templates) {
   const on = s?.auto_sell_enabled ?? 0;
   const tplId = s?.auto_sell_template_id || 0;
   kb.text(on ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
-  kb.text("━━━ Select Template ━━━", "noop").row();
-  if (!templates?.length) {
-    kb.text("No templates yet", "noop").row();
-  } else {
-    templates.forEach((t) => {
-      const active = tplId === t.id;
-      kb.text(`${active ? "✅" : "◻️"} ${t.name}`, `sas_use_${t.id}`).row();
-    });
-  }
+  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
+  renderTemplateRows(kb, templates, tplId, `sas_use`);
   kb.text("➕ New Template", "pset_autosell_screen").row();
   kb.text("← Back", "menu_settings")
     .text("🔄 Refresh", "pset_autosell_manual")
@@ -592,19 +581,11 @@ function buildSettingsAutoSellScreen(s, templates) {
 }
     function buildAutoSellListScreen(templates, activeTemplateId, autoSellOn) {
   const kb = new InlineKeyboard();
+  // Guard: ignore stale selection that no longer exists
+  if (activeTemplateId && !(templates||[]).some(t => t.id === activeTemplateId)) activeTemplateId = null;
   kb.text(autoSellOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
-
-  if (!templates?.length) {
-    kb.text("No templates yet", "noop").row();
-  } else {
-    // Show each template with delete button on same row
-    templates.forEach(t => {
-      const isActive = t.id === activeTemplateId;
-      kb.text(`${isActive ? "✅" : t.active ? "🟢" : "⏸"} ${t.name}`, `ast_select_${t.id}`)
-        .text("🗑", `ast_delete_${t.id}`)
-        .row();
-    });
-  }
+  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
+  renderTemplateRows(kb, templates, activeTemplateId, "ast_select");
   kb.text("➕ New Template", "ast_new").row();
   kb.text("← Back", "menu_settings")
     .text("🔄 Refresh", "pset_autosell_screen")
