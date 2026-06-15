@@ -466,15 +466,16 @@ async function refreshMsnipeScreen(ctx, userId) {
       ]};
       const savedMsgId = parseInt(db.getSysConfig(`msnipe_msg_${userId}`) || "0");
       console.log("[MSNIPE] savedMsgId:", savedMsgId, "chatId:", ctx.chat?.id || ctx.message?.chat?.id || userId);
-      try {
-        if (savedMsgId) {
-          await ctx.api.editMessageText(ctx.chat?.id || ctx.message?.chat?.id || userId, savedMsgId, msg, { parse_mode: "Markdown", reply_markup: keyboard }).catch(e => console.log("[MSNIPE EDIT ERR]:", e.message));
-        } else {
-          await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: keyboard });
-          const msgId = ctx.callbackQuery?.message?.message_id;
-          if (msgId) db.setSysConfig(`msnipe_msg_${userId}`, String(msgId));
-        }
-      } catch {
+      const mChatId = ctx.chat?.id || ctx.message?.chat?.id || userId;
+      let edited = false;
+      if (savedMsgId) {
+        try {
+          await ctx.api.editMessageText(mChatId, savedMsgId, msg, { parse_mode: "Markdown", reply_markup: keyboard });
+          edited = true;
+        } catch (e) { console.log("[MSNIPE EDIT ERR]:", e.message); edited = false; }
+      }
+      if (!edited) {
+        // Old message gone or no saved id — send a FRESH message
         const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: keyboard });
         db.setSysConfig(`msnipe_msg_${userId}`, String(s.message_id));
       }
