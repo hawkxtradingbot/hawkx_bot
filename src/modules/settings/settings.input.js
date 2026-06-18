@@ -329,7 +329,7 @@ async function handleTextInput(ctx, user, pendingKey) {
             db.setSapHash(userId, hash);
             await ctx.reply(
               "✅ *Security PIN set!*\n\n" +
-              "Required before: withdrawing, exporting key, wallet switch.\n" +
+              "Required before: withdrawing and exporting your key.\n" +
               "⚠️ *Save it — cannot be recovered.*",
               { parse_mode: "Markdown" }
             );
@@ -368,7 +368,15 @@ async function handleTextInput(ctx, user, pendingKey) {
           case "sap_verify_export": {
             const freshUser = db.getUser(userId);
             const valid = freshUser.sap_hash ? await bcrypt.compare(text, freshUser.sap_hash) : true;
-            if (!valid) { await ctx.reply("❌ Incorrect PIN. Export cancelled."); break; }
+            if (!valid) {
+              try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
+              await ctx.reply(
+                "❌ *Incorrect PIN.*\n\nTry again — enter your Security PIN:",
+                { parse_mode: "Markdown" }
+              );
+              db.setSysConfig(`pending_${userId}`, "sap_verify_export");
+              return;
+            }
             const walletId = parseInt(db.getSysConfig(`sap_next_wallet_${userId}`) || "0");
             db.setSysConfig(`pending_${userId}`, "");
             if (walletId) await doExportKey(ctx, userId, walletId);
@@ -432,7 +440,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       // ── Export key helper ─────────────────────────────────────────
       async function doExportKey(ctx, userId, walletId) {
         try {
-          const { decryptWallet } = require("./walletVault");
+          const { decryptWallet } = require("../walletVault");
           const bs58    = require("bs58");
           const keypair = decryptWallet(walletId);
           const privKey = bs58.encode(keypair.secretKey);

@@ -552,37 +552,13 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       const token = withoutPrefix.slice(0, lastUnderscore);
       const walletId = parseInt(withoutPrefix.slice(lastUnderscore + 1));
       await ctx.answerCallbackQuery();
-      const freshUser = db.getUser(userId);
-      if (freshUser.sap_enabled && freshUser.sap_hash) {
-        db.setSysConfig(
-          `sap_next_${userId}`,
-          `withdraw_address_${token}_${walletId}`,
-        );
-        const msg = await ctx.reply("🔐 Enter your Security PIN to continue:");
-        db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
-        db.setSysConfig(`pending_${userId}`, "sap_verify_withdraw");
-      } else {
-        // No PIN — prompt to set one or continue
-        return safeEdit(
-          ctx,
-          `💸 *Withdraw ${token}*\n\n⚠️ *No Security PIN set.*\n\nFor your safety we recommend setting a PIN before withdrawing.\n\nPaste your destination Solana address to continue:`,
-          {
-            parse_mode: "Markdown",
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
-                [
-                  {
-                    text: "Continue Without PIN",
-                    callback_data: `withdraw_nopinsend_${token}_${walletId}`,
-                  },
-                ],
-                [{ text: "← Cancel", callback_data: "wallet_withdraw" }],
-              ],
-            },
-          },
-        );
-      }
+      // Ask for destination address FIRST (PIN comes at final confirm)
+      const msg = await ctx.reply(
+        `💸 *Withdraw ${token}*\n\nPaste your destination Solana address:`,
+        { parse_mode: "Markdown" }
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
+      db.setSysConfig(`pending_${userId}`, `withdraw_address_${token}_${walletId}`);
       return;
     }
 
@@ -605,15 +581,61 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       return;
     }
 
+    if (data.startsWith("withdraw_custom_")) {
+      const rest = data.replace("withdraw_custom_", "");
+      const li = rest.lastIndexOf("_");
+      const token = rest.slice(0, li);
+      const walletId = parseInt(rest.slice(li + 1));
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply(`✏️ *Custom Amount*\n\nEnter the amount of ${token} to withdraw (e.g. 0.5):`, { parse_mode: "Markdown" });
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, `withdraw_customamt_${token}_${walletId}`);
+      return;
+    }
+
     if (data.startsWith("withdraw_send_")) {
       const parts = data.split("_");
       const pct = parseInt(parts[2]);
       const token = parts[3];
       const walletId = parseInt(parts[4]);
-      await ctx.answerCallbackQuery(`Sending ${pct}% ${token}...`);
+      await ctx.answerCallbackQuery();
+      const freshUser = db.getUser(userId);
+      const hasPIN = freshUser.sap_enabled && freshUser.sap_hash;
+      const addr = db.getSysConfig(`withdraw_addr_${userId}`) || "";
+      db.setSysConfig(`withdraw_pending_${userId}`, `${pct}_${token}_${walletId}`);
+      if (hasPIN) {
+        const m = await ctx.reply(
+          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n🔐 Enter your Security PIN to confirm:`,
+          { parse_mode: "Markdown" }
+        );
+        db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+        db.setSysConfig(`pending_${userId}`, "withdraw_confirm_pin");
+      } else {
+        return safeEdit(ctx,
+          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n⚠️ No Security PIN set.`,
+          { inline_keyboard: [
+            [{ text: "✅ Confirm Withdraw", callback_data: `withdraw_finalsend_${pct}_${token}_${walletId}` }],
+            [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+            [{ text: "← Cancel", callback_data: "wallet_withdraw" }],
+          ]}
+        );
+      }
+      return;
+    }
+
+    if (data.startsWith("withdraw_finalsend_")) {
+      const parts = data.split("_");
+      const raw = parts[2];
+      const token = parts[3];
+      // Handle both "2SOL" (custom) and "50" (percent)
+      const amtLabel = String(raw).endsWith("SOL") ? String(raw).replace("SOL", " SOL") : raw + "%";
+      await ctx.answerCallbackQuery(`Sending ${amtLabel} ${token}...`);
+      // Clear withdraw session
+      db.setSysConfig(`withdraw_pending_${userId}`, "");
+      db.setSysConfig(`withdraw_addr_${userId}`, "");
       await ctx.reply(
-        `✅ *Withdraw Initiated* [DEVNET]\n\nSending *${pct}%* of ${token}.\n\n_Devnet simulation — no real funds moved._`,
-        { parse_mode: "Markdown" },
+        `✅ *Withdraw Sent* [DEVNET]\n\nSent *${amtLabel}* of ${token}.\n\n_Devnet simulation — no real funds moved._`,
+        { parse_mode: "Markdown" }
       );
       return;
     }

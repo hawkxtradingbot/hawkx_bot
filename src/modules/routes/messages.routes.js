@@ -5,6 +5,7 @@ const { buildLaunchMsg, showCwSetupScreen, safeReply, safeEdit, deleteUserMsg, b
 const { handleTextInput } = require("../settings/index");
 const { handleAdminTextInput, isAdmin } = require("../admin");
 const { isSolanaAddress } = require("../walletVault");
+const { getBalance } = require("../walletSwitcher");
 const { buildMainMenu, buildSniperMainMenu, buildSniperConfigMenu, buildRealtimeSnipeMenu, buildMigrationSniperMenu, getGuide, buildCopyChannelSettingsMenu } = require("../keyboards");
 const { getTokenInfo, getTokenSafety, formatSafetyCard, formatAge, formatNum, formatPrice } = require("../tokenInfo");
 const { handleAutoBuy, executeRealtimeSnipe, mockBuy, mockSell } = require("../executor");
@@ -123,7 +124,7 @@ function setupMessages(bot) {
         "ab_set_max",
         "ast_set_name","ast_set_sl","ast_set_sl_pct","ast_set_tp","ast_set_tp_pct",
         "cw_edit_set_amount_","cw_edit_set_slip_","cw_edit_set_gas_","cw_edit_set_max_","cw_edit_set_min_","cw_edit_set_pct_","cw_edit_set_delay_",
-        "cch_autosell_new_","sap_verify_export","sap_verify_withdraw","sap_verify_remove",
+        "cch_autosell_new_","sap_verify_export","sap_verify_remove",
       "alert_add_ca", "alert_add_target", "alert_add_price_val", "alert_add_mcap_val", "tracker_add_address",
       "buy_custom_amount", "set_daily_loss", "set_daily_trades", "set_max_pos",
       ];
@@ -668,6 +669,101 @@ const t = text.trim().toLowerCase();
       return;
     }
 
+    if (pending.startsWith("withdraw_customamt_")) {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const rest = pending.replace("withdraw_customamt_", "");
+      const li = rest.lastIndexOf("_");
+      const token = rest.slice(0, li);
+      const walletId = parseInt(rest.slice(li + 1));
+      const amt = parseFloat(text);
+      if (isNaN(amt) || amt <= 0) {
+        await ctx.reply("❌ *Invalid amount.* Enter a number like 0.5", { parse_mode: "Markdown" });
+        return;
+      }
+      const freshUser = db.getUser(userId);
+      const hasPIN = freshUser.sap_enabled && freshUser.sap_hash;
+      const addr = db.getSysConfig(`withdraw_addr_${userId}`) || "";
+      db.setSysConfig(`withdraw_pending_${userId}`, `${amt}SOL_${token}_${walletId}`);
+      if (hasPIN) {
+        const mm = await ctx.reply(
+          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${amt} ${token}*\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n🔐 Enter your Security PIN to confirm:`,
+          { parse_mode: "Markdown" }
+        );
+        db.setSysConfig(`prompt_msg_${userId}`, String(mm.message_id));
+        db.setSysConfig(`pending_${userId}`, "withdraw_confirm_pin");
+      } else {
+        await safeReply(ctx,
+          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${amt} ${token}*\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n⚠️ No Security PIN set.`,
+          { inline_keyboard: [
+            [{ text: "✅ Confirm Withdraw", callback_data: `withdraw_finalsend_${amt}SOL_${token}_${walletId}` }],
+            [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],
+            [{ text: "← Cancel", callback_data: "wallet_withdraw" }],
+          ]}
+        );
+      }
+      return;
+    }
+
+    if (pending === "withdraw_confirm_pin") {
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+
+      // Lockout check
+      const lockUntil = parseInt(db.getSysConfig(`withdraw_lock_${userId}`) || "0");
+      if (lockUntil && Date.now() < lockUntil) {
+        const mins = Math.ceil((lockUntil - Date.now()) / 60000);
+        db.setSysConfig(`pending_${userId}`, "");
+        await ctx.reply(`🔒 *Withdrawals locked.*\n\nToo many wrong PIN attempts. Try again in ${mins} min.`, { parse_mode: "Markdown" });
+        return;
+      }
+
+      const freshUser = db.getUser(userId);
+      const bcrypt = require("bcryptjs");
+      const valid = freshUser.sap_hash ? await bcrypt.compare(text, freshUser.sap_hash) : true;
+
+      if (!valid) {
+        let fails = parseInt(db.getSysConfig(`withdraw_pin_fails_${userId}`) || "0") + 1;
+        db.setSysConfig(`withdraw_pin_fails_${userId}`, String(fails));
+        if (fails >= 5) {
+          // Lock 5 min + reset counter + security alert
+          const until = Date.now() + 5 * 60 * 1000;
+          db.setSysConfig(`withdraw_lock_${userId}`, String(until));
+          db.setSysConfig(`withdraw_pin_fails_${userId}`, "0");
+          db.setSysConfig(`pending_${userId}`, "");
+          await ctx.reply(
+            `🔒 *Security Alert — Withdraw Locked*\n\n5 incorrect PIN attempts on a withdrawal.\nWithdrawals are paused for 5 minutes.\n\nIf this was you — no problem, just wait and re-enter your PIN carefully.\n\nIf this was *NOT* you:\n⚠️ Someone may have access to this chat.\n• Your funds are still safe (they can't withdraw without your PIN)\n• Consider moving funds to a fresh wallet\n• Review who has access to your Telegram\n\nYour keys, your coins. HawkX never has access to your PIN or funds.`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+        // Inline retry (Option A) with icon + counter
+        db.setSysConfig(`pending_${userId}`, "withdraw_confirm_pin");
+        await ctx.reply(`🔑 *Incorrect PIN (${fails}/5).*\n\nTry again — enter your Security PIN:`, { parse_mode: "Markdown" });
+        return;
+      }
+
+      // Correct PIN — reset counter + show Confirm button (don't auto-send)
+      db.setSysConfig(`withdraw_pin_fails_${userId}`, "0");
+      db.setSysConfig(`pending_${userId}`, "");
+      const wp = db.getSysConfig(`withdraw_pending_${userId}`) || "";
+      const parts = wp.split("_");
+      const amtLabel = parts[0].endsWith("SOL") ? parts[0].replace("SOL", " SOL") : parts[0] + "%";
+      const token = parts[1];
+      const walletId = parts[2];
+      const addr = db.getSysConfig(`withdraw_addr_${userId}`) || "";
+      await ctx.reply(
+        `✅ *PIN Verified*\n\n💸 Sending *${amtLabel}* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address — transfers can't be reversed.\n\nTap Confirm to send.`,
+        { parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: [
+            [{ text: "✅ Confirm Withdraw", callback_data: `withdraw_finalsend_${parts[0]}_${token}_${walletId}` }],
+            [{ text: "← Cancel", callback_data: "wallet_withdraw" }],
+          ]}
+        }
+      );
+      return;
+    }
+
     if (pending.startsWith("withdraw_address_")) {
       await deleteMsg(ctx, promptId);
       try {
@@ -686,30 +782,21 @@ const t = text.trim().toLowerCase();
       const walletId = parseInt(parts[3]);
       const wallet = db.getWallet(walletId);
       const balance = await getBalance(wallet?.public_key || "");
+      // Store the FULL destination address for the confirm screen
+      db.setSysConfig(`withdraw_addr_${userId}`, text);
       await ctx.reply(
-        `✅ *Valid Solana Address*\n\n📤 From: *${stripMd(wallet?.label || "")}*\n📥 To: \`${text.slice(0, 8)}...${text.slice(-4)}\`\n💰 Balance: ${balance.toFixed(4)} SOL\n\nSelect amount:`,
+        `✅ *Valid Solana Address*\n\n📤 From: *${stripMd(wallet?.label || "")}*\n📥 To:\n\`${text}\`\n\n💰 Balance: ${balance.toFixed(4)} SOL\n\n⚠️ *Double-check the address above.*\nCrypto transfers can't be reversed.\n\nSelect amount:`,
         {
           parse_mode: "Markdown",
           reply_markup: {
             inline_keyboard: [
               [
-                {
-                  text: "25%",
-                  callback_data: `withdraw_send_25_${token}_${walletId}`,
-                },
-                {
-                  text: "50%",
-                  callback_data: `withdraw_send_50_${token}_${walletId}`,
-                },
-                {
-                  text: "75%",
-                  callback_data: `withdraw_send_75_${token}_${walletId}`,
-                },
-                {
-                  text: "100%",
-                  callback_data: `withdraw_send_100_${token}_${walletId}`,
-                },
+                { text: "25%", callback_data: `withdraw_send_25_${token}_${walletId}` },
+                { text: "50%", callback_data: `withdraw_send_50_${token}_${walletId}` },
+                { text: "75%", callback_data: `withdraw_send_75_${token}_${walletId}` },
+                { text: "100%", callback_data: `withdraw_send_100_${token}_${walletId}` },
               ],
+              [{ text: "✏️ Custom Amount", callback_data: `withdraw_custom_${token}_${walletId}` }],
               [{ text: "❌ Cancel", callback_data: "menu_wallets" }],
             ],
           },

@@ -66,42 +66,29 @@ async function handleStart(ctx, bot) {
     (ks ? `\n\nTrading is currently paused. Your account is ready when trading resumes.` : ``);
 
   const todayStats = db.getTodayStats(userId);
-  await ctx.reply(welcomeMsg, {
-    reply_markup: buildMainMenu(freshUser, todayStats, ks),
-  });
 
   if (isNew) {
-    await ctx.reply(
-      "Choose your mode:\n\nBeginner Mode — Clean 8-button menu. Easy for new traders.\n\nPro Mode — Full access: sniper, copy trade, limit orders, advanced settings and more.",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "🌱 Beginner Mode", callback_data: "mode_set_beginner" },
-              { text: "⚡ Pro Mode",       callback_data: "mode_set_pro" },
-            ],
-          ],
-        },
-      }
-    );
-    // Fund prompt — new users have an empty wallet
-    try {
-      const wallets = db.getWallets(userId) || [];
-      const w = wallets[0];
-      if (w) {
-        let fundMsg =
-          "💰 *Fund Your Wallet*\n" +
-          "━━━━━━━━━━━━━━━━━━\n\n" +
-          "Your wallet is ready! Send SOL to this address\nto start trading.\n\n" +
-          "📋 Your address (tap to copy):\n" +
-          "`" + w.public_key + "`\n\n" +
-          "🔐 Your keys, your coins — HawkX is non-custodial.\nOnly you control your wallet.";
-        const fundKb = { inline_keyboard: [] };
-        fundKb.inline_keyboard.push([{ text: "🔐 Set Security PIN", callback_data: "set_sap" }]);
-        fundKb.inline_keyboard.push([{ text: "✅ Start Trading", callback_data: "menu_main" }]);
-        await ctx.reply(fundMsg, { parse_mode: "Markdown", reply_markup: fundKb });
-      }
-    } catch (e) { console.error("[Onboard fund prompt]", e.message); }
+    // CLEAN onboarding — ONE message: short welcome + mode pick
+    const newMsg =
+      "🦅 *Welcome to HawkX* [DEVNET]\n" +
+      "━━━━━━━━━━━━━━━━━━\n\n" +
+      "The fastest Solana trading bot.\n" +
+      "✅ Your wallet is ready.\n\n" +
+      "Pick how you want to start 👇";
+    await ctx.reply(newMsg, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🌱 Beginner", callback_data: "mode_set_beginner" },
+           { text: "⚡ Pro",       callback_data: "mode_set_pro" }],
+        ],
+      },
+    });
+  } else {
+    // Returning user — normal welcome + main menu
+    await ctx.reply(welcomeMsg, {
+      reply_markup: buildMainMenu(freshUser, todayStats, ks),
+    });
   }
 }
 

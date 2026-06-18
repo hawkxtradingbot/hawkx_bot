@@ -29,18 +29,32 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── MODE SWITCH ───────────────────────────────────────────
-    if (data === "mode_set_pro") {
-      db.setUserMode(userId, "pro");
-      await ctx.answerCallbackQuery("⚡ Pro Mode activated!");
+    if (data === "mode_set_pro" || data === "mode_set_beginner") {
+      const mode = data === "mode_set_pro" ? "pro" : "beginner";
+      db.setUserMode(userId, mode);
+      await ctx.answerCallbackQuery(mode === "pro" ? "⚡ Pro Mode activated!" : "🌱 Beginner Mode activated!");
       const freshUser = db.getUser(userId);
-      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — ⚡ Pro Mode\n\n${getGuide("main_pro")}`, buildMainMenu(freshUser, db.getTodayStats(userId, db.getUser(userId).active_wallet_id), ks));
-    }
-
-    if (data === "mode_set_beginner") {
-      db.setUserMode(userId, "beginner");
-      await ctx.answerCallbackQuery("🌱 Beginner Mode activated!");
-      const freshUser = db.getUser(userId);
-      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — 🌱 Beginner Mode\n\n${getGuide("main_beginner")}`, buildMainMenu(freshUser, db.getTodayStats(userId, db.getUser(userId).active_wallet_id), ks));
+      // First-time fund prompt: only if wallet is empty (brand new)
+      const w = (db.getWallets(userId) || [])[0];
+      const bal = w ? parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0") : 0;
+      const seenFund = db.getSysConfig(`seen_fund_${userId}`) === "1";
+      if (w && bal === 0 && !seenFund) {
+        db.setSysConfig(`seen_fund_${userId}`, "1");
+        const fundMsg =
+          "💰 *Fund Your Wallet*\n" +
+          "━━━━━━━━━━━━━━━━━━\n\n" +
+          "Send SOL to this address to start trading:\n\n" +
+          "`" + w.public_key + "`\n" +
+          "_(tap to copy)_\n\n" +
+          "🔐 Non-custodial — your keys, your coins.";
+        return safeEdit(ctx, fundMsg, { inline_keyboard: [
+          [{ text: "🔐 Set Security PIN", callback_data: "set_sap" }],
+          [{ text: "✅ Start Trading", callback_data: "menu_main" }],
+        ]});
+      }
+      const guide = mode === "pro" ? "main_pro" : "main_beginner";
+      const label = mode === "pro" ? "⚡ Pro Mode" : "🌱 Beginner Mode";
+      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
     }
 
     // ── RANK INFO ─────────────────────────────────────────────
