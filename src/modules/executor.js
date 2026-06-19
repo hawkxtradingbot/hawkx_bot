@@ -352,9 +352,11 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
 
 // Only fires when user explicitly has auto_buy ON
 async function handleAutoBuy(ctx, user, ca) {
-  if (!isAutoBuyEnabled(user.user_id)) return false;
-  // Get fresh user to ensure correct active wallet
+  // Get fresh user to ensure correct active wallet + mode
   user = db.getUser(user.user_id) || user;
+  // Auto Buy is a PRO-only feature
+  if ((user.mode || "beginner") !== "pro") return false;
+  if (!isAutoBuyEnabled(user.user_id)) return false;
   const settings  = db.getSettings(user.user_id) || {};
   const solAmount = settings.max_buy_sol || 0.1;
   await ctx.reply(

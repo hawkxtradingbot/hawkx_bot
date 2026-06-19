@@ -97,6 +97,7 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
     kb.text('❓ Help', 'menu_help').row();
     kb.text('🌱 Beginner Mode →', 'mode_set_beginner').row();
   } else {
+    kb.text('📍 Limit', 'menu_limit_orders').text('📉 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('❓ Help', 'menu_help').row();
     kb.text('🚰 Get Test SOL', 'devnet_faucet').row();

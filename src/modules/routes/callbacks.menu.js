@@ -113,7 +113,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const kb = { inline_keyboard: [
         [{ text: "📤 Today's Card", callback_data: "stats_card_today" }, { text: "📤 Weekly Card", callback_data: "stats_card_week" }],
         [{ text: "📤 Monthly Card", callback_data: "stats_card_month" }, { text: "🏅 Rank Card", callback_data: "gen_rank_card" }],
-        [{ text: "🔄 Refresh", callback_data: "menu_stats" }, { text: "← Back", callback_data: "menu_main" }],
+        [{ text: "← Back", callback_data: "menu_main" }, { text: "🔄 Refresh", callback_data: "menu_stats" }],
       ]};
       return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
     }
