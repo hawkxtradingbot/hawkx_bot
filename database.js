@@ -475,6 +475,30 @@ function getTradeHistoryFiltered(userId, days = 1) {
     .all(userId, since);
 }
 
+// Compute realized win/loss by matching sells to buys per token
+function computeWinLoss(trades) {
+  const byToken = {};
+  trades.forEach(t => {
+    if (!byToken[t.token_ca]) byToken[t.token_ca] = { bought: 0, sold: 0, hasSell: false };
+    const net = (t.sol_amount || 0) - (t.fee_sol || 0);
+    if (t.action === "buy")  byToken[t.token_ca].bought += (t.sol_amount || 0) + (t.fee_sol || 0);
+    if (t.action === "sell") { byToken[t.token_ca].sold += net; byToken[t.token_ca].hasSell = true; }
+  });
+  let wins = 0, losses = 0, realizedPnl = 0;
+  Object.values(byToken).forEach(tk => {
+    if (!tk.hasSell) return; // only count tokens that have been sold (realized)
+    const tokenPnl = tk.sold - tk.bought;
+    realizedPnl += tokenPnl;
+    if (tokenPnl >= 0) wins++; else losses++;
+  });
+  const closed = wins + losses;
+  return {
+    wins, losses, closed, realizedPnl,
+    winRate:  closed > 0 ? Math.round((wins / closed) * 100) : 0,
+    lossRate: closed > 0 ? Math.round((losses / closed) * 100) : 0,
+  };
+}
+
 function getTodayStats(userId, walletId) {
   const today  = new Date().toISOString().slice(0, 10);
   let query = "SELECT * FROM trades WHERE user_id = ? AND timestamp >= ? AND status = 'confirmed'";
@@ -482,35 +506,35 @@ function getTodayStats(userId, walletId) {
   if (walletId) { query += " AND wallet_id = ?"; params.push(walletId); }
   const trades = getDb().prepare(query).all(...params);
 
-  const sells = trades.filter((t) => t.action === "sell");
-  const buys  = trades.filter((t) => t.action === "buy");
-  let pnl = 0, wins = 0;
-  sells.forEach((t) => {
-    pnl += t.sol_amount - t.fee_sol;
-    if ((t.sol_amount - t.fee_sol) > 0) wins++;
-  });
-  buys.forEach((t) => { pnl -= t.sol_amount; });
-
+  const wl = computeWinLoss(trades);
   return {
-    pnl,
+    pnl: wl.realizedPnl,
     trades: trades.length,
-    winRate: sells.length > 0 ? Math.round((wins / sells.length) * 100) : 0,
+    winRate: wl.winRate,
+    lossRate: wl.lossRate,
+    wins: wl.wins,
+    losses: wl.losses,
   };
 }
 
 function getUserStats(userId) {
   const trades      = getDb().prepare("SELECT * FROM trades WHERE user_id = ? AND status = 'confirmed'").all(userId);
-  const sellTrades  = trades.filter((t) => t.action === "sell");
-  let totalPnl = 0, wins = 0, bestPnl = 0, worstPnl = 0;
-  sellTrades.forEach((t) => {
-    const net = t.sol_amount - t.fee_sol;
-    totalPnl += net;
-    if (net > 0) wins++;
-    if (net > bestPnl)  bestPnl  = net;
-    if (net < worstPnl) worstPnl = net;
+  const wl = computeWinLoss(trades);
+  // best/worst per-token realized PnL
+  const byToken = {};
+  trades.forEach(t => {
+    if (!byToken[t.token_ca]) byToken[t.token_ca] = { bought: 0, sold: 0, hasSell: false };
+    if (t.action === "buy")  byToken[t.token_ca].bought += (t.sol_amount||0) + (t.fee_sol||0);
+    if (t.action === "sell") { byToken[t.token_ca].sold += (t.sol_amount||0) - (t.fee_sol||0); byToken[t.token_ca].hasSell = true; }
   });
-  const winRate  = sellTrades.length > 0 ? Math.round((wins / sellTrades.length) * 100) : 0;
-  return { totalTrades: trades.length, totalPnl, winRate, lossRate: 100 - winRate, bestPnl, worstPnl };
+  let bestPnl = 0, worstPnl = 0;
+  Object.values(byToken).forEach(tk => {
+    if (!tk.hasSell) return;
+    const p = tk.sold - tk.bought;
+    if (p > bestPnl)  bestPnl  = p;
+    if (p < worstPnl) worstPnl = p;
+  });
+  return { totalTrades: trades.length, totalPnl: wl.realizedPnl, winRate: wl.winRate, lossRate: wl.lossRate, bestPnl, worstPnl };
 }
 
 function getWeeklyPnl(userId) {
