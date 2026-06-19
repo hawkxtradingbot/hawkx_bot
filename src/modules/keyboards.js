@@ -230,7 +230,7 @@ function buildAlertsSettingsMenu(s) {
 // ════════════════════════════════════════════════════════════
 // WALLET MENU
 // ════════════════════════════════════════════════════════════
-function buildWalletMenu(wallets, activeWalletId) {
+function buildWalletMenu(wallets, activeWalletId, mode = "pro") {
   const kb = new InlineKeyboard();
   if (!Array.isArray(wallets)) wallets = [];
 
@@ -245,18 +245,21 @@ function buildWalletMenu(wallets, activeWalletId) {
     kb.row();
   }
 
-  if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
-  kb.text("📋 Copy Address", "wallet_copy_address").text("✏️ Rename", "wallet_rename").row();
-
-  kb.text(" Deposit 🟢",  "wallet_deposit")
-    .text("🔴 Withdraw ", "wallet_withdraw")
-    .row();
-  kb.text("📥 Import Key",  "wallet_import")
-    .text("🔑 Export Key",  "wallet_export_select")
-    .row();
-  kb.text("➕ New Wallet",  "wallet_generate")
-    .text("🚰 Airdrop SOL", "devnet_faucet")
-    .row();
+  const isPro = mode === "pro";
+  if (isPro) {
+    // PRO — full menu
+    if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
+    kb.text("📋 Copy Address", "wallet_copy_address").text("✏️ Rename", "wallet_rename").row();
+    kb.text(" Deposit 🟢",  "wallet_deposit").text("🔴 Withdraw ", "wallet_withdraw").row();
+    kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
+    kb.text("➕ New Wallet",  "wallet_generate").text("🚰 Airdrop SOL", "devnet_faucet").row();
+  } else {
+    // BEGINNER — simplified (Delete on top, then Deposit/Withdraw/Import/Export/New)
+    if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
+    kb.text(" Deposit 🟢",  "wallet_deposit").text("🔴 Withdraw ", "wallet_withdraw").row();
+    kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
+    kb.text("➕ New Wallet",  "wallet_generate").row();
+  }
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", "menu_wallets")
     .row();

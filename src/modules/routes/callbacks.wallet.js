@@ -46,9 +46,10 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
 \`${address}\`
 
 ` +
-      `_${wallets.length}/${walletLimit} wallets_`;
+      `_${wallets.length}/${walletLimit} wallets_\n` +
+      `\n💡 _🗑 Delete removes the active wallet. To delete another, switch to it first. Always export your key before deleting._`;
 
-    return safeEdit(ctx, text, buildWalletMenu(wallets, walletId));
+    return safeEdit(ctx, text, buildWalletMenu(wallets, walletId, freshUser.mode));
   }
 
 
@@ -97,19 +98,23 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
   }
 
   if (data === "wallet_delete_select") {
-      await ctx.answerCallbackQuery();
       const wallets = db.getWallets(userId) || [];
       if (wallets.length <= 1) {
-        await ctx.answerCallbackQuery("❌ Cannot delete only wallet.", {
-          show_alert: true,
-        });
+        await ctx.answerCallbackQuery("❌ Cannot delete your only wallet.", { show_alert: true });
         return;
       }
+      await ctx.answerCallbackQuery();
+      // Delete the ACTIVE wallet directly (no middle select screen)
       const freshUser = db.getUser(userId);
-      return safeEdit(
-        ctx,
-        "🗑 *Delete Wallet*\n\nSelect which wallet to delete:",
-        buildWalletDeleteSelect(wallets, freshUser.active_wallet_id),
+      const wallet = db.getWallet(freshUser.active_wallet_id);
+      const wIdx = wallets.findIndex(w => w.wallet_id === freshUser.active_wallet_id) + 1;
+      if (!wallet) { await ctx.answerCallbackQuery("Not found."); return; }
+      return safeEdit(ctx,
+        `🗑 *Confirm Delete Wallet W${wIdx}*\n\n*${stripMd(wallet.label || "")}*\n\`${wallet.public_key.slice(0, 12)}...\`\n\n⚠️ *This permanently removes this wallet from HawkX.*\n\n• If you have NOT exported the private key, any funds in this wallet will be *LOST FOREVER*.\n• HawkX cannot recover a deleted wallet.\n\nExport the key first if you're unsure.\n\n💡 To delete a different wallet, switch to it first, then tap Delete.`,
+        { inline_keyboard: [[
+          { text: "✅ Delete", callback_data: `wallet_delete_do_${wallet.wallet_id}` },
+          { text: "❌ Cancel", callback_data: "menu_wallets" },
+        ]]}
       );
     }
 
@@ -122,7 +127,7 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       }
       await ctx.answerCallbackQuery();
       return ctx.reply(
-        `🗑 *Confirm Delete*\n\n*${stripMd(wallet.label || "")}*\n\`${wallet.public_key.slice(0, 12)}...\`\n\n⚠️ Cannot be undone. Back up key first.`,
+        `🗑 *Confirm Delete Wallet*\n\n*${stripMd(wallet.label || "")}*\n\`${wallet.public_key.slice(0, 12)}...\`\n\n⚠️ *This permanently removes this wallet from HawkX.*\n\n• If you have NOT exported the private key, any funds in this wallet will be *LOST FOREVER*.\n• HawkX cannot recover a deleted wallet.\n\nExport the key first if you're unsure.`,
         {
           parse_mode: "Markdown",
           reply_markup: {
@@ -181,7 +186,7 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
           pnlLine +
           `\n\n` +
           `_Tap wallet to switch. ${wallets.length}/${config.WALLET_LIMITS[updated.rank] || 5} wallets_`,
-        buildWalletMenu(wallets, updated.active_wallet_id),
+        buildWalletMenu(wallets, updated.active_wallet_id, updated.mode),
       );
     }
 
@@ -201,7 +206,7 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       return safeEdit(
         ctx,
         `💼 *Wallet Management*`,
-        buildWalletMenu(wallets, updated.active_wallet_id),
+        buildWalletMenu(wallets, updated.active_wallet_id, updated.mode),
       );
     }
 
