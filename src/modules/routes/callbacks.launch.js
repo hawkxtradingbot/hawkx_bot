@@ -527,7 +527,8 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const schedCheck = db.getSysConfig(`launch_f_schedule_${userId}`) || "";
       const willSchedule = schedCheck && schedCheck !== "Launch now";
       if (initBuyAmt > 0 && !willSchedule) {
-        try { await mockBuy(ctx, user, mockCa, initBuyAmt, "launch", "", { silent: true }); }
+        const lName0 = db.getSysConfig(`launch_symbol_${userId}`) || db.getSysConfig(`launch_name_${userId}`) || "";
+        try { await mockBuy(ctx, user, mockCa, initBuyAmt, "launch", "", { silent: true, tokenName: lName0 }); }
         catch (e) { console.error("[Launch initial buy] failed:", e.message); }
       }
       const info = { pump:"pump.fun", launchlab:"Raydium LaunchLab", meteora:"Meteora DBC", letsbonk:"LetsBonk", moonshot:"Moonshot" }[lp] || lp;
@@ -613,7 +614,8 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const ca = parts.slice(0,-1).join("_");
       const amt = parseFloat(parts[parts.length-1]);
       try {
-        await mockBuy(ctx, user, ca, amt, "launch", "", { silent: true });
+        const lName = db.getSysConfig(`launch_symbol_${userId}`) || db.getSysConfig(`launch_name_${userId}`) || "";
+        await mockBuy(ctx, user, ca, amt, "launch", "", { silent: true, tokenName: lName });
         await ctx.answerCallbackQuery({ text: `✅ Bought ${amt} SOL`, show_alert: false });
       } catch (e) {
         await ctx.answerCallbackQuery({ text: "❌ Buy failed", show_alert: true });

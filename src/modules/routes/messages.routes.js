@@ -226,7 +226,8 @@ function setupMessages(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       const amt = parseFloat(text);
       if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Invalid amount."); return; }
-      await mockBuy(ctx, user, ca, amt);
+      const lNameC = db.getSysConfig(`launch_symbol_${userId}`) || db.getSysConfig(`launch_name_${userId}`) || "";
+      await mockBuy(ctx, user, ca, amt, "launch", "", { tokenName: lNameC });
       return;
     }
 

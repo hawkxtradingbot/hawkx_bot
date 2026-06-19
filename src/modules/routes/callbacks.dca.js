@@ -262,7 +262,7 @@ async function showTokenDca(ctx, userId, ca) {
       { text: "✖ Cancel", callback_data: "dca_cancel_setup" },
     ]);
   }
-  kb.inline_keyboard.push([{ text: "← Back", callback_data: "dca_refresh" }]);
+  kb.inline_keyboard.push([{ text: "← Back", callback_data: "dca_refresh" }, { text: "📂 Positions", callback_data: "menu_portfolio" }]);
 
   const dcaMsgId = parseInt(db.getSysConfig(`dca_msg_${userId}`) || "0");
   const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;

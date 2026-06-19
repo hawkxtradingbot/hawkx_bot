@@ -174,7 +174,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   // ── Token selector buttons ───────────────────────────────────
   paginated.forEach((pos) => {
-    const name  = (pos.token_name || pos.token_ca.slice(0,6)).slice(0,6);
+    let name = (pos.token_name || pos.token_ca.slice(0,8)).trim();
+    if (name.length > 10) name = name.slice(0, 10) + "…";
     const isSel = selPos && pos.position_id === selPos.position_id;
     const pnlPct = pos.buy_price > 0 ? ((simulatePriceMovement(pos.token_ca) - pos.buy_price) / pos.buy_price * 100) : 0;
     const icon  = pnlPct >= 0 ? "🟢" : "🔴";
@@ -182,11 +183,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   });
   kb.row();
 
-  // ── Pagination ───────────────────────────────────────────────
+  // ── Pagination (cleaner labeled arrows) ──────────────────────
   if (totalPages > 1) {
-    if (page > 0) kb.text("◀", `pos_filter_${filter}_${page-1}_0`);
-    kb.text(`${page+1}/${totalPages}`, "noop");
-    if (page < totalPages - 1) kb.text("▶", `pos_filter_${filter}_${page+1}_0`);
+    if (page > 0) kb.text("◀ Prev", `pos_filter_${filter}_${page-1}_0`);
+    kb.text(`Page ${page+1}/${totalPages}`, "noop");
+    if (page < totalPages - 1) kb.text("Next ▶", `pos_filter_${filter}_${page+1}_0`);
     kb.row();
   }
 
@@ -206,7 +207,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         .text("🔴 75%",  `sell_pct_75_${selPos.position_id}`)
         .text("🔴 100%", `sell_pct_100_${selPos.position_id}`)
         .row();
-      kb.text("📍 Limit", "menu_limit_orders")
+      kb.text("📍 Limit", `lo_token_${selPos.position_id}`)
         .text("📉 DCA", "scanner_dca")
         .text("📌 Auto Sell", `pos_autosell_${selPos.position_id}`)
         .row();
@@ -216,6 +217,10 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       kb.text(`🔴 ${s1}%`,  `sell_pct_${s1}_${selPos.position_id}`)
         .text(`🔴 ${s2}%`,  `sell_pct_${s2}_${selPos.position_id}`)
         .text("🔴 Initial", `sell_initial_${selPos.position_id}`)
+        .row();
+      // Beginner: Limit + DCA (beginner-friendly), NO Auto Sell
+      kb.text("📍 Limit", `lo_token_${selPos.position_id}`)
+        .text("📉 DCA", "scanner_dca")
         .row();
     }
   }
@@ -349,7 +354,7 @@ async function getTokenPosition(ctx, user, positionId) {
       .text("🔴 75%",  `sell_pct_75_${positionId}`)
       .text("🔴 100%", `sell_pct_100_${positionId}`)
       .row();
-    kb.text("📍 Limit", "menu_limit_orders").text("📉 DCA", "scanner_dca").text("🤖 Auto-Sell", `pos_autosell_${positionId}`).row();
+    kb.text("📍 Limit", `lo_token_${positionId}`).text("📉 DCA", "scanner_dca").text("🤖 Auto-Sell", `pos_autosell_${positionId}`).row();
   } else {
     const s1 = settings.sell_pct_1 || 25;
     const s2 = settings.sell_pct_2 || 50;
@@ -357,6 +362,8 @@ async function getTokenPosition(ctx, user, positionId) {
       .text(`🔴 ${s2}%`,  `sell_pct_${s2}_${positionId}`)
       .text("🔴 Initial", `sell_initial_${positionId}`)
       .row();
+    // Beginner: Limit + DCA (no Auto Sell)
+    kb.text("📍 Limit", `lo_token_${positionId}`).text("📉 DCA", "scanner_dca").row();
   }
 
   kb.text("← Positions", "menu_portfolio")

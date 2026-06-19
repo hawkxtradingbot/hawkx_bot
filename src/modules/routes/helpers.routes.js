@@ -587,6 +587,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   ]);
   kb.inline_keyboard.push([
     { text: "← Back", callback_data: "limit_orders_refresh" },
+    { text: "📂 Positions", callback_data: "menu_portfolio" },
     { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca.slice(0,12)}` },
   ]);
   const curMsgId = forceMsgId || ctx.callbackQuery?.message?.message_id;

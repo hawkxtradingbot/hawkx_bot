@@ -149,17 +149,21 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   const feeSol      = solAmount * feeRate;
   let tokenName = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
   let entryMcap = 0;
-  try {
-    const axiosMcap = require("axios");
-    const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1500 });
-    const pairs  = dexRes.data?.pairs;
-    if (pairs && pairs.length > 0) {
-      entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
-      // Store the SYMBOL as the token name (e.g. JitoSOL, BONK)
-      const sym = pairs[0].baseToken?.symbol;
-      if (sym) tokenName = sym;
-    }
-  } catch {}
+  // If a custom token name was passed (e.g. from Launch), use it
+  if (opts.tokenName) {
+    tokenName = opts.tokenName;
+  } else {
+    try {
+      const axiosMcap = require("axios");
+      const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1500 });
+      const pairs  = dexRes.data?.pairs;
+      if (pairs && pairs.length > 0) {
+        entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
+        const sym = pairs[0].baseToken?.symbol;
+        if (sym) tokenName = sym;
+      }
+    } catch {}
+  }
   
   const tradeId = db.recordTrade({
     userId: user.user_id, walletId: user.active_wallet_id,
