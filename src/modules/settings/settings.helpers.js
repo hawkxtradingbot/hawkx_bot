@@ -31,8 +31,13 @@ async function showSettings(ctx, user) {
     ? buildProSettingsMenu(userWithSettings)
     : buildBeginnerSettingsMenu(userWithSettings);
 
-  try { await ctx.editMessageText(guide, { parse_mode: "Markdown", reply_markup: kb }); }
-  catch { await ctx.reply(guide, { parse_mode: "Markdown", reply_markup: kb }); }
+  try {
+    await ctx.editMessageText(guide, { parse_mode: "Markdown", reply_markup: kb });
+    db.setSysConfig(`settings_msg_${user.user_id}`, String(ctx.callbackQuery?.message?.message_id || 0));
+  } catch {
+    const m = await ctx.reply(guide, { parse_mode: "Markdown", reply_markup: kb });
+    db.setSysConfig(`settings_msg_${user.user_id}`, String(m.message_id));
+  }
 }
 
 // ── Send prompt, return message ID for deletion ───────────────

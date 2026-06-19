@@ -3,6 +3,17 @@ const bcrypt = require("bcryptjs");
 const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildExecutionSettingsMenu, buildRiskSettingsMenu } = require("../keyboards");
 const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./settings.helpers");
 
+async function refreshBeginnerSettings(ctx, userId) {
+  try {
+    const u = db.getUser(userId);
+    const settings = db.getSettings(userId);
+    const uws = { ...u, settings };
+    const kb = u.mode === "pro" ? buildProSettingsMenu(uws) : buildBeginnerSettingsMenu(uws);
+    const mid = parseInt(db.getSysConfig(`settings_msg_${userId}`) || "0");
+    if (mid) { try { await ctx.api.editMessageReplyMarkup(ctx.chat.id, mid, { reply_markup: kb }); } catch {} }
+  } catch {}
+}
+
 async function handleTextInput(ctx, user, pendingKey) {
   const text     = ctx.message.text.trim();
   const userId   = user.user_id;
@@ -310,6 +321,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       db.updateSettings(userId, { [`buy_amt_${n}`]: v });
       await ctx.reply(`✅ Buy Amount ${n}: *${v} SOL*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
+      await refreshBeginnerSettings(ctx, userId);
       break;
     }
     case "set_sell_pct_1": case "set_sell_pct_2": case "set_sell_pct_3": {
@@ -318,6 +330,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       if (isNaN(v) || v <= 0 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
       db.updateSettings(userId, { [`sell_pct_${n}`]: v });
       await ctx.reply(`✅ Sell ${n}: *${v}%*`, { parse_mode: "Markdown" });
+      await refreshBeginnerSettings(ctx, userId);
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
