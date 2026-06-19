@@ -118,7 +118,6 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   // ── Build message ────────────────────────────────────────────
   let msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n`;
-  msg += `💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
   msg += `🤖 auto-sell · 📉 DCA · 📍 limit\n`;
   msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
@@ -151,18 +150,33 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       if (limitActive) autoIcons += " 📍";
     } catch {}
 
-    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}${autoIcons}\n`;
-    msg += `${formatPnl(pnlPct)} | ${formatSol(pnlSol)} SOL\n`;
-    msg += `Bought: ${pos.sol_invested.toFixed(4)} → Now: ${currentValue.toFixed(4)} SOL\n`;
-    msg += `Holdings: ${(pos.token_amount||0).toLocaleString()} ${name} | Hold: ${holdTime}\n`;
+    // Count buys/sells + totals from trades
+    let bCount = 0, bSol = 0, sCount = 0, sSol = 0;
+    try {
+      const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+      const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+      bCount = bq.c; bSol = bq.s; sCount = sq.c; sSol = sq.s;
+    } catch {}
+    // Prices
+    const entryPrice = pos.buy_price || 0;
+    const curPrice = entryPrice * (1 + pnlPct / 100);
+    const fmtP = (v) => v < 0.0001 ? "$" + v.toFixed(8) : "$" + v.toFixed(6);
+    // MCaps
+    const eMc = pos.entry_mcap && pos.entry_mcap > 0
+      ? (pos.entry_mcap >= 1e6 ? "$" + (pos.entry_mcap/1e6).toFixed(1) + "M" : "$" + (pos.entry_mcap/1e3).toFixed(0) + "K")
+      : "—";
+    const cMcVal = pos.entry_mcap > 0 ? pos.entry_mcap * (1 + pnlPct/100) : 0;
+    const cMc = cMcVal > 0
+      ? (cMcVal >= 1e6 ? "$" + (cMcVal/1e6).toFixed(1) + "M" : "$" + (cMcVal/1e3).toFixed(0) + "K")
+      : "—";
+    const usd = (sol) => "$" + (sol * 150).toFixed(2);
 
-    // MCap
-    if (pos.entry_mcap && pos.entry_mcap > 0) {
-      const entryMcap = pos.entry_mcap >= 1000000
-        ? `$${(pos.entry_mcap/1000000).toFixed(1)}M`
-        : `$${(pos.entry_mcap/1000).toFixed(0)}K`;
-      msg += `Entry MCap: ${entryMcap}\n`;
-    }
+    const mcE = eMc !== "—" ? ` · MC <b>${eMc}</b>` : "";
+    const mcN = cMc !== "—" ? ` · MC <b>${cMc}</b>` : "";
+    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}${autoIcons}\n`;
+    msg += `📊 Entry <b>${fmtP(entryPrice)}</b>${mcE} · 💰 Bought <b>${bSol.toFixed(3)} SOL</b> (${usd(bSol)}) · ${bCount} times\n`;
+    msg += `📈 Now <b>${fmtP(curPrice)}</b>${mcN} · 📤 Sold <b>${sSol.toFixed(3)} SOL</b> (${usd(sSol)}) · ${sCount} times\n`;
+    msg += `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> · PnL <b>${formatPnl(pnlPct)} ${formatSol(pnlSol)} SOL</b> (${usd(pnlSol)})\n`;
     msg += `━━━━━━━━━━━━━━━━━━━\n`;
   }
 
@@ -171,6 +185,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   const totalSign = totalPnl >= 0 ? "+" : "";
   const totalPnlSol = totalCurrent - totalInvested;
   msg += `Total P&L: <b>${totalSign}${totalPnl.toFixed(2)}%</b> | ${totalSign}${totalPnlSol.toFixed(4)} SOL\n`;
+  msg += `💼 ${activeWallet?.label || walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>\n`;
 
   // ── Token selector buttons ───────────────────────────────────
   paginated.forEach((pos) => {
@@ -259,6 +274,13 @@ async function getTokenPosition(ctx, user, positionId) {
   const sign         = pnlPct >= 0 ? "+" : "";
   const holdTime     = formatHoldTime(pos.created_at || Date.now());
 
+  // Buy/sell counts + totals for this token
+  let sbCount = 0, sbSol = 0, ssCount = 0, ssSol = 0;
+  try {
+    const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+    const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+    sbCount = bq.c; sbSol = bq.s; ssCount = sq.c; ssSol = sq.s;
+  } catch {}
   const tokenData = await getTokenInfo(pos.token_ca);
   const dexUrl    = `https://dexscreener.com/solana/${pos.token_ca}`;
   const tokenName = tokenData.name || pos.token_name || pos.token_ca.slice(0,8);
@@ -328,11 +350,12 @@ async function getTokenPosition(ctx, user, positionId) {
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `📋 <code>${pos.token_ca}</code>\n\n` +
-    `🛒 Bought: <b>${pos.sol_invested.toFixed(4)} SOL</b>\n` +
-    `💰 Holdings: <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
-    `📈 Current: <b>${currentValue.toFixed(4)} SOL</b>\n` +
-    `P&L: <b>${sign}${formatPnl(pnlPct)}</b> | ${sign}${formatSol(pnlSol)} SOL | $${pnlUsd.toFixed(2)}\n` +
-    `⏱ Hold: <b>${holdTime}</b>\n` +
+    `💰 Bought <b>${sbSol.toFixed(3)} SOL</b> (${(sbSol*150).toFixed(2)}) · ${sbCount} times\n` +
+    `📤 Sold <b>${ssSol.toFixed(3)} SOL</b> (${(ssSol*150).toFixed(2)}) · ${ssCount} times\n` +
+    `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
+    `📈 Current Value: <b>${currentValue.toFixed(4)} SOL</b>\n` +
+    `P&L: <b>${sign}${formatPnl(pnlPct)}</b> | ${sign}${formatSol(pnlSol)} SOL | ${pnlUsd.toFixed(2)}\n` +
+    `⏱ Held: <b>${holdTime}</b>\n` +
     (marketLine ? `\n${marketLine}` : "") +
     (scannerLine ? scannerLine : "") +
     (autoSummary ? autoSummary : "") +
