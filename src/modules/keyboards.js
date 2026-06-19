@@ -126,8 +126,8 @@ function buildBeginnerSettingsMenu(user) {
     .row();
 
   // Slippage — 2 per row
-  kb.text(`📉 Buy: ${s.slippage_pct||10}%`,      "set_slippage")
-    .text(`📉 Sell: ${s.sell_slippage_pct||10}%`, "set_sell_slippage")
+  kb.text(`📉 Buy Slippage: ${s.slippage_pct||10}%`,      "set_slippage")
+    .text(`📉 Sell Slippage: ${s.sell_slippage_pct||10}%`, "set_sell_slippage")
     .row();
 
   // Trade speed — 3 per row

@@ -215,6 +215,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       db.updateSettings(userId, { slippage_pct: v });
       await ctx.reply(`✅ Buy slippage: *${v}%*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
+      await refreshBeginnerSettings(ctx, userId);
       break;
     }
     case "set_sell_slippage": {
@@ -225,6 +226,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       db.updateSettings(userId, { sell_slippage_pct: v });
       await ctx.reply(`✅ Sell slippage: *${v}%*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
+      await refreshBeginnerSettings(ctx, userId);
       break;
     }
 
