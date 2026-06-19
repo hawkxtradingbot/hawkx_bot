@@ -59,7 +59,6 @@ async function addWallet(ctx, user, privateKeyB58OrGenerate) {
   try {
     if (privateKeyB58OrGenerate === "generate") {
       keypair = Keypair.generate();
-      await ctx.reply("🔑 Generating new devnet wallet...");
     } else {
       keypair = Keypair.fromSecretKey(bs58.decode(privateKeyB58OrGenerate));
     }
@@ -80,13 +79,16 @@ async function addWallet(ctx, user, privateKeyB58OrGenerate) {
     db.updateUser(user.user_id, { active_wallet_id: walletId });
   }
 
-  await ctx.reply(
-    `✅ *Wallet Added!*\n\n` +
-    `🏷 Label: *${label}*\n` +
-    `📋 Address:\n\`${publicKey}\`\n\n` +
-    `💡 Tap the address to copy it.`,
-    { parse_mode: "Markdown" }
-  );
+  // Only show the detailed screen for IMPORT; generate shows a short confirmation in the handler
+  if (privateKeyB58OrGenerate !== "generate") {
+    await ctx.reply(
+      `✅ *Wallet Imported!*\n\n` +
+      `🏷 Label: *${label}*\n` +
+      `📋 Address:\n\`${publicKey}\`\n\n` +
+      `💡 Tap the address to copy it.`,
+      { parse_mode: "Markdown" }
+    );
+  }
 
   if (config.AUTO_AIRDROP) {
     const { airdropToWallet } = require("./faucet");

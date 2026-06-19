@@ -203,11 +203,9 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       await addWallet(ctx, freshUser, "generate");
       const wallets = db.getWallets(userId) || [];
       const updated = db.getUser(userId);
-      return safeEdit(
-        ctx,
-        `💼 *Wallet Management*`,
-        buildWalletMenu(wallets, updated.active_wallet_id, updated.mode),
-      );
+      const newIdx = wallets.length;
+      await ctx.reply(`✅ *Wallet W${newIdx} created!*`, { parse_mode: "Markdown" });
+      return showWalletScreen(ctx, userId, updated.active_wallet_id);
     }
 
     if (data === "wallet_import") {
