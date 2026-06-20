@@ -63,28 +63,9 @@ function removePromoter(userId) {
 }
 
 function startPayoutCron(bot) {
-  cron.schedule("0 */12 * * *", async () => {
-    console.log("[Referrals] Starting 12hr payout cron...");
-    const payouts = db.getAllPendingPayouts();
-    let count     = 0;
-
-    for (const payout of payouts) {
-      if ((payout.total || 0) < (config.MIN_PAYOUT_SOL || 0.001)) continue;
-      db.markEarningsPaid(payout.user_id);
-      count++;
-      try {
-        await bot.api.sendMessage(
-          payout.user_id,
-          `💰 *Referral Payout!*\n\n` +
-          `You received *${payout.total.toFixed(6)} SOL* in referral earnings.\n\n` +
-          `_[DEVNET — simulated payout]_`,
-          { parse_mode: "Markdown" }
-        );
-      } catch {}
-    }
-    console.log(`[Referrals] Payout cron done. Paid ${count} users.`);
-  });
-  console.log("[Referrals] ✅ 12hr payout cron started");
+  // Auto-payout cron DISABLED — users now claim earnings manually (#16).
+  // Code kept for reference / possible future use.
+  console.log("[Referrals] ℹ️ Auto-payout cron disabled — manual claim enabled");
 }
 
 module.exports = {

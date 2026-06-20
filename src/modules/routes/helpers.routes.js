@@ -355,12 +355,12 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   msg += `L1: ${isPromoter ? "35" : "30"}% | L2: 4% | L3: 3% | L4: 2% | L5: 1.5% | L6: 1%\n\n`;
   msg += `👥 Direct referrals: *${dirCount}*\n`;
   msg += `💎 Total earned: *${(total?.total || 0).toFixed(6)} SOL*\n`;
-  msg += `✅ Paid: *${(paid?.total || 0).toFixed(6)} SOL*\n`;
-  msg += `⏳ Pending: *${(pending2?.total || 0).toFixed(6)} SOL*\n\n`;
+  msg += `✅ Claimed: *${(paid?.total || 0).toFixed(6)} SOL*\n`;
+  msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n\n`;
   msg += `🔗 *Your Referral Link:*\n\`${refLink}\`\n\n`;
   msg += `💳 *Payout Wallet:* ${payoutLabel} ✅\n`;
   msg += `\`${payoutAddress || "Not set"}\`\n\n`;
-  msg += `_Paid every 12 hours._`;
+  msg += `_Tap 💰 Claim to withdraw earnings (min 0.01 SOL) to your payout wallet._`;
 
   if (freshUser.joiner_discount && freshUser.rank === 1) {
     msg += `\n\n🎁 *10% fee discount* active! Fee: *0.90%* instead of 1.00%.`;
@@ -392,20 +392,20 @@ async function buildReferralScreen(ctx, userId, showWallets) {
       ],
     };
   } else {
-    keyboard = {
-      inline_keyboard: [
-        [
-          {
-            text: "💳 Set Payout Wallet",
-            callback_data: "referral_set_payout",
-          },
-        ],
-        [
-          { text: "← Back", callback_data: "menu_main" },
-          { text: "🔄 Refresh", callback_data: "menu_referrals" },
-        ],
-      ],
-    };
+    const claimable = pending2?.total || 0;
+    const rows = [];
+    // Claim button — always shown; handler checks the 0.01 minimum
+    rows.push([{ text: `💰 Claim ${claimable.toFixed(4)} SOL`, callback_data: "referral_claim" }]);
+    // Enter Code + Set Payout side by side
+    rows.push([
+      { text: "🎟 Enter Code", callback_data: "referral_enter_code" },
+      { text: "💳 Payout Wallet", callback_data: "referral_set_payout" },
+    ]);
+    rows.push([
+      { text: "← Back", callback_data: "menu_main" },
+      { text: "🔄 Refresh", callback_data: "menu_referrals" },
+    ]);
+    keyboard = { inline_keyboard: rows };
   }
 
   try {

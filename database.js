@@ -656,12 +656,29 @@ function getPaidEarnings(userId) {
   return getDb().prepare("SELECT SUM(earned_sol) as total FROM referral_earnings WHERE user_id = ? AND paid = 1").get(userId);
 }
 
+function getUserByUsername(username) {
+  const clean = String(username || "").replace(/^@/, "").trim();
+  if (!clean) return null;
+  return getDb().prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1").get(clean);
+}
+
 function getDirectReferralCount(userId) {
   return getDb().prepare("SELECT COUNT(*) as cnt FROM users WHERE referrer_id = ?").get(userId)?.cnt || 0;
 }
 
 function markEarningsPaid(userId) {
   getDb().prepare("UPDATE referral_earnings SET paid = 1 WHERE user_id = ? AND paid = 0").run(userId);
+}
+
+// Manual claim: check minimum, mark paid, return result
+function claimEarnings(userId, minClaim = 0.01) {
+  const row = getDb().prepare("SELECT SUM(earned_sol) as total FROM referral_earnings WHERE user_id = ? AND paid = 0").get(userId);
+  const pending = row?.total || 0;
+  if (pending < minClaim) {
+    return { ok: false, pending, min: minClaim };
+  }
+  getDb().prepare("UPDATE referral_earnings SET paid = 1 WHERE user_id = ? AND paid = 0").run(userId);
+  return { ok: true, claimed: pending };
 }
 
 function getAllPendingPayouts() {
@@ -1125,7 +1142,7 @@ module.exports = {
   closePosition, getAllOpenPositions, setPositionNote, getPosition,
   buildReferralChain, getReferralChain, addReferralEarning,
   getPendingEarnings, getTotalEarnings, getPaidEarnings,
-  getDirectReferralCount, markEarningsPaid, getAllPendingPayouts, checkReferralMilestone,
+  getDirectReferralCount, getUserByUsername, markEarningsPaid, claimEarnings, getAllPendingPayouts, checkReferralMilestone,
   getWatchlist, addToWatchlist, removeFromWatchlist,
   getCopyWallets, addCopyWallet, deleteCopyWallet, toggleCopyWallet, updateCopyWallet,
   getCopyChannels, addCopyChannel, deleteCopyChannel, updateCopyChannel,

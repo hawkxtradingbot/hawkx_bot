@@ -1515,6 +1515,20 @@ const t = text.trim().toLowerCase();
       return;
     }
 
+    if (pending === "referral_enter_code") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const me = db.getUser(userId);
+      if (me.referrer_id) { await ctx.reply("✅ You already have a referrer — it can't be changed."); return; }
+      const refUser = db.getUserByUsername(text);
+      if (!refUser) { await ctx.reply("❌ User not found. Check the username and try again."); return; }
+      if (refUser.user_id === userId) { await ctx.reply("❌ You can't refer yourself."); return; }
+      db.updateUser(userId, { referrer_id: refUser.user_id });
+      await ctx.reply(`✅ *Referral code accepted!*\n\nYou were referred by *@${refUser.username || "user"}*. They'll now earn from your trades.`, { parse_mode: "Markdown" });
+      return;
+    }
+
     // Auto-detect CA
     if (
       !pending &&

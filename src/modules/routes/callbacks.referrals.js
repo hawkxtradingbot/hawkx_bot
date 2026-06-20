@@ -9,6 +9,68 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
       return buildReferralScreen(ctx, userId, false);
     }
 
+    // ── CLAIM EARNINGS ────────────────────────────────────────
+    if (data === "referral_claim") {
+      const pending = db.getPendingEarnings(userId)?.total || 0;
+      const MIN = 0.01;
+      if (pending < MIN) {
+        await ctx.answerCallbackQuery({
+          text: `⏳ You need at least ${MIN} SOL to claim.\nYou have ${pending.toFixed(4)} SOL.\nKeep referring to reach the minimum!`,
+          show_alert: true,
+        });
+        return true;
+      }
+      // Show confirm with destination
+      const wallets = db.getWallets(userId) || [];
+      let payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
+      const pw = wallets.find(w => w.public_key === payoutAddr);
+      const pwLabel = pw ? `W${wallets.indexOf(pw)+1}` : "Custom";
+      await ctx.answerCallbackQuery();
+      return ctx.reply(
+        `💰 *Claim Referral Earnings*\n\nAmount: *${pending.toFixed(4)} SOL*\nTo: *${pwLabel}*\n\`${payoutAddr.slice(0,16)}...\`\n\nConfirm the claim?`,
+        { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[
+          { text: "✅ Confirm Claim", callback_data: "referral_claim_confirm" },
+          { text: "❌ Cancel", callback_data: "menu_referrals" },
+        ]]}}
+      );
+    }
+
+    if (data === "referral_claim_confirm") {
+      const result = db.claimEarnings(userId, 0.01);
+      if (!result.ok) {
+        await ctx.answerCallbackQuery({ text: `⏳ Need ${result.min} SOL. You have ${result.pending.toFixed(4)} SOL.`, show_alert: true });
+        return true;
+      }
+      const wallets = db.getWallets(userId) || [];
+      let payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
+      const pw = wallets.find(w => w.public_key === payoutAddr);
+      const pwLabel = pw ? `W${wallets.indexOf(pw)+1}` : "Custom";
+      await ctx.answerCallbackQuery("✅ Claimed!");
+      // DEVNET: simulated. MAINNET TODO: real SOL transfer to payoutAddr.
+      await ctx.reply(
+        `✅ *Claimed ${result.claimed.toFixed(4)} SOL!*\n\nSent to: *${pwLabel}*\n\`${payoutAddr.slice(0,16)}...\`\n\n_[DEVNET — simulated. Real transfer on mainnet.]_`,
+        { parse_mode: "Markdown" }
+      );
+      return buildReferralScreen(ctx, userId, false);
+    }
+
+    // ── ENTER REFERRAL CODE ───────────────────────────────────
+    if (data === "referral_enter_code") {
+      const freshUser = db.getUser(userId);
+      if (freshUser.referrer_id) {
+        await ctx.answerCallbackQuery({ text: "✅ You already have a referrer. It can't be changed.", show_alert: true });
+        return true;
+      }
+      await ctx.answerCallbackQuery();
+      const m = await ctx.reply(
+        "🎟 *Enter Referral Code*\n\nSend the username of who referred you (e.g. @fazle or fazle):\n\n_You can only set this once._",
+        { parse_mode: "Markdown" }
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "referral_enter_code");
+      return true;
+    }
+
     if (data === "referral_refresh") {
       await ctx.answerCallbackQuery();
       return buildReferralScreen(ctx, userId, false);
