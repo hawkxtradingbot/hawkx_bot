@@ -119,6 +119,19 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       await mockBuy(ctx, user, ca, amt, "manual", "");
       return true;
     }
+    // Pro safety override — buy a risky token after confirmation
+    if (data.startsWith("buy_override_")) {
+      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      if ((user.mode || "beginner") !== "pro") { await ctx.answerCallbackQuery("❌ Override is Pro-only.", { show_alert: true }); return true; }
+      const rest = data.replace("buy_override_", "");
+      const lastUnderscore = rest.lastIndexOf("_");
+      const ca = rest.slice(0, lastUnderscore);
+      const amt = parseFloat(rest.slice(lastUnderscore + 1));
+      if (!ca || !(amt > 0)) { await ctx.answerCallbackQuery("❌ Invalid override."); return true; }
+      await ctx.answerCallbackQuery("⚠️ Overriding safety — buying anyway...");
+      await mockBuy(ctx, user, ca, amt, "manual", "", { skipSafety: true });
+      return true;
+    }
     if (data === "buy_ca_custom") {
       const customAmt = parseFloat(db.getSysConfig(`custom_buy_amt_${userId}`) || "0");
       if (customAmt > 0) { await mockBuy(ctx, user, db.getSysConfig(`pending_ca_${userId}`) || "", customAmt, "manual", ""); return true; }

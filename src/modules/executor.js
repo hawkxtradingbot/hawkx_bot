@@ -127,8 +127,20 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   // Safety check
   const safety = await checkSafety(ca, user.mode || "beginner");
   if (safety.status === "BLOCK" && !opts.skipSafety) {
+    const cleanReason = String(safety.reason||"").replace(/[_*`[\]]/g,"");
+    // Pro can override overridable blocks (freeze/mint/high-rug); honeypot/can't-sell never
+    if (safety.canOverride && (user.mode || "beginner") === "pro") {
+      await ctx.reply(
+        `⚠️ *Risky Token — Safety Warning*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${cleanReason}*\n\n_This token is risky. As a Pro user, you can override and buy anyway — but you may lose funds._`,
+        { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[
+          { text: "⚠️ Override & Buy Anyway", callback_data: `buy_override_${ca}_${solAmount}` },
+          { text: "❌ Cancel", callback_data: "noop" },
+        ]]}}
+      );
+      return null;
+    }
     await ctx.reply(
-      `🚫 *Trade Blocked — Safety Check*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${String(safety.reason||"").replace(/[_*`[\]]/g,"")}*\n\n_Blocked to protect you._`,
+      `🚫 *Trade Blocked — Safety Check*\n\nToken: \`${ca.slice(0,12)}...\`\nReason: *${cleanReason}*\n\n_Blocked to protect you.${safety.canOverride ? " Switch to Pro Mode to override." : ""}_`,
       { parse_mode: "Markdown" }
     );
     return null;
