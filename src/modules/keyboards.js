@@ -143,9 +143,7 @@ function buildBeginnerSettingsMenu(user) {
     .text("👁 Show/Hide", "bset_show_hide")
     .row();
   kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set Security PIN", "set_sap").row();
-  kb.text("💼 Wallets",    "menu_wallets")
-    .text("🌐 Language",   "set_language")
-    .row();
+  kb.text("🌐 Language",   "set_language").row();
   kb.text("⚡ Pro Mode →", "mode_set_pro").row();
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", "menu_settings")
