@@ -255,6 +255,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid SOL amount."); handled = false; break; }
       db.updateSettings(userId, { speed_mode: "custom", custom_fee: v });
       await ctx.reply(`✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
+      await refreshBeginnerSettings(ctx, userId);
       break;
     }
     case "alert_add_ca": {

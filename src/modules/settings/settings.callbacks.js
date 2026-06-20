@@ -141,7 +141,9 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     await ctx.answerCallbackQuery(`MEV Protection: ${v ? "✅ ON" : "⬜ OFF"}`);
     const fresh = db.getUser(user.user_id);
     const freshS = db.getSettings(user.user_id);
-    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS) }); } catch {}
+    const uws = { ...fresh, settings: freshS };
+    const kb = fresh.mode === "pro" ? buildExecutionSettingsMenu(freshS) : buildBeginnerSettingsMenu(uws);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
     return;
   }
 
@@ -184,8 +186,12 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     const speed = action === "bset_speed_fast" ? "fast" : "turbo";
     db.updateSettings(user.user_id, { speed_mode: speed });
     await ctx.answerCallbackQuery(`✅ Speed: ${speed}`);
+    const freshU = db.getUser(user.user_id);
     const freshS = db.getSettings(user.user_id);
-    try { await ctx.editMessageReplyMarkup({ reply_markup: buildExecutionSettingsMenu(freshS, false, false, false) }); } catch {}
+    const uws = { ...freshU, settings: freshS };
+    // Refresh the CORRECT menu based on mode (was always Pro execution)
+    const kb = freshU.mode === "pro" ? buildExecutionSettingsMenu(freshS, false, false, false) : buildBeginnerSettingsMenu(uws);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
     return;
   }
 

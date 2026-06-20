@@ -137,7 +137,11 @@ function buildBeginnerSettingsMenu(user) {
     .text(spd==="custom" ? "✅ Custom ✏️" : "Custom ✏️", "bset_speed_custom")
     .row();
 
-  kb.text("👁 Show/Hide Tokens",                   "bset_show_hide").row();
+  // MEV protection toggle + Show/Hide side by side
+  const bMev = s?.mev_protect ?? 1;
+  kb.text(bMev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ⬜", "set_mev")
+    .text("👁 Show/Hide", "bset_show_hide")
+    .row();
   kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set Security PIN", "set_sap").row();
   kb.text("💼 Wallets",    "menu_wallets")
     .text("🌐 Language",   "set_language")
