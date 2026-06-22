@@ -382,17 +382,46 @@ async function handleTextInput(ctx, user, pendingKey) {
             return;
           }
           case "sap_verify_export": {
+            // Check lockout first
+            const lockUntil = parseInt(db.getSysConfig(`export_lock_${userId}`) || "0");
+            if (lockUntil && Date.now() < lockUntil) {
+              const mins = Math.ceil((lockUntil - Date.now()) / 60000);
+              try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
+              db.setSysConfig(`pending_${userId}`, "");
+              await ctx.reply(`🔒 *Export Locked*\n\nToo many wrong PINs. Try again in *${mins} min*.`, { parse_mode: "Markdown" });
+              return;
+            }
             const freshUser = db.getUser(userId);
             const valid = freshUser.sap_hash ? await bcrypt.compare(text, freshUser.sap_hash) : true;
             if (!valid) {
               try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
+              const fails = parseInt(db.getSysConfig(`export_pin_fails_${userId}`) || "0") + 1;
+              db.setSysConfig(`export_pin_fails_${userId}`, String(fails));
+              if (fails >= 10) {
+                // Lock for 10 minutes
+                db.setSysConfig(`export_lock_${userId}`, String(Date.now() + 10 * 60000));
+                db.setSysConfig(`export_pin_fails_${userId}`, "0");
+                db.setSysConfig(`pending_${userId}`, "");
+                await ctx.reply(
+                  "🔒 *Security Alert — Export Locked*\n\n" +
+                  "10 wrong PIN attempts. Key export is locked for *10 minutes*.\n\n" +
+                  "🛡 Your funds are still safe — no one can export your key without the correct PIN.\n\n" +
+                  "⚠️ *If this wasn't you*, someone may be trying to access your wallet. When unlocked, consider exporting your key (with the correct PIN) and moving funds to a new wallet.\n\n" +
+                  "💡 Wait 10 minutes, then try again with your correct PIN.",
+                  { parse_mode: "Markdown" }
+                );
+                return;
+              }
               await ctx.reply(
-                "❌ *Incorrect PIN.*\n\nTry again — enter your Security PIN:",
+                `❌ *Incorrect PIN (${fails}/10).*\n\nTry again — enter your Security PIN:\n\n💡 _After 10 wrong tries, export locks for 10 minutes._`,
                 { parse_mode: "Markdown" }
               );
               db.setSysConfig(`pending_${userId}`, "sap_verify_export");
               return;
             }
+            // Correct PIN — reset fails + export
+            db.setSysConfig(`export_pin_fails_${userId}`, "0");
+            db.setSysConfig(`export_lock_${userId}`, "0");
             const walletId = parseInt(db.getSysConfig(`sap_next_wallet_${userId}`) || "0");
             db.setSysConfig(`pending_${userId}`, "");
             if (walletId) await doExportKey(ctx, userId, walletId);
