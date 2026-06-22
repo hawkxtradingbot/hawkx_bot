@@ -316,11 +316,12 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
         walletRows.push(wallets.slice(i, i + 3).map((w, idx) => getWalletBtn(w, i+idx+1, w.wallet_id===freshUser.active_wallet_id, `deposit_select_${w.wallet_id}`)));
       }
       const depMsg =
-        `💰 *Deposit*\n\n` +
+        `💰 *Deposit SOL*\n\n` +
         `Active: *W${activeIdx}* ✅\n` +
-        `📋 Address:\n\`${activeAddr}\`\n\n` +
+        `📋 Address (tap to copy):\n\`${activeAddr}\`\n\n` +
         `💰 Balance: *${activeBal.toFixed(4)} SOL*\n\n` +
-        `_Select the deposit wallet._`;
+        `⚠️ _Send only *SOL* or *SPL tokens* on the *Solana network* to this address. Other networks = lost funds._\n\n` +
+        `_Tap a wallet below to switch deposit address._`;
       try {
         await ctx.editMessageText(depMsg, {
           parse_mode: "Markdown",
