@@ -61,7 +61,7 @@ const db = require("../../../database");
 const { InputFile } = require("grammy");
 const config = require("../../../config");
 const bcrypt = require("bcryptjs");
-const { getTokenInfo, formatNum, formatPrice } = require("../tokenInfo");
+const { getTokenInfo, getTokenSafety, formatSafetyCard, formatAge, formatNum, formatPrice } = require("../tokenInfo");
 
 async function handlePnlCard(ctx, user, posId, hideAmounts) {
   const pos = db.getPosition(posId, user.user_id);
@@ -952,6 +952,72 @@ async function showLaunchScreen(ctx, userId) {
 
 
 
+// Shared token scanner/buy screen — used by paste-CA and watchlist Buy
+async function showTokenScanner(ctx, user, ca, asReply = false) {
+  const userId = user.user_id;
+  const settings = db.getSettings(userId) || {};
+  const b1 = settings.buy_amt_1 || 0.1;
+  const b2 = settings.buy_amt_2 || 0.5;
+  const b3 = settings.buy_amt_3 || 1.0;
+  db.setSysConfig(`pending_ca_${userId}`, ca);
+  db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
+  const tInfo = await getTokenInfo(ca);
+  const safety = await getTokenSafety(ca);
+  if (safety && tInfo.holders) safety.holders = tInfo.holders;
+  const dexUrl = `https://dexscreener.com/solana/${ca}`;
+  const tName = tInfo.name
+    ? `<a href="${dexUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
+    : `<a href="${dexUrl}"><b>${ca.slice(0, 8)}...</b></a>`;
+  const _chP = [];
+  const _fmtC = (v) => (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
+  if (tInfo.change5m !== undefined && tInfo.change5m !== 0) _chP.push("5m " + _fmtC(tInfo.change5m));
+  if (tInfo.change1h !== undefined && tInfo.change1h !== 0) _chP.push("1h " + _fmtC(tInfo.change1h));
+  if (tInfo.change24h !== undefined) _chP.push("24h " + _fmtC(tInfo.change24h));
+  const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
+  let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
+  if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
+  const statBits = [];
+  if (tInfo.mcap) statBits.push(`MC ${formatNum(tInfo.mcap)}`);
+  if (tInfo.liquidity) statBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
+  if (tInfo.volume24h) statBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
+  if (statBits.length) infoLines += `📊 ${statBits.join(" · ")}\n`;
+  if (tInfo.holders) infoLines += `👥 ${tInfo.holders.toLocaleString()} holders\n`;
+  const ageStr = formatAge(tInfo.pairCreatedAt);
+  if (ageStr) {
+    const isNew = (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
+    infoLines += `🕐 Age: ${ageStr}${isNew ? " 🆕" : ""}`;
+    if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  🟢 ${tInfo.buys24h} / 🔴 ${tInfo.sells24h}`;
+    infoLines += `\n`;
+    if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
+  }
+  if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
+  const sc = formatSafetyCard(safety);
+  if (sc.l1 || sc.l2) {
+    infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n`;
+    if (sc.l1) infoLines += `${sc.l1}\n`;
+    if (sc.l2) infoLines += `${sc.l2}\n`;
+    if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
+  }
+  infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${ca}</code>\n\nSelect amount to buy:`;
+  const kb = { inline_keyboard: [
+    [
+      { text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` },
+      { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
+      { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
+      { text: "✏️ Custom", callback_data: "buy_ca_custom" },
+    ],
+    [
+      { text: "📉 DCA", callback_data: "scanner_dca" },
+      { text: "📍 Limit Order", callback_data: "scanner_limit" },
+    ],
+    [
+      { text: "← Back", callback_data: "menu_main" },
+      { text: "🔄 Refresh", callback_data: "trade_refresh_ca" },
+    ],
+  ]};
+  await ctx.reply(infoLines, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb });
+}
+
 async function showWatchlistScreen(ctx, userId) {
   const items = db.getWatchlist(userId);
   const alerts = db.getPriceAlerts(userId);
@@ -1001,8 +1067,9 @@ async function showWatchlistScreen(ctx, userId) {
     { text: "🔄 Refresh", callback_data: "menu_watchlist" },
   ]);
 
-  const curMsgId = ctx.callbackQuery?.message?.message_id;
-  if (curMsgId) db.setSysConfig("wl_msg_" + userId, String(curMsgId));
+  // Use callbackQuery msg if present, else fall back to stored watchlist msg (text-input case like adding a token)
+  const curMsgId = ctx.callbackQuery?.message?.message_id || parseInt(db.getSysConfig("wl_msg_" + userId) || "0");
+  if (ctx.callbackQuery?.message?.message_id) db.setSysConfig("wl_msg_" + userId, String(ctx.callbackQuery.message.message_id));
   const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
   try {
     if (curMsgId && chatId) {
@@ -1019,6 +1086,7 @@ async function showWatchlistScreen(ctx, userId) {
 }
 
 module.exports = {
+  showTokenScanner,
   LAUNCHPAD_INFO,
   showWatchlistScreen,
   handlePnlCard,

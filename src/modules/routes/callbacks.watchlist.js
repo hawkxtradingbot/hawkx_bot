@@ -1,5 +1,5 @@
 const db = require("../../../database");
-const { safeEdit, showWatchlistScreen } = require("./helpers.routes");
+const { safeEdit, showWatchlistScreen, showTokenScanner } = require("./helpers.routes");
 
 async function showAlertMgmtScreen(ctx, userId, wlId) {
   const item = db.getWatchlist(userId).find(w => w.id === wlId);
@@ -71,14 +71,16 @@ async function handleWatchlistCallbacks(ctx, data, userId, user, bot, ks) {
       if (!item) { await ctx.answerCallbackQuery("Not found."); return true; }
       await ctx.answerCallbackQuery();
       const name = item.token_name || item.token_ca.slice(0,8);
-      const m = await ctx.reply("🗑 *Remove " + name + " from watchlist?*\n\nThis also removes its alerts.", {
-        parse_mode: "Markdown",
-        reply_markup: { inline_keyboard: [[
-          { text: "✅ Yes, Remove", callback_data: "wl_remove_confirm_" + id },
-          { text: "← Cancel", callback_data: "wl_cancel_remove" },
-        ]]}
-      });
-      db.setSysConfig("wl_confirm_msg_" + userId, String(m.message_id));
+      // Edit the watchlist message itself into a confirm prompt (in place)
+      try {
+        await ctx.editMessageText("🗑 *Remove " + name + " from watchlist?*\n\nThis also removes its alerts.", {
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: [[
+            { text: "✅ Yes, Remove", callback_data: "wl_remove_confirm_" + id },
+            { text: "← Cancel", callback_data: "menu_watchlist" },
+          ]]}
+        });
+      } catch {}
       return true;
     }
 
@@ -92,7 +94,7 @@ async function handleWatchlistCallbacks(ctx, data, userId, user, bot, ks) {
         db.removeFromWatchlist(userId, id);
       }
       await ctx.answerCallbackQuery("🗑 Removed.");
-      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id); } catch {}
+      // The confirm prompt IS the watchlist message — refresh it in place
       return showWatchlistScreen(ctx, userId);
     }
 
@@ -107,34 +109,7 @@ async function handleWatchlistCallbacks(ctx, data, userId, user, bot, ks) {
       const item = db.getWatchlist(userId).find(w => w.id === id);
       if (!item) { await ctx.answerCallbackQuery("Not found."); return true; }
       await ctx.answerCallbackQuery();
-      const { getTokenInfo, formatPrice, formatNum } = require("../tokenInfo");
-      let tInfo = {};
-      try { tInfo = await getTokenInfo(item.token_ca); } catch {}
-      const settings = db.getSettings(userId) || {};
-      const b1 = settings.buy_amt_1 || 0.1;
-      const b2 = settings.buy_amt_2 || 0.5;
-      const b3 = settings.buy_amt_3 || 1.0;
-      db.setSysConfig("pending_ca_" + userId, item.token_ca);
-      db.setSysConfig("pending_ca_time_" + userId, String(Date.now()));
-      const dexUrl = "https://dexscreener.com/solana/" + item.token_ca;
-      const tName = tInfo.name ? tInfo.name : item.token_ca.slice(0, 8);
-      let infoLines = "🔍 <a href=\"" + dexUrl + "\"><b>" + tName + "</b></a>\n\n<code>" + item.token_ca + "</code>\n\n";
-      if (tInfo.price) infoLines += "💲 Price: " + formatPrice(tInfo.price) + "\n";
-      if (tInfo.mcap) infoLines += "📊 MCap: " + formatNum(tInfo.mcap) + "\n";
-      if (tInfo.liquidity) infoLines += "💧 Liq: " + formatNum(tInfo.liquidity) + "\n";
-      infoLines += "\nSelect amount to buy:";
-      await ctx.reply(infoLines, {
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: [
-          [
-            { text: "🟢 " + b1 + " SOL", callback_data: "buy_ca_amt_" + b1 },
-            { text: "🟢 " + b2 + " SOL", callback_data: "buy_ca_amt_" + b2 },
-            { text: "🟢 " + b3 + " SOL", callback_data: "buy_ca_amt_" + b3 },
-          ],
-          [{ text: "✏️ Custom", callback_data: "buy_ca_custom" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
-          [{ text: "✖ Cancel", callback_data: "trade_cancel" }],
-        ]},
-      });
+      await showTokenScanner(ctx, user, item.token_ca);
       return true;
     }
 
