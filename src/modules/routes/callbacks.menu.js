@@ -18,11 +18,11 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const todayStats = db.getTodayStats(userId, db.getUser(userId).active_wallet_id);
       const mode = getModeLabel(freshUser);
       const rank = freshUser.rank || 1;
-      const rankNames = ["","Degen","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite"];
+      const rankNames = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
       const fees = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
       const menuMsg = 
         `🦅 *HawkX* [DEVNET] — ${mode} Mode\n\n` +
-        `🏅 Rank: *${rankNames[rank]||"Degen"}* (${rank}/7)\n` +
+        `🏅 Rank: *${rankNames[rank]||"Scout"}* (${rank}/7)\n` +
         `💸 Fee: *${fees[rank]||1.00}%*\n\n` +
         `${getGuide(freshUser.mode === "pro" ? "main_pro" : "main_beginner")}`;
       return safeEdit(ctx, menuMsg, buildMainMenu(freshUser, todayStats, ks));
@@ -92,7 +92,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const barLen = 16;
       const filled = Math.round((rankPct / 100) * barLen);
       const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
-      const nextRankNames = ["","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite","MAX"];
+      const nextRankNames = ["","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite","MAX"];
       let msg = `📊 *Your Trading Stats*\n\n`;
       msg += `🏅 *${rank.name}* (${freshUser.rank}/7) — Fee: *${rank.fee.toFixed(2)}%*\n`;
       msg += `━━━━━━━━━━━━━━━━━━━\n\n`;

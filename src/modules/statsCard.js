@@ -81,7 +81,7 @@ function generateChartSVG(width, height, isProfit) {
 async function generateTradeCard(opts) {
   const {
     username = 'Trader',
-    rankName = 'Degen',
+    rankName = 'Scout',
     rankNum = 1,
     tokenName = 'TOKEN',
     sellPct = 100,
@@ -207,7 +207,7 @@ async function generateTradeCard(opts) {
 
 async function generateStatsCard(opts) {
   const {
-    username = 'Trader', rankName = 'Degen', rankNum = 1,
+    username = 'Trader', rankName = 'Scout', rankNum = 1,
     period = 'today', pnlSol = 0, pnlUsd = 0, trades = 0,
     winRate = 0, volume = 0, weekPnl = 0, monthPnl = 0,
     nextRankSol = 0, rankProgress = 0,
@@ -297,7 +297,7 @@ async function generateStatsCard(opts) {
 
 async function generateRankCard(opts) {
   const {
-    username = 'Trader', rankName = 'Degen', rankNum = 1,
+    username = 'Trader', rankName = 'Scout', rankNum = 1,
     volume = 0, nextRankSol = 0, rankProgress = 0,
     fee = 1.00, totalTrades = 0, winRate = 0,
   } = opts;

@@ -6,17 +6,17 @@ const { InlineKeyboard } = require("grammy");
 const config = require("../../config");
 
 const RANKS = {
-  1: { name: "Degen",      fee: 1.00, nextSol: 0.1  },
-  2: { name: "Flipper",    fee: 0.85, nextSol: 0.5  },
-  3: { name: "Trader",     fee: 0.80, nextSol: 1    },
-  4: { name: "Sniper",     fee: 0.75, nextSol: 2    },
-  5: { name: "Whale",      fee: 0.70, nextSol: 5    },
-  6: { name: "Shark",      fee: 0.60, nextSol: 10   },
+  1: { name: "Scout",      fee: 1.00, nextSol: 0.1  },
+  2: { name: "Tracker",    fee: 0.85, nextSol: 0.5  },
+  3: { name: "Hunter",     fee: 0.80, nextSol: 1    },
+  4: { name: "Predator",   fee: 0.75, nextSol: 2    },
+  5: { name: "Apex",       fee: 0.70, nextSol: 5    },
+  6: { name: "Hawk",       fee: 0.60, nextSol: 10   },
   7: { name: "Hawk Elite", fee: 0.50, nextSol: null },
 };
 
 function getFeeDisplay(user) {
-  if (!user) return "🦅 1.00% — Degen RANK";
+  if (!user) return "🦅 1.00% — Scout RANK";
   const r = RANKS[user.rank] || RANKS[1];
   return `🦅 ${r.fee.toFixed(2)}% — ${r.name} RANK`;
 }

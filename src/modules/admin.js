@@ -182,7 +182,7 @@ async function handleAdminCallback(ctx, action) {
       const count   = db.getDirectReferralCount(u.user_id);
       const earned  = db.getTotalEarnings(u.user_id);
       const pending = db.getPendingEarnings(u.user_id);
-      const rankName = config.RANK_NAMES?.[u.rank] || "Degen";
+      const rankName = config.RANK_NAMES?.[u.rank] || "Scout";
       csv += `────────────────────\n`;
       csv += `User: ${u.username||"Unknown"} (ID: ${u.user_id})\n`;
       csv += `Rank: ${rankName} | Volume: ${(u.cumulative_volume_sol||0).toFixed(4)} SOL\n`;
@@ -218,7 +218,7 @@ async function handleAdminCallback(ctx, action) {
     const users = db.getAllUsers();
     const lines = users.slice(0, 20).map((u, i) => {
       const name     = u.username || "Unknown";
-      const rankName = config.RANK_NAMES?.[u.rank] || "Degen";
+      const rankName = config.RANK_NAMES?.[u.rank] || "Scout";
       const vol      = (u.cumulative_volume_sol || 0).toFixed(2);
       const promo    = u.promoter_status ? "👑" : "";
       return `${i+1}. ${promo}${name}\n   ID: ${u.user_id} | ${rankName} | ${vol} SOL`;

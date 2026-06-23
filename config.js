@@ -63,12 +63,12 @@ const config = Object.freeze({
 
   // ── RANK NAMES — #02 Option A ──
   RANK_NAMES: {
-    1: "Degen",
-    2: "Flipper",
-    3: "Trader",
-    4: "Sniper",
-    5: "Whale",
-    6: "Shark",
+    1: "Scout",
+    2: "Tracker",
+    3: "Hunter",
+    4: "Predator",
+    5: "Apex",
+    6: "Hawk",
     7: "Hawk Elite",
   },
 

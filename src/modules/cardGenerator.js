@@ -4,7 +4,7 @@ const path = require("path");
 const SOL_PRICE  = 150;
 const CARDS_DIR  = path.join(__dirname, "../assets/cards");
 
-const RANK_NAMES = ["","Degen","Flipper","Trader","Sniper","Whale","Shark","Hawk Elite"];
+const RANK_NAMES = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
 const RANK_EMOJI = ["","🎲","🔄","📊","🎯","🐋","🦈","👑"];
 
 const PROFIT_EXPR = ["",
@@ -114,7 +114,7 @@ async function generatePnlCard(opts) {
   const sign      = isProfit ? "+" : "";
   const arrow     = isProfit ? "📈" : "📉";
   const pnlUsd    = Math.abs(pnlSol * SOL_PRICE);
-  const rankName  = RANK_NAMES[rankNum] || "Degen";
+  const rankName  = RANK_NAMES[rankNum] || "Scout";
   const rankEmoji = RANK_EMOJI[rankNum] || "🎲";
 
   const solLine = hideAmounts ? `${sign}**** SOL` : `${sign}${Math.abs(pnlSol).toFixed(4)} SOL`;

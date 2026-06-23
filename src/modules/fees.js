@@ -10,7 +10,7 @@ async function collectFee(userId, tradeId, solAmount) {
   // Pure rank-based fee — no trial
   const feeRate  = getFeeRate(user);
   const feeSol   = solAmount * feeRate;
-  const rankName = config.RANK_NAMES[user.rank] || "Degen";
+  const rankName = config.RANK_NAMES[user.rank] || "Scout";
 
   console.log(
     `[Fee] User ${userId} | ${rankName} | ` +
