@@ -366,47 +366,41 @@ async function buildReferralScreen(ctx, userId, showWallets) {
     msg += `\n\n🎁 *10% fee discount* active! Fee: *0.90%* instead of 1.00%.`;
   }
 
-  let keyboard;
+  const claimable = pending2?.total || 0;
+  const rows = [];
+  // Claim — always shown (handler checks 0.01 min)
+  rows.push([{ text: `💰 Claim ${claimable.toFixed(4)} SOL`, callback_data: "referral_claim" }]);
+
   if (showWallets) {
-    const walletRows = [];
+    // EXPANDED: payout wallet selector inline (other buttons stay)
+    rows.push([{ text: "💳 Payout Wallet ▲ (tap to close)", callback_data: "referral_payout_close" }]);
     for (let i = 0; i < wallets.length; i += 3) {
-      walletRows.push(
+      rows.push(
         wallets.slice(i, i + 3).map((w, idx) => {
           const num = i + idx + 1;
           const isActive = w.public_key === payoutAddress;
+          const l = (w.label && !w.label.match(/^W\d+$/)) ? ` ${w.label}` : "";
           return {
-            text: (() => { const l=(w.label&&!w.label.match(/^W\d+$/))?` ${w.label}`:""; return isActive?`W${num}${l} ✅`.slice(0,20):`W${num}${l}`.slice(0,20); })(),
+            text: isActive ? `W${num}${l} ✅`.slice(0,20) : `W${num}${l}`.slice(0,20),
             callback_data: `payout_wallet_select_${w.wallet_id}`,
           };
-        }),
+        })
       );
     }
-    keyboard = {
-      inline_keyboard: [
-        ...walletRows,
-        [{ text: "✏️ Custom Address", callback_data: "payout_wallet_custom" }],
-        [
-          { text: "← Back", callback_data: "menu_main" },
-          { text: "🔄 Refresh", callback_data: "referral_set_payout" },
-        ],
-      ],
-    };
+    rows.push([{ text: "✏️ Paste Custom Address", callback_data: "payout_wallet_custom" }]);
   } else {
-    const claimable = pending2?.total || 0;
-    const rows = [];
-    // Claim button — always shown; handler checks the 0.01 minimum
-    rows.push([{ text: `💰 Claim ${claimable.toFixed(4)} SOL`, callback_data: "referral_claim" }]);
-    // Enter Code + Set Payout side by side
+    // COLLAPSED: Enter Code + Payout Wallet (expand)
     rows.push([
       { text: "🎟 Enter Code", callback_data: "referral_enter_code" },
-      { text: "💳 Payout Wallet", callback_data: "referral_set_payout" },
+      { text: "💳 Payout Wallet ▼", callback_data: "referral_set_payout" },
     ]);
-    rows.push([
-      { text: "← Back", callback_data: "menu_main" },
-      { text: "🔄 Refresh", callback_data: "menu_referrals" },
-    ]);
-    keyboard = { inline_keyboard: rows };
   }
+
+  rows.push([
+    { text: "← Back", callback_data: "menu_main" },
+    { text: "🔄 Refresh", callback_data: showWallets ? "referral_set_payout" : "menu_referrals" },
+  ]);
+  const keyboard = { inline_keyboard: rows };
 
   try {
     await ctx.editMessageText(msg, {

@@ -81,6 +81,11 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
       return buildReferralScreen(ctx, userId, true);
     }
 
+    if (data === "referral_payout_close") {
+      await ctx.answerCallbackQuery();
+      return buildReferralScreen(ctx, userId, false);
+    }
+
     if (data.startsWith("payout_wallet_select_")) {
       const walletId = parseInt(data.replace("payout_wallet_select_", ""));
       const wallet = db.getWallet(walletId);
