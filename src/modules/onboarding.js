@@ -13,9 +13,14 @@ async function handleStart(ctx, bot) {
   const startParam = ctx.match || "";
   let referrerId   = null;
   if (startParam.startsWith("REF_")) {
+    // Old format: REF_userId_username (backward compatible)
     const parts = startParam.replace("REF_", "").split("_");
     const refId = parseInt(parts[0]);
     if (!isNaN(refId) && refId !== userId) referrerId = refId;
+  } else if (startParam) {
+    // New format: a referral code (auto HAWKxxxxx or custom)
+    const refUser = db.getUserByReferralCode(startParam);
+    if (refUser && refUser.user_id !== userId) referrerId = refUser.user_id;
   }
 
   let user    = db.getUser(userId);
@@ -29,6 +34,7 @@ async function handleStart(ctx, bot) {
       referrerId: referrerId || null,
     });
     user = db.getUser(userId);
+    db.ensureReferralCode(userId);
     try { await addWallet(ctx, user, "generate"); } catch {}
     if (referrerId) {
       db.buildReferralChain(userId, referrerId);
@@ -43,7 +49,8 @@ async function handleStart(ctx, bot) {
   const hasDiscount  = freshUser.joiner_discount && freshUser.rank === 1;
   const effectiveFee = hasDiscount ? (rank.fee * 0.9).toFixed(2) : rank.fee.toFixed(2);
   const botUsername  = ctx.me?.username || "HawkXBot";
-  const refLink      = `https://t.me/${botUsername}?start=REF_${userId}_${freshUser.username || "user"}`;
+  const myCode       = freshUser.custom_code || freshUser.referral_code || db.ensureReferralCode(userId);
+  const refLink      = `https://t.me/${botUsername}?start=${myCode}`;
 
   const welcomeMsg =
     `🦅 Welcome to HawkX [DEVNET]\n` +

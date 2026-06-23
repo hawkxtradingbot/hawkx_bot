@@ -336,7 +336,8 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   const dirCount = db.getDirectReferralCount(userId);
   const isPromoter = freshUser.promoter_status === 1;
   const botName = "hawkx_devnet_fazle_bot";
-  const refLink = `https://t.me/${botName}?start=REF_${userId}_${freshUser.username || "user"}`;
+  const myCode = freshUser.custom_code || freshUser.referral_code || db.ensureReferralCode(userId);
+  const refLink = `https://t.me/${botName}?start=${myCode}`;
   const wallets = db.getWallets(userId) || [];
 
   let payoutAddress = db.getSysConfig(`payout_wallet_${userId}`);
@@ -357,7 +358,8 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   msg += `💎 Total earned: *${(total?.total || 0).toFixed(6)} SOL*\n`;
   msg += `✅ Claimed: *${(paid?.total || 0).toFixed(6)} SOL*\n`;
   msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n\n`;
-  msg += `🔗 *Your Referral Link:*\n\`${refLink}\`\n\n`;
+  msg += `🎟 *Your Code:* \`${myCode}\`\n`;
+  msg += `🔗 *Your Link:*\n\`${refLink}\`\n\n`;
   msg += `💳 *Payout Wallet:* ${payoutLabel} ✅\n`;
   msg += `\`${payoutAddress || "Not set"}\`\n\n`;
   msg += `_Tap 💰 Claim to withdraw earnings (min 0.01 SOL) to your payout wallet._`;
@@ -394,6 +396,7 @@ async function buildReferralScreen(ctx, userId, showWallets) {
       { text: "🎟 Enter Code", callback_data: "referral_enter_code" },
       { text: "💳 Payout Wallet ▼", callback_data: "referral_set_payout" },
     ]);
+    rows.push([{ text: "✏️ Customize My Code", callback_data: "referral_customize_code" }]);
   }
 
   rows.push([

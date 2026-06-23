@@ -656,6 +656,44 @@ function getPaidEarnings(userId) {
   return getDb().prepare("SELECT SUM(earned_sol) as total FROM referral_earnings WHERE user_id = ? AND paid = 1").get(userId);
 }
 
+// Get user by ANY referral code (auto referral_code OR custom_code), case-insensitive
+function getUserByReferralCode(code) {
+  const clean = String(code || "").trim().toUpperCase();
+  if (!clean) return null;
+  return getDb().prepare("SELECT * FROM users WHERE UPPER(referral_code) = ? OR UPPER(custom_code) = ? LIMIT 1").get(clean, clean);
+}
+
+// Ensure a user has an auto referral_code (generate if missing)
+function ensureReferralCode(userId) {
+  const u = getDb().prepare("SELECT referral_code FROM users WHERE user_id = ?").get(userId);
+  if (u && u.referral_code) return u.referral_code;
+  const crypto = require("crypto");
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let t = 0; t < 20; t++) {
+    let c = "HAWK";
+    for (let i = 0; i < 5; i++) c += chars[crypto.randomInt(chars.length)];
+    if (!getDb().prepare("SELECT 1 FROM users WHERE referral_code = ?").get(c)) {
+      getDb().prepare("UPDATE users SET referral_code = ? WHERE user_id = ?").run(c, userId);
+      return c;
+    }
+  }
+  return null;
+}
+
+// Set a custom code (returns {ok, reason}). Validates length, charset, uniqueness, reserved words.
+function setCustomCode(userId, rawCode) {
+  const code = String(rawCode || "").trim().toUpperCase();
+  if (code.length < 3 || code.length > 15) return { ok: false, reason: "Code must be 3-15 characters." };
+  if (!/^[A-Z0-9]+$/.test(code)) return { ok: false, reason: "Only letters and numbers allowed (no spaces or symbols)." };
+  const reserved = ["HAWKX","ADMIN","OFFICIAL","SUPPORT","HAWK","MOD","TEAM","BOT"];
+  if (reserved.includes(code)) return { ok: false, reason: "That code is reserved. Pick another." };
+  // Uniqueness — not used by anyone else (auto or custom)
+  const taken = getDb().prepare("SELECT user_id FROM users WHERE (UPPER(referral_code) = ? OR UPPER(custom_code) = ?) AND user_id != ?").get(code, code, userId);
+  if (taken) return { ok: false, reason: "That code is already taken. Try another." };
+  getDb().prepare("UPDATE users SET custom_code = ? WHERE user_id = ?").run(code, userId);
+  return { ok: true, code };
+}
+
 function getUserByUsername(username) {
   const clean = String(username || "").replace(/^@/, "").trim();
   if (!clean) return null;
@@ -1142,7 +1180,7 @@ module.exports = {
   closePosition, getAllOpenPositions, setPositionNote, getPosition,
   buildReferralChain, getReferralChain, addReferralEarning,
   getPendingEarnings, getTotalEarnings, getPaidEarnings,
-  getDirectReferralCount, getUserByUsername, markEarningsPaid, claimEarnings, getAllPendingPayouts, checkReferralMilestone,
+  getDirectReferralCount, getUserByUsername, getUserByReferralCode, ensureReferralCode, setCustomCode, markEarningsPaid, claimEarnings, getAllPendingPayouts, checkReferralMilestone,
   getWatchlist, addToWatchlist, removeFromWatchlist,
   getCopyWallets, addCopyWallet, deleteCopyWallet, toggleCopyWallet, updateCopyWallet,
   getCopyChannels, addCopyChannel, deleteCopyChannel, updateCopyChannel,

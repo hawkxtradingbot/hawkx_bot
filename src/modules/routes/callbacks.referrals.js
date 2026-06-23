@@ -86,6 +86,25 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
       return buildReferralScreen(ctx, userId, false);
     }
 
+    if (data === "referral_customize_code") {
+      await ctx.answerCallbackQuery();
+      const u = db.getUser(userId);
+      const cur = u.custom_code || u.referral_code || db.ensureReferralCode(userId);
+      const m = await ctx.reply(
+        "✏️ *Set Your Referral Code*\n\n" +
+        "Current: `" + cur + "`\n\n" +
+        "Enter a custom code:\n" +
+        "• 3-15 characters\n" +
+        "• Letters & numbers only\n" +
+        "• Example: FAZLE, MOON, APEX99\n\n" +
+        "Your old auto-code keeps working too, so existing links won't break.",
+        { parse_mode: "Markdown" }
+      );
+      db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
+      db.setSysConfig(`pending_${userId}`, "referral_customize_code");
+      return true;
+    }
+
     if (data.startsWith("payout_wallet_select_")) {
       const walletId = parseInt(data.replace("payout_wallet_select_", ""));
       const wallet = db.getWallet(walletId);

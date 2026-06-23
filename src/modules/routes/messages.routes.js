@@ -1521,11 +1521,27 @@ const t = text.trim().toLowerCase();
       db.setSysConfig(`pending_${userId}`, "");
       const me = db.getUser(userId);
       if (me.referrer_id) { await ctx.reply("✅ You already have a referrer — it can't be changed."); return; }
-      const refUser = db.getUserByUsername(text);
-      if (!refUser) { await ctx.reply("❌ User not found. Check the username and try again."); return; }
+      // Accept a referral CODE (HAWKxxxxx or custom) OR a @username
+      let refUser = db.getUserByReferralCode(text);
+      if (!refUser) refUser = db.getUserByUsername(text);
+      if (!refUser) { await ctx.reply("❌ Code or user not found. Check it and try again."); return; }
       if (refUser.user_id === userId) { await ctx.reply("❌ You can't refer yourself."); return; }
       db.updateUser(userId, { referrer_id: refUser.user_id });
-      await ctx.reply(`✅ *Referral code accepted!*\n\nYou were referred by *@${refUser.username || "user"}*. They'll now earn from your trades.`, { parse_mode: "Markdown" });
+      db.buildReferralChain(userId, refUser.user_id);
+      await ctx.reply(`✅ *Referral accepted!*\n\nYou were referred by *@${refUser.username || "a HawkX user"}*. They'll now earn from your trades.`, { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (pending === "referral_customize_code") {
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      db.setSysConfig(`pending_${userId}`, "");
+      const result = db.setCustomCode(userId, text);
+      if (!result.ok) {
+        await ctx.reply(`❌ ${result.reason}\n\nTap ✏️ Customize My Code to try again.`);
+        return;
+      }
+      await ctx.reply(`✅ <b>Your code is now</b> <code>${result.code}</code>\n\nShare this link:\n<code>https://t.me/hawkx_devnet_fazle_bot?start=${result.code}</code>`, { parse_mode: "HTML", disable_web_page_preview: true });
       return;
     }
 
