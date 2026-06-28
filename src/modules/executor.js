@@ -177,6 +177,15 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     } catch {}
   }
   
+  // Update mock wallet balance (devnet) — deduct SOL spent
+  try {
+    const buyWallet = db.getWallet(user.active_wallet_id);
+    if (buyWallet) {
+      const curBal = parseFloat(db.getSysConfig(`mock_balance_${buyWallet.public_key}`) || "0");
+      db.setSysConfig(`mock_balance_${buyWallet.public_key}`, String(curBal - solAmount));
+    }
+  } catch {}
+
   const tradeId = db.recordTrade({
     userId: user.user_id, walletId: user.active_wallet_id,
     tokenCa: ca, tokenName, platform: "devnet_mock",
@@ -273,6 +282,16 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   const feeRate       = getEffectiveFeeRate(user);
   const feeSol        = solReceived * feeRate;
   const txHash        = `DEVNET_SELL_${Date.now()}`;
+
+  // Update mock wallet balance (devnet) — credit proceeds minus fee
+  try {
+    const sellWalletId = user.active_wallet_id || position.wallet_id;
+    const sellWallet = db.getWallet(sellWalletId);
+    if (sellWallet) {
+      const curBal = parseFloat(db.getSysConfig(`mock_balance_${sellWallet.public_key}`) || "0");
+      db.setSysConfig(`mock_balance_${sellWallet.public_key}`, String(curBal + (solReceived - feeSol)));
+    }
+  } catch {}
 
   const tradeId = db.recordTrade({
     userId: user.user_id, walletId: user.active_wallet_id || position.wallet_id,

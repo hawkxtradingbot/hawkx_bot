@@ -80,10 +80,13 @@ function formatNum(n) {
 
 function formatPrice(p) {
   if (!p || p === 0) return "—";
-  if (p < 0.000001) return `$${p.toFixed(12)}`;
-  if (p < 0.001)    return `$${p.toFixed(8)}`;
-  if (p < 1)        return `$${p.toFixed(6)}`;
-  return `$${p.toFixed(4)}`;
+  let s;
+  if (p < 0.000001) s = p.toFixed(12);
+  else if (p < 0.001) s = p.toFixed(8);
+  else if (p < 1) s = p.toFixed(6);
+  else s = p.toFixed(4);
+  if (s.includes(".")) s = s.replace(/0+$/, "").replace(/\.$/, "");
+  return `${s}`;
 }
 
 // Token safety checks — mint/freeze authority, top holder, LP
@@ -138,8 +141,10 @@ function formatAge(createdMs) {
   const mins = Math.floor(diff / 60000);
   const hrs  = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
+  const months = Math.floor(days / 30);
   const yrs  = Math.floor(days / 365);
-  if (yrs >= 1) return `${yrs}y ${days % 365}d`;
+  if (yrs >= 1) return `${yrs}y ${Math.floor((days % 365) / 30)}mo`;
+  if (months >= 1) return `${months}mo ${days % 30}d`;
   if (days >= 1) return `${days}d ${hrs % 24}h`;
   if (hrs >= 1) return `${hrs}h ${mins % 60}m`;
   return `${mins}m`;
@@ -150,8 +155,10 @@ function formatSafetyCard(safety) {
   const mark = (v) => v === true ? "✅" : v === false ? "🔴" : null;
   const bits1 = [];
   // Only include checks we could actually verify (not null)
-  if (mark(safety.mintRevoked)) bits1.push(`${mark(safety.mintRevoked)} Mint`);
-  if (mark(safety.freezeRevoked)) bits1.push(`${mark(safety.freezeRevoked)} Freeze`);
+  if (safety.mintRevoked === true) bits1.push("✅ Mint Revoked");
+  else if (safety.mintRevoked === false) bits1.push("🔴 Mint Active");
+  if (safety.freezeRevoked === true) bits1.push("✅ Freeze Revoked");
+  else if (safety.freezeRevoked === false) bits1.push("🔴 Freeze Active");
   if (mark(safety.lpLocked)) bits1.push(`${mark(safety.lpLocked)} LP locked`);
   const bits2 = [];
   if (safety.topHolderPct !== null && safety.topHolderPct !== undefined) {

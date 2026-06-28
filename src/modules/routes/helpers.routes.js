@@ -967,11 +967,11 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
     : `<a href="${dexUrl}"><b>${ca.slice(0, 8)}...</b></a>`;
   const _chP = [];
   const _fmtC = (v) => (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
-  if (tInfo.change5m !== undefined && tInfo.change5m !== 0) _chP.push("5m " + _fmtC(tInfo.change5m));
-  if (tInfo.change1h !== undefined && tInfo.change1h !== 0) _chP.push("1h " + _fmtC(tInfo.change1h));
-  if (tInfo.change24h !== undefined) _chP.push("24h " + _fmtC(tInfo.change24h));
+  if (tInfo.change5m !== undefined && tInfo.change5m !== null) _chP.push("5m " + _fmtC(tInfo.change5m));
+  if (tInfo.change1h !== undefined && tInfo.change1h !== null) _chP.push("1h " + _fmtC(tInfo.change1h));
+  if (tInfo.change24h !== undefined && tInfo.change24h !== null) _chP.push("24h " + _fmtC(tInfo.change24h));
   const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
-  let infoLines = `🦅 ${tName}\n━━━━━━━━━━━━━━━\n`;
+  let infoLines = `${tName}\n📋 <code>${ca}</code>\n━━━━━━━━━━━━━━━\n`;
   if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
   const statBits = [];
   if (tInfo.mcap) statBits.push(`MC ${formatNum(tInfo.mcap)}`);
@@ -983,7 +983,7 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   if (ageStr) {
     const isNew = (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
     infoLines += `🕐 Age: ${ageStr}${isNew ? " 🆕" : ""}`;
-    if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  🟢 ${tInfo.buys24h} / 🔴 ${tInfo.sells24h}`;
+    if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  Buys: ${tInfo.buys24h}  Sells: ${tInfo.sells24h}`;
     infoLines += `\n`;
     if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
   }
@@ -995,7 +995,13 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
     if (sc.l2) infoLines += `${sc.l2}\n`;
     if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
   }
-  infoLines += `━━━━━━━━━━━━━━━\n📋 <code>${ca}</code>\n\nSelect amount to buy:`;
+  const activeWallet = db.getWallet(user.active_wallet_id) || null;
+  const walletBal = activeWallet ? (await db.getWalletBalance(activeWallet.public_key)) || 0 : 0;
+  if (activeWallet) {
+    const label = activeWallet.label && !activeWallet.label.match(/^W\d+$/) ? activeWallet.label : "Wallet";
+    infoLines += `━━━━━━━━━━━━━━━\n👛 ${label} · ${walletBal.toFixed(4)} SOL\n`;
+  }
+  infoLines += `\nSelect amount to buy:`;
   const kb = { inline_keyboard: [
     [
       { text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` },
