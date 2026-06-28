@@ -171,12 +171,16 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       : "—";
     const usd = (sol) => "$" + (sol * 150).toFixed(2);
 
-    const mcE = eMc !== "—" ? ` · MC <b>${eMc}</b>` : "";
-    const mcN = cMc !== "—" ? ` · MC <b>${cMc}</b>` : "";
+    const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
+    const mcN = cMc !== "—" ? ` · <b>MC</b> ${cMc}` : "";
     msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}${autoIcons}\n`;
-    msg += `📊 Entry <b>${fmtP(entryPrice)}</b>${mcE} · 💰 Bought <b>${bSol.toFixed(3)} SOL</b> (${usd(bSol)}) · ${bCount} times\n`;
-    msg += `📈 Now <b>${fmtP(curPrice)}</b>${mcN} · 📤 Sold <b>${sSol.toFixed(3)} SOL</b> (${usd(sSol)}) · ${sCount} times\n`;
-    msg += `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> · PnL <b>${formatPnl(pnlPct)} ${formatSol(pnlSol)} SOL</b> (${usd(pnlSol)})\n`;
+    msg += `📋 <code>${pos.token_ca}</code>\n`;
+    msg += `📊 <b>Entry</b>${mcE} · <b>PR</b> ${fmtP(entryPrice)}\n`;
+    msg += `💰 <b>Bought</b> ${bSol.toFixed(3)} SOL (${usd(bSol)}) · ${bCount} buys\n`;
+    msg += `📈 <b>Now</b>${mcN} · <b>PR</b> ${fmtP(curPrice)}\n`;
+    msg += `📤 <b>Sold</b> ${sSol.toFixed(3)} SOL (${usd(sSol)}) · ${sCount} sells\n`;
+    msg += `💎 <b>Hold</b> ${(pos.token_amount||0).toLocaleString()} · <b>PnL</b> ${formatPnl(pnlPct)} ${formatSol(pnlSol)} SOL (${usd(pnlSol)})\n`;
+
     msg += `━━━━━━━━━━━━━━━━━━━\n`;
   }
 
