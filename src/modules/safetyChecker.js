@@ -36,10 +36,10 @@ async function checkSafety(ca, userMode = "beginner") {
       result = { status: "BLOCK", reason: "🧊 Freeze authority active", score: 90, canOverride: userMode === "pro" };
     } else if (gpData?.mint_authority && gpData.mint_authority !== "0") {
       result = { status: "BLOCK", reason: "🖨 Mint authority active", score: 85, canOverride: userMode === "pro" };
-    } else if (rugData?.score > 70) {
-      result = { status: "BLOCK", reason: `☠️ Rug score: ${rugData.score}/100`, score: rugData.score, canOverride: userMode === "pro" };
-    } else if (rugData?.score > 40) {
-      result = { status: "WARNING", reason: `⚠️ Medium risk: ${rugData.score}/100`, score: rugData.score, canOverride: true };
+    } else if (rugData?.score_normalised > 70) {
+      result = { status: "BLOCK", reason: `☠️ Rug score: ${rugData.score_normalised}/100`, score: rugData.score_normalised, canOverride: userMode === "pro" };
+    } else if (rugData?.score_normalised > 40) {
+      result = { status: "WARNING", reason: `⚠️ Medium risk: ${rugData.score_normalised}/100`, score: rugData.score_normalised, canOverride: true };
     }
   } catch {
     result = { status: "WARNING", reason: "⚠️ Safety API unavailable", score: 0, canOverride: true };
