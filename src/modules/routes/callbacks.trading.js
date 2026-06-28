@@ -60,46 +60,8 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery("🔄 Refreshed!");
       const ca2 = db.getSysConfig(`pending_ca_${userId}`) || "";
       if (!ca2) return true;
-      const settings2 = db.getSettings(userId) || {};
-      const b1 = settings2.buy_amt_1 || 0.1;
-      const b2 = settings2.buy_amt_2 || 0.5;
-      const b3 = settings2.buy_amt_3 || 1.0;
-      const tInfo2 = await getTokenInfo(ca2);
-      const safety2 = await getTokenSafety(ca2);
-      if (safety2 && tInfo2.holders) safety2.holders = tInfo2.holders;
-      const dexUrl2 = `https://dexscreener.com/solana/${ca2}`;
-      const tName2 = tInfo2.name ? `<a href="${dexUrl2}"><b>${tInfo2.name}</b>${tInfo2.symbol ? " ("+tInfo2.symbol+")" : ""}</a>` : `<a href="${dexUrl2}"><b>${ca2.slice(0,8)}...</b></a>`;
-      const _p = []; const _f = (v) => (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%"; if (tInfo2.change5m) _p.push("5m "+_f(tInfo2.change5m)); if (tInfo2.change1h) _p.push("1h "+_f(tInfo2.change1h)); if (tInfo2.change24h !== undefined) _p.push("24h "+_f(tInfo2.change24h)); const ch24b = _p.length ? `  ${(tInfo2.change24h||0) >= 0 ? "📈" : "📉"} ${_p.join(" · ")}` : "";
-      let info2 = `🦅 ${tName2}\n━━━━━━━━━━━━━━━\n`;
-      if (tInfo2.price) info2 += `💰 ${formatPrice(tInfo2.price)}${ch24b}\n`;
-      const sb = [];
-      if (tInfo2.mcap) sb.push(`MC ${formatNum(tInfo2.mcap)}`);
-      if (tInfo2.liquidity) sb.push(`Liq ${formatNum(tInfo2.liquidity)}`);
-      if (tInfo2.volume24h) sb.push(`Vol ${formatNum(tInfo2.volume24h)}`);
-      if (sb.length) info2 += `📊 ${sb.join(" · ")}\n`;
-      if (tInfo2.holders) info2 += `👥 ${tInfo2.holders.toLocaleString()} holders\n`;
-      const ageStr2 = formatAge(tInfo2.pairCreatedAt);
-      if (ageStr2) {
-        const isNew2 = (Date.now() - tInfo2.pairCreatedAt) < 24*3600000;
-        info2 += `🕐 Age: ${ageStr2}${isNew2 ? " 🆕" : ""}`;
-        if (tInfo2.buys24h || tInfo2.sells24h) info2 += `  ·  🟢 ${tInfo2.buys24h} / 🔴 ${tInfo2.sells24h}`;
-        info2 += `\n`;
-        if (isNew2) info2 += `🆕 <i>New token — higher risk</i>\n`;
-      }
-      if (tInfo2.liquidity && tInfo2.liquidity < 10000) info2 += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
-      const sc2 = formatSafetyCard(safety2);
-      if (sc2.l1 || sc2.l2) {
-        info2 += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n`;
-        if (sc2.l1) info2 += `${sc2.l1}\n`;
-        if (sc2.l2) info2 += `${sc2.l2}\n`;
-        if (safety2.isMock) info2 += `<i>(live data at mainnet)</i>\n`;
-      }
-      info2 += `━━━━━━━━━━━━━━━\n📋 <code>${ca2}</code>\n\nSelect amount to buy:`;
-      try { await ctx.editMessageText(info2, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: { inline_keyboard: [
-        [{ text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` }, { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` }, { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` }, { text: "✏️ Custom", callback_data: "buy_ca_custom" }],
-        [{ text: "📉 DCA", callback_data: "scanner_dca" }, { text: "📍 Limit Order", callback_data: "scanner_limit" }],
-        [{ text: "← Back", callback_data: "menu_main" }, { text: "🔄 Refresh", callback_data: "trade_refresh_ca" }],
-      ]}}); } catch {}
+      const { showTokenScanner } = require("./helpers.routes");
+      await showTokenScanner(ctx, user, ca2, true);
       return true;
     }
     if (data === "trade_quickbuy") {

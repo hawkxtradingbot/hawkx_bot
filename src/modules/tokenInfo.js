@@ -34,7 +34,7 @@ async function getTokenInfo(ca) {
       data.name        = pair.baseToken?.name    || null;
       data.symbol      = pair.baseToken?.symbol  || null;
       data.price       = parseFloat(pair.priceUsd || 0);
-      data.mcap        = pair.fdv               || pair.marketCap || 0;
+      data.mcap        = pair.marketCap || pair.fdv || 0;
       data.liquidity   = pair.liquidity?.usd    || 0;
       data.volume24h   = pair.volume?.h24       || 0;
       data.change24h   = pair.priceChange?.h24  || 0;
@@ -71,10 +71,11 @@ async function getTokenInfo(ca) {
 // Format large numbers
 function formatNum(n) {
   if (!n || n === 0) return "—";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000)     return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000)         return `$${(n / 1_000).toFixed(2)}K`;
-  return `$${n.toFixed(2)}`;
+  if (n >= 1_000_000_000_000) return `${(n / 1_000_000_000_000).toFixed(2)}T`;
+  if (n >= 1_000_000_000)     return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000)         return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)             return `${(n / 1_000).toFixed(2)}K`;
+  return `${n.toFixed(2)}`;
 }
 
 function formatPrice(p) {

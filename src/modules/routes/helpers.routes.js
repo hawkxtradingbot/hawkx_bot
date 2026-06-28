@@ -1012,6 +1012,15 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
       { text: "🔄 Refresh", callback_data: "trade_refresh_ca" },
     ],
   ]};
+  if (asReply) {
+    try {
+      await ctx.editMessageText(infoLines, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb });
+      return;
+    } catch (e) {
+      if (String(e.description || e.message || "").includes("not modified")) return; // no change — fine, do nothing
+      console.log("[Scanner Refresh] edit failed:", e.message); // real failure — fall through to a fresh message
+    }
+  }
   await ctx.reply(infoLines, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb });
 }
 
