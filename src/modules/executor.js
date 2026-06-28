@@ -167,7 +167,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   } else {
     try {
       const axiosMcap = require("axios");
-      const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1500 });
+      const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
       const pairs  = dexRes.data?.pairs;
       if (pairs && pairs.length > 0) {
         entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
@@ -203,9 +203,13 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     const newSolInvested = existingPos.sol_invested + solAmount;
     const newTokenAmount = existingPos.token_amount + tokenAmount;
     const avgBuyPrice    = newSolInvested / newTokenAmount;
+    // Weighted-average entry MC too (was only ever set on the first buy)
+    const newEntryMcap = entryMcap > 0
+      ? (((existingPos.entry_mcap || 0) * existingPos.sol_invested) + (entryMcap * solAmount)) / newSolInvested
+      : (existingPos.entry_mcap || 0);
     db.getDb()
-      .prepare("UPDATE positions SET sol_invested = ?, token_amount = ?, buy_price = ? WHERE position_id = ?")
-      .run(newSolInvested, newTokenAmount, avgBuyPrice, existingPos.position_id);
+      .prepare("UPDATE positions SET sol_invested = ?, token_amount = ?, buy_price = ?, entry_mcap = ? WHERE position_id = ?")
+      .run(newSolInvested, newTokenAmount, avgBuyPrice, newEntryMcap, existingPos.position_id);
     positionId = existingPos.position_id;
   } else {
     // Get auto sell template for this position
@@ -257,8 +261,8 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   // Wait 100ms then delete confirmed message and open position screen
   try { if (processingMsg) await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id); } catch {}
 
-  // Open position screen
-  if (positionId) {
+  // Open position screen (unless caller wants to handle the UI itself, e.g. refreshing a list)
+  if (positionId && !opts.skipPositionScreen) {
     const { getTokenPosition } = require("./portfolio");
     const freshUser = db.getUser(user.user_id);
     await getTokenPosition(ctx, freshUser, positionId);
@@ -327,7 +331,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   );
   // Auto PnL card on every sell
   let exitMcap = 0;
-  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 1500 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
+  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 5000 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
   try {
     console.log("[PnL Card] Generating for user:", user.user_id);
     const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";

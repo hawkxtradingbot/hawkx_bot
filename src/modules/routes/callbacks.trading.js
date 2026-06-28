@@ -78,6 +78,15 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       const ca = db.getSysConfig(`pending_ca_${userId}`);
       if (!ca) { await ctx.answerCallbackQuery("❌ Please paste a token CA first."); return true; }
       await ctx.answerCallbackQuery();
+      const buyCtx = db.getSysConfig(`buy_ctx_${userId}`) || "";
+      if (buyCtx.startsWith("positions_")) {
+        db.setSysConfig(`buy_ctx_${userId}`, "");
+        await mockBuy(ctx, user, ca, amt, "manual", "", { skipPositionScreen: true });
+        const [, filter, page] = buyCtx.split("_");
+        const { getPortfolio } = require("../portfolio");
+        await getPortfolio(ctx, user, filter, parseInt(page) || 0);
+        return true;
+      }
       await mockBuy(ctx, user, ca, amt, "manual", "");
       return true;
     }

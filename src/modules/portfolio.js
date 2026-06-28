@@ -214,6 +214,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   if (selPos) {
     db.setSysConfig(`pending_ca_${user.user_id}`, selPos.token_ca);
     db.setSysConfig(`pending_ca_time_${user.user_id}`, String(Date.now()));
+    db.setSysConfig(`buy_ctx_${user.user_id}`, `positions_${filter}_${page}`);
 
     const b1 = settings.buy_amt_1 || 0.1;
     const b2 = settings.buy_amt_2 || 0.5;

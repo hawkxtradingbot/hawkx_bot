@@ -958,6 +958,7 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   const b3 = settings.buy_amt_3 || 1.0;
   db.setSysConfig(`pending_ca_${userId}`, ca);
   db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
+  db.setSysConfig(`buy_ctx_${userId}`, "");
   const tInfo = await getTokenInfo(ca);
   const safety = await getTokenSafety(ca);
   if (safety && tInfo.holders) safety.holders = tInfo.holders;
