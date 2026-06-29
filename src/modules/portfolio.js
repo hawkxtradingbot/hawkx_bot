@@ -99,7 +99,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     kb.text("← Back", "menu_main").row();
     const msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
     try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
-    catch { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
+    catch (e) {
+      if (!String(e.description || e.message || "").includes("not modified")) {
+        try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
+      }
+    }
     return;
   }
 
@@ -162,13 +166,9 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const curPrice = entryPrice * (1 + pnlPct / 100);
     const fmtP = (v) => v < 0.0001 ? "$" + v.toFixed(8) : "$" + v.toFixed(6);
     // MCaps
-    const eMc = pos.entry_mcap && pos.entry_mcap > 0
-      ? (pos.entry_mcap >= 1e6 ? "$" + (pos.entry_mcap/1e6).toFixed(1) + "M" : "$" + (pos.entry_mcap/1e3).toFixed(0) + "K")
-      : "—";
+    const eMc = pos.entry_mcap && pos.entry_mcap > 0 ? formatNum(pos.entry_mcap) : "—";
     const cMcVal = pos.entry_mcap > 0 ? pos.entry_mcap * (1 + pnlPct/100) : 0;
-    const cMc = cMcVal > 0
-      ? (cMcVal >= 1e6 ? "$" + (cMcVal/1e6).toFixed(1) + "M" : "$" + (cMcVal/1e3).toFixed(0) + "K")
-      : "—";
+    const cMc = cMcVal > 0 ? formatNum(cMcVal) : "—";
     const usd = (sol) => "$" + (sol * 150).toFixed(2);
 
     const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
@@ -250,7 +250,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     .row();
 
   try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
-  catch { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
+  catch (e) {
+    if (!String(e.description || e.message || "").includes("not modified")) {
+      try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
+    }
+  }
 }
 
 // ── Single token position view (shown after buy) ──────────────
@@ -359,7 +363,7 @@ async function getTokenPosition(ctx, user, positionId) {
     `📤 Sold <b>${ssSol.toFixed(3)} SOL</b> (${(ssSol*150).toFixed(2)}) · ${ssCount} times\n` +
     `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
     `📈 Current Value: <b>${currentValue.toFixed(4)} SOL</b>\n` +
-    `P&L: <b>${sign}${formatPnl(pnlPct)}</b> | ${sign}${formatSol(pnlSol)} SOL | ${pnlUsd.toFixed(2)}\n` +
+    `P&L: <b>${formatPnl(pnlPct)}</b> | ${formatSol(pnlSol)} SOL | ${pnlUsd.toFixed(2)}\n` +
     `⏱ Held: <b>${holdTime}</b>\n` +
     (marketLine ? `\n${marketLine}` : "") +
     (scannerLine ? scannerLine : "") +
@@ -399,7 +403,11 @@ async function getTokenPosition(ctx, user, positionId) {
     .row();
 
   try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
-  catch { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
+  catch (e) {
+    if (!String(e.description || e.message || "").includes("not modified")) {
+      try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
+    }
+  }
 }
 
 module.exports = { getPortfolio, getTokenPosition, getSourceLabel };

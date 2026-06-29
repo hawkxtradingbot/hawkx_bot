@@ -92,12 +92,37 @@ async function executeRealtimeSnipe(ctx, user, tokenCa, meta = {}) {
 }
 
 function simulatePriceMovement(ca) {
-  const current  = getMockPrice(ca);
-  const change   = (Math.random() - 0.45) * 0.3;
-  const newPrice = Math.max(current * (1 + change), 0.000001);
-  mockPrices.set(ca, newPrice);
-  return newPrice;
+  // Read-only: just returns the current tracked price.
+  // Real-listed tokens are kept fresh by refreshTrackedPrices() on a
+  // background timer (anchored to real DexScreener price). Pure
+  // mock/Launch tokens (no real listing) get a small bounded nudge
+  // on that same timer instead of drifting every time someone views them.
+  return getMockPrice(ca);
 }
+
+async function refreshTrackedPrices() {
+  const axios = require("axios");
+  const cas = Array.from(mockPrices.keys());
+  for (const ca of cas) {
+    if (ca.startsWith("DEVNET_") || ca.startsWith("MOCK_")) continue; // pure mock, no real CA to check
+    try {
+      const res = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
+      const pair = res.data?.pairs?.[0];
+      const realPrice = pair ? parseFloat(pair.priceUsd || 0) : 0;
+      if (realPrice > 0) {
+        mockPrices.set(ca, realPrice); // anchor to real price
+      } else {
+        // No real listing found (e.g. Launch-created token) — small neutral nudge, once per cycle
+        const current = mockPrices.get(ca);
+        const change = (Math.random() - 0.5) * 0.05; // ±2.5%, no bias
+        mockPrices.set(ca, Math.max(current * (1 + change), 0.000001));
+      }
+    } catch {
+      // network hiccup — leave price as-is this cycle, try again next time
+    }
+  }
+}
+setInterval(refreshTrackedPrices, 30000);
 
 function getEffectiveFeeRate(user) {
   const { getFeeRate } = require("./ranks");
