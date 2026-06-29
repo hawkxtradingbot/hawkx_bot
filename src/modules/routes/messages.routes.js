@@ -541,8 +541,8 @@ const t = text.trim().toLowerCase();
       });
       // Clear stale msg id so the screen does a FRESH reply (not edit a deleted msg)
       db.setSysConfig(`lo_msg_${userId}`, "");
-      const { showLimitOrdersScreen } = require("./helpers.routes");
-      return showLimitOrdersScreen(ctx, userId);
+      const { buildTokenOrdersScreen: returnToTokenScreen } = require("./helpers.routes");
+      return returnToTokenScreen(ctx, userId, ca3);
     }
 
     

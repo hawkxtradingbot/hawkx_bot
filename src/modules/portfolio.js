@@ -410,4 +410,4 @@ async function getTokenPosition(ctx, user, positionId) {
   }
 }
 
-module.exports = { getPortfolio, getTokenPosition, getSourceLabel };
+module.exports = { getPortfolio, getTokenPosition, getSourceLabel, formatPnl, formatSol };

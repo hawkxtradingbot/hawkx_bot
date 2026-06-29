@@ -155,7 +155,9 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       const mp3b = gmp3b(existingCa);
       const curMsg10 = ctx.callbackQuery?.message?.message_id;
       if (curMsg10) db.setSysConfig(`lo_msg_${userId}`, String(curMsg10));
-      const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3b.toFixed(8)}\n\nEnter price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
+      let mcLine3b = "";
+      try { const { getTokenInfo, formatNum } = require("../tokenInfo"); const ti3b = await getTokenInfo(existingCa); if (ti3b.mcap) mcLine3b = `\nMC: ${formatNum(ti3b.mcap)}`; } catch {}
+      const m = await ctx.reply(`🟢 *Add Limit Buy*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa.slice(0,8)}\nPrice: ${mp3b.toFixed(8)}${mcLine3b}\n\nEnter price or MC (e.g. 0.0005 / 50K / 1M):`, { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
       db.setSysConfig(`pending_${userId}`, "lo_set_price");
       return true;
@@ -170,7 +172,9 @@ async function handleLimitOrderCallbacks(ctx, data, userId, user, bot, ks) {
       if (existingCa2 && data === "lo_add_sell") {
         const { getMockPrice: gmp4 } = require("../executor");
         const mp4 = gmp4(existingCa2);
-        const m2 = await ctx.reply(`🔴 *Add Limit Sell*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa2.slice(0,8)}\nPrice: ${mp4.toFixed(8)}\n\nEnter sell % (e.g. 50 for 50%):`, { parse_mode: "Markdown" });
+        let mcLine4 = "";
+        try { const { getTokenInfo, formatNum } = require("../tokenInfo"); const ti4 = await getTokenInfo(existingCa2); if (ti4.mcap) mcLine4 = `\nMC: ${formatNum(ti4.mcap)}`; } catch {}
+        const m2 = await ctx.reply(`🔴 *Add Limit Sell*\n\nToken: ${db.getSysConfig(`lo_pending_name_${userId}`) || existingCa2.slice(0,8)}\nPrice: ${mp4.toFixed(8)}${mcLine4}\n\nEnter sell % (e.g. 50 for 50%):`, { parse_mode: "Markdown" });
         db.setSysConfig(`prompt_msg_${userId}`, String(m2.message_id));
         db.setSysConfig(`pending_${userId}`, "lo_set_sell_pct_direct");
         return true;

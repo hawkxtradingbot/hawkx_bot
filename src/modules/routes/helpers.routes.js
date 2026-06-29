@@ -533,7 +533,28 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
   const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
-  const msg = `📍 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy executes at or below target price\n🔴 Sell executes at or above target price\n⏰ Orders expire in 48h (adjustable)\n\nTap any order to manage it.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
+
+  // MC (live) + Holdings + PnL (if you have an open position in this token)
+  let mcLine = "";
+  try {
+    const { getTokenInfo, formatNum } = require("../tokenInfo");
+    const tInfo3 = await getTokenInfo(ca);
+    if (tInfo3.mcap) mcLine = `  ·  📊 MC ${formatNum(tInfo3.mcap)}`;
+  } catch {}
+
+  let holdLine = "";
+  if (pos2) {
+    try {
+      const { simulatePriceMovement } = require("../executor");
+      const { formatPnl, formatSol } = require("../portfolio");
+      const curPrice = simulatePriceMovement(ca);
+      const pnlPct = pos2.buy_price > 0 ? ((curPrice - pos2.buy_price) / pos2.buy_price * 100) : 0;
+      const pnlSol = pos2.sol_invested * (pnlPct / 100);
+      holdLine = `\n💎 Holding: ${(pos2.token_amount||0).toLocaleString()}  ·  📈 PnL: ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL)`;
+    } catch {}
+  }
+
+  const msg = `📍 *${name} — Limit Orders*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 Buy executes at or below target price\n🔴 Sell executes at or above target price\n⏰ Orders expire in 48h (adjustable)\n\nTap any order to manage it.\n━━━━━━━━━━━━━━━━━━━\n\n🪙 *${name}*\n${priceInfo}${mcLine}${holdLine}\n💼 ${walletLabel}: *${loBal.toFixed(3)} SOL*\n\n${tokenOrders.length ? `*Orders: ${tokenOrders.length}*` : "*No orders yet*"}`;
   const kb = { inline_keyboard: [] };
   tokenOrders.forEach(o => {
     const status = o.paused ? "⏸" : "🟢";
@@ -585,7 +606,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   kb.inline_keyboard.push([
     { text: "← Back", callback_data: "limit_orders_refresh" },
     { text: "📂 Positions", callback_data: "menu_portfolio" },
-    { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca.slice(0,12)}` },
+    { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca}` }, // full CA fits within Telegram's 64-byte limit, no truncation/mapping needed here
   ]);
   const curMsgId = forceMsgId || ctx.callbackQuery?.message?.message_id;
   if (curMsgId) db.setSysConfig(`lo_msg_${userId}`, String(curMsgId));
