@@ -218,10 +218,11 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     priceSol: price, feeSol, feeRate, txHash, status: "confirmed",
   });
 
-  // Check if position exists — update or create
+  // Check if position exists — update or create (must match wallet too, not just user+token,
+  // otherwise buying the same token from a different wallet wrongly merges into the wrong wallet's position)
   const existingPos = db.getDb()
-    .prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' LIMIT 1")
-    .get(user.user_id, ca);
+    .prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND wallet_id = ? AND status = 'open' LIMIT 1")
+    .get(user.user_id, ca, user.active_wallet_id);
 
   let positionId;
   if (existingPos) {
@@ -232,9 +233,13 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     const newEntryMcap = entryMcap > 0
       ? (((existingPos.entry_mcap || 0) * existingPos.sol_invested) + (entryMcap * solAmount)) / newSolInvested
       : (existingPos.entry_mcap || 0);
+    // Self-heal token name: if we got a real symbol this time and the stored name still looks like
+    // a CA-prefix placeholder (from a past failed lookup), fix it now.
+    const looksLikePlaceholder = existingPos.token_name === ca.slice(0, 8);
+    const newTokenName = (tokenName && !tokenName.startsWith(ca.slice(0,4)) && looksLikePlaceholder) ? tokenName : existingPos.token_name;
     db.getDb()
-      .prepare("UPDATE positions SET sol_invested = ?, token_amount = ?, buy_price = ?, entry_mcap = ? WHERE position_id = ?")
-      .run(newSolInvested, newTokenAmount, avgBuyPrice, newEntryMcap, existingPos.position_id);
+      .prepare("UPDATE positions SET sol_invested = ?, token_amount = ?, buy_price = ?, entry_mcap = ?, token_name = ? WHERE position_id = ?")
+      .run(newSolInvested, newTokenAmount, avgBuyPrice, newEntryMcap, newTokenName, existingPos.position_id);
     positionId = existingPos.position_id;
   } else {
     // Get auto sell template for this position
