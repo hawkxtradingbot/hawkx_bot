@@ -3,9 +3,10 @@
 const db = require("../../../database");
 
 const INTERVALS = [
-  { label: "1h", sec: 3600 },
-  { label: "6h", sec: 21600 },
-  { label: "1d", sec: 86400 },
+  { label: "30m", sec: 1800 },
+  { label: "1h",  sec: 3600 },
+  { label: "6h",  sec: 21600 },
+  { label: "1d",  sec: 86400 },
 ];
 
 function fmtInterval(sec) {
@@ -178,9 +179,9 @@ async function showTokenDca(ctx, userId, ca) {
     msg += `🎯 PnL: *${sign}${pnlPct.toFixed(1)}%* (${sign}${pnlSol.toFixed(3)} SOL) ${icon}\n`;
     msg += `💼 You hold: ${(pos.token_amount||0).toLocaleString()} (~${(pos.sol_invested||0).toFixed(2)} SOL)\n`;
     const dParts = [];
-    if (price) dParts.push(`💰 ${fmtPrice(price)}`);
-    if (mcap) dParts.push(`MC ${fmtNum(mcap)}`);
-    if (dParts.length) msg += dParts.join(" · ") + "\n";
+    if (mcap) dParts.push(`📊 MC ${fmtNum(mcap)}`);
+    if (price) dParts.push(`💲 PR ${fmtPrice(price)}`);
+    if (dParts.length) msg += dParts.join("  ") + "\n";
   } else {
     // NEW: price + MC + Liq + age + safety
     const dParts = [];
@@ -246,11 +247,14 @@ async function showTokenDca(ctx, userId, ca) {
       msg += `\n`;
     }
     // Amount row
-    kb.inline_keyboard.push(AMT_PRESETS.map(a => ({ text: `${amt===a?"✅ ":""}${a}`, callback_data: `dca_set_amt_${a}` })).concat([{ text: "✏️", callback_data: "dca_set_amt_custom" }]));
+    const amtCustom = amt && !AMT_PRESETS.includes(amt);
+    kb.inline_keyboard.push(AMT_PRESETS.map(a => ({ text: `${amt===a?"✅ ":""}${a}`, callback_data: `dca_set_amt_${a}` })).concat([{ text: amtCustom ? `✅ ✏️ ${amt}` : "✏️", callback_data: "dca_set_amt_custom" }]));
     // Count row
-    kb.inline_keyboard.push(CNT_PRESETS.map(n => ({ text: `${cnt===n?"✅ ":""}${n}×`, callback_data: `dca_set_cnt_${n}` })).concat([{ text: "✏️", callback_data: "dca_set_cnt_custom" }]));
+    const cntCustom = cnt && !CNT_PRESETS.includes(cnt);
+    kb.inline_keyboard.push(CNT_PRESETS.map(n => ({ text: `${cnt===n?"✅ ":""}${n}×`, callback_data: `dca_set_cnt_${n}` })).concat([{ text: cntCustom ? `✅ ✏️ ${cnt}×` : "✏️", callback_data: "dca_set_cnt_custom" }]));
     // Interval row
-    kb.inline_keyboard.push(INTERVALS.map(iv => ({ text: `${intv===iv.sec?"✅ ":""}${iv.label}`, callback_data: `dca_set_int_${iv.sec}` })).concat([{ text: "✏️", callback_data: "dca_set_int_custom" }]));
+    const intvCustom = intv && !INTERVALS.find(iv => iv.sec === intv);
+    kb.inline_keyboard.push(INTERVALS.map(iv => ({ text: `${intv===iv.sec?"✅ ":""}${iv.label}`, callback_data: `dca_set_int_${iv.sec}` })).concat([{ text: intvCustom ? `✅ ✏️ ${fmtInterval(intv)}` : "✏️", callback_data: "dca_set_int_custom" }]));
     // Start / Cancel
     if (amt && cnt && intv) msg += `\n👉 Tap *Start DCA* to begin, or *Cancel* to discard.\n`;
     else msg += `\n_Set all three (amount, buys, interval) to start._\n`;
@@ -299,17 +303,40 @@ async function finalizeDca(ctx, userId, intervalSec) {
   // keep dca_msg_ so the screen edits in place (no new page)
   // keep dca_setup_ca_ so the token screen can re-render
 
-  // Balance check + deposit suggestion
-  let note = `✅ DCA started — ${cnt} buys × ${amt} SOL = ${totalCost.toFixed(2)} SOL total, every ${fmtInterval(intervalSec)}.`;
+  // Build first-buy time string
+  const firstBuyMs = Date.now() + intervalSec * 1000;
+  const firstBuyDate = new Date(firstBuyMs);
+  const fmtTime = (d) => {
+    const diff = d.getTime() - Date.now();
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const days = Math.floor(hrs / 24);
+    if (days > 0) return `in ${days}d ${hrs % 24}h`;
+    if (hrs > 0) return `in ${hrs}h ${mins % 60}m`;
+    return `in ${mins}m`;
+  };
+
+  // Full confirmation message (stays visible, not just a toast)
+  let confirmMsg = `✅ *DCA Order Confirmed!*\n\n`;
+  confirmMsg += `🪙 Token: *${name}*\n`;
+  confirmMsg += `💵 Amount: *${amt} SOL* per buy\n`;
+  confirmMsg += `🔁 Buys: *${cnt}* total\n`;
+  confirmMsg += `⏱ Every: *${fmtInterval(intervalSec)}*\n`;
+  confirmMsg += `📊 Total cost: *${totalCost.toFixed(2)} SOL*\n`;
+  confirmMsg += `⏰ First buy: *${fmtTime(firstBuyDate)}*\n\n`;
+
   if (totalCost > balance) {
     const need = (totalCost - balance).toFixed(3);
-    note += `\n\n⚠️ *Low balance:* wallet has ${balance.toFixed(3)} SOL, order needs ${totalCost.toFixed(2)} SOL.\nDeposit *${need} SOL* more to complete all buys, or some buys may fail.`;
+    confirmMsg += `⚠️ *Low balance:* wallet has ${balance.toFixed(3)} SOL, needs ${totalCost.toFixed(2)} SOL.\nDeposit *${need} SOL* more or some buys may fail.\n`;
   } else {
-    note += `\n💵 Wallet: ${balance.toFixed(3)} SOL — enough ✅`;
+    confirmMsg += `💼 Wallet: ${balance.toFixed(3)} SOL — enough ✅\n`;
   }
-  // Toast confirmation (no new message), then update same screen
-  try { await ctx.answerCallbackQuery({ text: note.replace(/\*/g,"").slice(0,180) }); } catch {}
-  db.setSysConfig(`dca_last_note_${userId}`, note);
+
+  try { await ctx.answerCallbackQuery({ text: "✅ DCA started!" }); } catch {}
+  const confirmSent = await ctx.reply(confirmMsg, { parse_mode: "Markdown" });
+  // Auto-delete confirmation after 30s
+  setTimeout(async () => { try { await ctx.api.deleteMessage(ctx.chat.id, confirmSent.message_id); } catch {} }, 30000);
+  db.setSysConfig(`dca_last_note_${userId}`, confirmMsg);
   return showTokenDca(ctx, userId, ca);
 }
 
@@ -468,7 +495,7 @@ async function handleDcaCallbacks(ctx, data, userId, user) {
   }
   if (data === "dca_set_int_custom") {
     await ctx.answerCallbackQuery();
-    const m = await ctx.reply("⏱ Enter interval in hours (e.g. 2 or 0.5):");
+    const m = await ctx.reply("⏱ *Custom Interval*\n\nExamples:\n• 30m (30 minutes)\n• 2h (2 hours)\n• 1d (1 day)\n• 90m (90 minutes)", { parse_mode: "Markdown" });
     db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
     db.setSysConfig(`pending_${userId}`, "dca_custom_int");
     return true;

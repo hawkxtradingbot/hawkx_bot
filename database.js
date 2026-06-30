@@ -943,7 +943,7 @@ function getDcaOrders(userId, tokenCa) {
   return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND active = 1 ORDER BY created_at DESC").all(userId);
 }
 function addDcaOrder(userId, data) {
-  const nextBuy = new Date(Date.now()).toISOString(); // first buy fires on next tick
+  const nextBuy = new Date(Date.now() + (data.intervalSec || 3600) * 1000).toISOString(); // first buy after first interval
   const result = getDb().prepare(
     "INSERT INTO dca_orders (user_id, token_ca, token_name, sol_per_buy, total_buys, buys_done, interval_sec, next_buy_at, active, paused, wallet_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1, 0, ?)"
   ).run(userId, data.tokenCa, data.tokenName || "", data.solPerBuy || 0.1, data.totalBuys || 5, data.intervalSec || 3600, nextBuy, data.walletId || null);

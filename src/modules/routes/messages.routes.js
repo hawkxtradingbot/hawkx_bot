@@ -492,10 +492,16 @@ const t = text.trim().toLowerCase();
     if (pending === "dca_custom_int") {
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       await deleteMsg(ctx, promptId);
-      const hrs = parseFloat(text);
-      if (isNaN(hrs) || hrs <= 0) { await ctx.reply("❌ Invalid hours."); return; }
-      db.setSysConfig(`dca_draft_int_${userId}`, String(Math.round(hrs * 3600)));
       db.setSysConfig(`pending_${userId}`, "");
+      // Parse format: 30m / 2h / 1d / or plain number = hours
+      const raw = text.trim().toLowerCase();
+      let secs = 0;
+      if (raw.endsWith("m")) secs = Math.round(parseFloat(raw) * 60);
+      else if (raw.endsWith("h")) secs = Math.round(parseFloat(raw) * 3600);
+      else if (raw.endsWith("d")) secs = Math.round(parseFloat(raw) * 86400);
+      else secs = Math.round(parseFloat(raw) * 3600); // plain number = hours
+      if (isNaN(secs) || secs < 60) { await ctx.reply("❌ Invalid interval. Min is 1m. Examples: 30m, 2h, 1d"); return; }
+      db.setSysConfig(`dca_draft_int_${userId}`, String(secs));
       const { showTokenDca } = require("./callbacks.dca");
       return showTokenDca(ctx, userId, db.getSysConfig(`dca_setup_ca_${userId}`));
     }
