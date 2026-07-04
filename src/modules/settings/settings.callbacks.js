@@ -80,7 +80,7 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       const t = db.getAutoSellTemplate(user.user_id, newId);
       const { buildAutoSellTemplateScreen } = require("../keyboards");
       const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
-      const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
+      const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${user.user_id}_${t.id}`) || "") });
       db.setSysConfig(`ast_msg_${user.user_id}`, String(sent.message_id));
       return;
     }
@@ -439,24 +439,12 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
       await ctx.answerCallbackQuery();
       const { buildAutoSellTemplateScreen } = require("../keyboards");
-      const msg =
-        `🤖 *${t.name}*\n\n` +
-        `━━━ 📚 HOW TO USE ━━━\n` +
-        `🛑 SL = sells if price drops\n` +
-        `🎯 TP = sells if price rises\n` +
-        `📍 = fixed price level\n` +
-        `🔄 Trail = follows price up\n` +
-        `Sell% = % of remaining tokens\n\n` +
-        `SL1 active from start\n` +
-        `SL2 activates when TP1 hits\n` +
-        `SL3 activates when TP2 hits\n\n` +
-        `Tap any button to change instantly\n` +
-        `━━━━━━━━━━━━━━━━━━━`;
+      const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       const msgId = ctx.callbackQuery?.message?.message_id;
       if (msgId) db.setSysConfig(`ast_msg_${user.user_id}`, String(msgId));
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); }
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${user.user_id}_${t.id}`) || "") }); }
       catch { 
-        const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
+        const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${user.user_id}_${t.id}`) || "") });
         db.setSysConfig(`ast_msg_${user.user_id}`, String(sent.message_id));
       }
       return;
@@ -466,20 +454,8 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       const newId = db.createAutoSellTemplate(user.user_id, "New Template");
       const t = db.getAutoSellTemplate(user.user_id, newId);
       const { buildAutoSellTemplateScreen } = require("../keyboards");
-      const msg =
-        `🤖 *${t.name}*\n\n` +
-        `━━━ 📚 HOW TO USE ━━━\n` +
-        `🛑 SL = sells if price drops\n` +
-        `🎯 TP = sells if price rises\n` +
-        `📍 = fixed price level\n` +
-        `🔄 Trail = follows price up\n` +
-        `Sell% = % of remaining tokens\n\n` +
-        `SL1 active from start\n` +
-        `SL2 activates when TP1 hits\n` +
-        `SL3 activates when TP2 hits\n\n` +
-        `Tap any button to change instantly\n` +
-        `━━━━━━━━━━━━━━━━━━━`;
-      const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
+      const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
+      const sent = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${user.user_id}_${t.id}`) || "") });
       db.setSysConfig(`ast_msg_${user.user_id}`, String(sent.message_id));
       return;
     }
@@ -492,7 +468,52 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     await ctx.answerCallbackQuery(t.active ? "⏸ Paused" : "✅ Activated");
     const { buildAutoSellTemplateScreen } = require("../keyboards");
     const updated = db.getAutoSellTemplate(user.user_id, id);
-    try { await ctx.editMessageReplyMarkup({ reply_markup: buildAutoSellTemplateScreen(updated) }); } catch {}
+    try { await ctx.editMessageText(`🤖 *${updated.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(updated, db.getSysConfig(`ast_expand_${user.user_id}_${updated.id}`) || "") }); } catch {}
+    return;
+  }
+
+  // Expand/collapse SL or TP section
+  if (action.startsWith("ast_expand_sl_") || action.startsWith("ast_expand_tp_")) {
+    const isSl = action.startsWith("ast_expand_sl_");
+    const id = parseInt(action.replace(isSl ? "ast_expand_sl_" : "ast_expand_tp_", ""));
+    await ctx.answerCallbackQuery();
+    const t = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    const { buildAutoSellTemplateScreen } = require("../keyboards");
+    // Toggle: if already expanded, collapse (no expand param)
+    const curExpand = db.getSysConfig(`ast_expand_${user.user_id}_${id}`) || "";
+    const newExpand = curExpand === (isSl ? "sl" : "tp") ? "" : (isSl ? "sl" : "tp");
+    db.setSysConfig(`ast_expand_${user.user_id}_${id}`, newExpand);
+    const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, newExpand) }); } catch {}
+    return;
+  }
+
+  // Delete confirm step
+  if (action.startsWith("ast_del_confirm_")) {
+    const id = parseInt(action.replace("ast_del_confirm_", ""));
+    const t = db.getAutoSellTemplate(user.user_id, id);
+    if (!t) { await ctx.answerCallbackQuery("Not found."); return; }
+    await ctx.answerCallbackQuery();
+    const { InlineKeyboard } = require("grammy");
+    const kb = new InlineKeyboard();
+    kb.text("✅ Yes, delete it", `ast_delete_${id}`).row();
+    kb.text("❌ Cancel", "pset_autosell_screen").row();
+    try { await ctx.editMessageText(`🗑 *Delete "${t.name}"?*\n\nThis cannot be undone.`, { parse_mode: "Markdown", reply_markup: kb }); } catch {}
+    return;
+  }
+
+  // Select template (stays on list screen)
+  if (action.startsWith("ast_select_")) {
+    const id = parseInt(action.replace("ast_select_", ""));
+    await ctx.answerCallbackQuery("✅ Template selected!");
+    const s = db.getSettings(user.user_id);
+    db.updateSettings(user.user_id, { auto_sell_template_id: id });
+    const { buildAutoSellListScreen } = require("../keyboards");
+    const templates = db.getAutoSellTemplates(user.user_id);
+    const updatedS = db.getSettings(user.user_id);
+    const listMsg = `🤖 *Auto Sell Templates*\n\n━━━━━━━━━━━━━━━━━━━\n📚 *HOW IT WORKS:*\n🛑 SL = auto sell if price drops\n🎯 TP = auto sell if price rises\n\n📌 Selected template applies to:\n   Manual buys & Auto Buy only\n━━━━━━━━━━━━━━━━━━━`;
+    try { await ctx.editMessageText(listMsg, { parse_mode: "Markdown", reply_markup: buildAutoSellListScreen(templates, updatedS?.auto_sell_template_id, updatedS?.auto_sell_enabled) }); } catch {}
     return;
   }
 
@@ -542,8 +563,8 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       await ctx.answerCallbackQuery("✅ Updated");
       const { buildAutoSellTemplateScreen } = require("../keyboards");
       const updated = db.getAutoSellTemplate(user.user_id, id);
-      const msg = `🤖 *${updated.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(updated) }); } catch {}
+      const msg = `🤖 *${updated.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(updated, db.getSysConfig(`ast_expand_${user.user_id}_${updated.id}`) || "") }); } catch {}
       return;
     }
     if (action.startsWith("ast_tp_pct_")) {
@@ -567,8 +588,8 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
       await ctx.answerCallbackQuery("✅ Updated");
       const { buildAutoSellTemplateScreen } = require("../keyboards");
       const updated = db.getAutoSellTemplate(user.user_id, id);
-      const msg = `🤖 *${updated.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 SL = sells if price drops\n🎯 TP = sells if price rises\n📍 = fixed price level\n🔄 Trail = follows price up\nSell% = % of remaining tokens\n\nSL1 active from start\nSL2 activates when TP1 hits\nSL3 activates when TP2 hits\n\nTap any button to change instantly\n━━━━━━━━━━━━━━━━━━━`;
-      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(updated) }); } catch {}
+      const msg = `🤖 *${updated.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(updated, db.getSysConfig(`ast_expand_${user.user_id}_${updated.id}`) || "") }); } catch {}
       return;
     }
 

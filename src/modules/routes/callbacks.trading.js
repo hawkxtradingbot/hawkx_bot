@@ -240,7 +240,7 @@ async function handlePositionAutoSell(ctx, data, userId, user) {
     return true;
   }
 
-  // Attach template to position
+  // Attach template to position — stays on auto-sell screen showing summary
   if (data.startsWith("pos_ast_use_")) {
     const parts = data.replace("pos_ast_use_", "").split("_");
     const posId = parseInt(parts[0]);
@@ -248,7 +248,31 @@ async function handlePositionAutoSell(ctx, data, userId, user) {
     db.getDb().prepare("UPDATE positions SET auto_sell_template_id = ? WHERE position_id = ? AND user_id = ?")
       .run(tplId, posId, userId);
     await ctx.answerCallbackQuery("✅ Auto Sell attached!");
-    return getPortfolio(ctx, user, "all", 0, false, posId);
+    // Stay on the auto-sell screen (rebuild it with updated selection + summary)
+    const pos = db.getPosition(posId, userId);
+    const templates = db.getAutoSellTemplates(userId);
+    const tokenName = pos?.token_name || pos?.token_ca?.slice(0,8) || "Token";
+    const activeT = templates.find(t => t.id === tplId);
+    const { InlineKeyboard } = require("grammy");
+    const kb = new InlineKeyboard();
+    templates.forEach(t => {
+      const isSel = t.id === tplId;
+      kb.text(isSel ? `✅ ${t.name}` : t.name, `pos_ast_use_${posId}_${t.id}`).row();
+    });
+    if (tplId) kb.text("❌ Remove Auto Sell", `pos_ast_remove_${posId}`).row();
+    kb.text("← Back", `pos_filter_all_0_${posId}`).row();
+    // Build summary of selected template
+    let summaryLine = "";
+    if (activeT) {
+      const parts2 = [];
+      for (let i = 1; i <= 3; i++) { if (activeT[`sl_${i}`]) parts2.push(`🛑 SL${i}: ${activeT[`sl_${i}`]}%`); }
+      for (let i = 1; i <= 5; i++) { if (activeT[`tp_${i}`]) parts2.push(`🎯 TP${i}: +${activeT[`tp_${i}`]}%`); }
+      summaryLine = parts2.length ? `${parts2.join("  ")}\n` : `_(no SL/TP levels set yet — edit the template to add them)_\n`;
+    }
+    const msg = `📌 *Auto Sell — ${tokenName}*\n\n✅ Active: *${activeT?.name || "Template"}*\n${summaryLine}\nSelect a template to attach:`;
+    try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+    catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+    return true;
   }
 
   // Remove template from position

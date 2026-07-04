@@ -45,9 +45,9 @@ async function handleTextInput(ctx, user, pendingKey) {
         const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
         const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
         try {
-          if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
-          else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-        } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+          if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+          else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       } else {
         const newId = db.createAutoSellTemplate(userId, text);
         const t = db.getAutoSellTemplate(userId, newId);
@@ -55,9 +55,9 @@ async function handleTextInput(ctx, user, pendingKey) {
         const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
         const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
         try {
-          if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
-          else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-        } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+          if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+          else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       }
       db.setSysConfig(`pending_${userId}`, "");
         try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
@@ -112,9 +112,9 @@ async function handleTextInput(ctx, user, pendingKey) {
       const tplMsgId = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
       const msg = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
-        if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) });
-        else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-      } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        if (tplMsgId) await ctx.api.editMessageText(ctx.chat.id, tplMsgId, msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+        else { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+      } catch { const s = await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildAutoSellTemplateScreen(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       db.setSysConfig(`pending_${userId}`, "");
       try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
       return;
@@ -132,9 +132,9 @@ async function handleTextInput(ctx, user, pendingKey) {
       const tplMsgId2 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
       const msg2 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
-        if (tplMsgId2) await ctx.api.editMessageText(ctx.chat.id, tplMsgId2, msg2, { parse_mode: "Markdown", reply_markup: bats2(t) });
-        else { const s = await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: bats2(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-      } catch { const s = await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: bats2(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        if (tplMsgId2) await ctx.api.editMessageText(ctx.chat.id, tplMsgId2, msg2, { parse_mode: "Markdown", reply_markup: bats2(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+        else { const s = await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: bats2(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+      } catch { const s = await ctx.reply(msg2, { parse_mode: "Markdown", reply_markup: bats2(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       db.setSysConfig(`pending_${userId}`, "");
       try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
       return;
@@ -152,9 +152,9 @@ async function handleTextInput(ctx, user, pendingKey) {
       const tplMsgId3 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
       const msg3 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
-        if (tplMsgId3) await ctx.api.editMessageText(ctx.chat.id, tplMsgId3, msg3, { parse_mode: "Markdown", reply_markup: bats3(t) });
-        else { const s = await ctx.reply(msg3, { parse_mode: "Markdown", reply_markup: bats3(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-      } catch { const s = await ctx.reply(msg3, { parse_mode: "Markdown", reply_markup: bats3(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        if (tplMsgId3) await ctx.api.editMessageText(ctx.chat.id, tplMsgId3, msg3, { parse_mode: "Markdown", reply_markup: bats3(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+        else { const s = await ctx.reply(msg3, { parse_mode: "Markdown", reply_markup: bats3(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+      } catch { const s = await ctx.reply(msg3, { parse_mode: "Markdown", reply_markup: bats3(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       db.setSysConfig(`pending_${userId}`, "");
       try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
       return;
@@ -172,9 +172,9 @@ async function handleTextInput(ctx, user, pendingKey) {
       const tplMsgId4 = parseInt(db.getSysConfig(`ast_msg_${userId}`) || "0");
       const msg4 = `🤖 *${t.name}*\n\n━━━ 📚 HOW TO USE ━━━\n🛑 *SL* = Stop Loss (sell if price drops)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n🎯 *TP* = Take Profit (sell if price rises)\n   📍 Fixed % | 🔄 Trail = follows price up\n   Sell% = how much to sell when triggered\n\n📌 *Order of triggers:*\n   SL1 → always watching from start\n   SL2 → activates after TP1 hits\n   SL3 → activates after TP2 hits\n\n💡 Set 0 = disabled\n✅ Save = confirms & saves template\n← Back = exits WITHOUT saving\n━━━━━━━━━━━━━━━━━━━`;
       try {
-        if (tplMsgId4) await ctx.api.editMessageText(ctx.chat.id, tplMsgId4, msg4, { parse_mode: "Markdown", reply_markup: bats4(t) });
-        else { const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: bats4(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
-      } catch { const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: bats4(t) }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+        if (tplMsgId4) await ctx.api.editMessageText(ctx.chat.id, tplMsgId4, msg4, { parse_mode: "Markdown", reply_markup: bats4(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") });
+        else { const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: bats4(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
+      } catch { const s = await ctx.reply(msg4, { parse_mode: "Markdown", reply_markup: bats4(t, db.getSysConfig(`ast_expand_${userId}_${t.id}`) || "") }); db.setSysConfig(`ast_msg_${userId}`, String(s.message_id)); }
       db.setSysConfig(`pending_${userId}`, "");
       try { await ctx.api.deleteMessage(ctx.chat.id, userMsgId); } catch {}
       return;

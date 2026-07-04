@@ -587,11 +587,15 @@ function buildSettingsAutoSellScreen(s, templates) {
 }
     function buildAutoSellListScreen(templates, activeTemplateId, autoSellOn) {
   const kb = new InlineKeyboard();
-  // Guard: ignore stale selection that no longer exists
   if (activeTemplateId && !(templates||[]).some(t => t.id === activeTemplateId)) activeTemplateId = null;
   kb.text(autoSellOn ? "🤖 Auto Sell: ON ✅" : "🤖 Auto Sell: OFF ❌", "sas_toggle").row();
-  kb.text("📚 🛑 SL = sell if drops · 🎯 TP = sell if rises", "noop").row();
-  renderTemplateRows(kb, templates, activeTemplateId, "ast_select");
+  (templates||[]).forEach(t => {
+    const isSel = t.id === activeTemplateId;
+    kb.text(isSel ? `✅ ${t.name}` : t.name, `ast_select_${t.id}`)
+      .text("✏️", `ast_view_${t.id}`)
+      .text("🗑", `ast_del_confirm_${t.id}`)
+      .row();
+  });
   kb.text("➕ New Template", "ast_new").row();
   kb.text("← Back", "menu_settings")
     .text("🔄 Refresh", "pset_autosell_screen")
@@ -617,39 +621,42 @@ function buildAutoBuyScreen(s) {
 // ════════════════════════════════════════════════════════════
 // WATCHLIST
 // ════════════════════════════════════════════════════════════
-function buildAutoSellTemplateScreen(t) {
+function buildAutoSellTemplateScreen(t, expand) {
   const kb = new InlineKeyboard();
   const id = t.id;
+  const isNew = t.name === "New Template";
+  kb.text(isNew ? "📝 Add Name" : `✏️ ${t.name}`, `ast_rename_${id}`).row();
 
-  // Active/Rename
-  const isNewTemplate = t.name === "New Template";
-  kb.text(isNewTemplate ? "📝 Add Name" : `✏️ ${t.name}`, `ast_rename_${id}`).row();
-
-  // SL Section
-  kb.text("━━━ 🛑 Stop Loss ━━━", "noop").row();
-  for (let i = 1; i <= 3; i++) {
-    const sl    = t[`sl_${i}`] || 0;
-    const slPct = t[`sl_${i}_sell_pct`] || 100;
-    const slTr  = t[`sl_${i}_trail`] ? "🔄" : "📍";
-    kb.text(`SL${i}`,                                      "noop")
-      .text(`${slTr} ${sl===0?"OFF":sl+"%"}`,              `ast_sl_${i}_${id}`)
-      .text(`Sell:${slPct}%`,                              `ast_sl_pct_${i}_${id}`)
-      .text(t[`sl_${i}_trail`] ? "✅Trail" : "◻️Trail",  `ast_sl_trail_${i}_${id}`)
-      .row();
+  // SL Section — collapsible
+  const slExpand = expand === "sl";
+  kb.text(slExpand ? "🛑 Stop Loss ▲" : "🛑 Stop Loss ▼", `ast_expand_sl_${id}`).row();
+  if (slExpand) {
+    for (let i = 1; i <= 3; i++) {
+      const sl = t[`sl_${i}`] || 0;
+      const slPct = t[`sl_${i}_sell_pct`] || 100;
+      const slTr = t[`sl_${i}_trail`] ? "🔄" : "📍";
+      kb.text(`SL${i}: ${sl===0?"OFF":sl+"%"}`, `ast_sl_${i}_${id}`)
+        .text(`Sell:${slPct}%`, `ast_sl_pct_${i}_${id}`)
+        .text(slTr, `ast_sl_trail_${i}_${id}`)
+        .row();
+    }
   }
 
-  // TP Section
-  kb.text("━━━ 🎯 Take Profit ━━━", "noop").row();
-  for (let i = 1; i <= 5; i++) {
-    const tp    = t[`tp_${i}`] || 0;
-    const tpPct = t[`tp_${i}_pct`] || 100;
-    const tpTr  = t[`tp_${i}_trail`] ? "🔄" : "📍";
-    kb.text(`TP${i}`,                                      "noop")
-      .text(`${tpTr} ${tp===0?"OFF":"+"+tp+"%"}`,         `ast_tp_${i}_${id}`)
-      .text(`Sell:${tpPct}%`,                              `ast_tp_pct_${i}_${id}`)
-      .text(t[`tp_${i}_trail`] ? "✅Trail" : "◻️Trail",  `ast_tp_trail_${i}_${id}`)
-      .row();
+  // TP Section — collapsible
+  const tpExpand = expand === "tp";
+  kb.text(tpExpand ? "🎯 Take Profit ▲" : "🎯 Take Profit ▼", `ast_expand_tp_${id}`).row();
+  if (tpExpand) {
+    for (let i = 1; i <= 5; i++) {
+      const tp = t[`tp_${i}`] || 0;
+      const tpPct = t[`tp_${i}_pct`] || 100;
+      const tpTr = t[`tp_${i}_trail`] ? "🔄" : "📍";
+      kb.text(`TP${i}: ${tp===0?"OFF":"+"+tp+"%"}`, `ast_tp_${i}_${id}`)
+        .text(`Sell:${tpPct}%`, `ast_tp_pct_${i}_${id}`)
+        .text(tpTr, `ast_tp_trail_${i}_${id}`)
+        .row();
+    }
   }
+
   kb.text("✅ Save", `ast_save_${id}`).row();
   kb.text("← Back", `ast_back_${id}`)
     .text("🔄 Refresh", `ast_view_${id}`)
