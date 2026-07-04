@@ -157,8 +157,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     // Count buys/sells + totals from trades
     let bCount = 0, bSol = 0, sCount = 0, sSol = 0;
     try {
-      const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca);
-      const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+      const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca, pos.wallet_id);
+      const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca, pos.wallet_id);
       bCount = bq.c; bSol = bq.s; sCount = sq.c; sSol = sq.s;
     } catch {}
     // Prices
@@ -286,8 +286,8 @@ async function getTokenPosition(ctx, user, positionId) {
   // Buy/sell counts + totals for this token
   let sbCount = 0, sbSol = 0, ssCount = 0, ssSol = 0;
   try {
-    const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca);
-    const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca);
+    const bq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='buy' AND status='confirmed'").get(pos.user_id, pos.token_ca, pos.wallet_id);
+    const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca, pos.wallet_id);
     sbCount = bq.c; sbSol = bq.s; ssCount = sq.c; ssSol = sq.s;
   } catch {}
   const tokenData = await getTokenInfo(pos.token_ca);

@@ -101,6 +101,29 @@ function setupMessages(bot) {
     const ks = require("../killSwitch").isActive();
     const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
 
+    // ── Global CA escape hatch ──────────────────────────────────
+    // If the user pastes a full valid Solana CA while stuck in some other
+    // input flow, treat it as "scan this token" and jump to the scanner.
+    // EXCLUDES flows where pasting a CA is the expected input (they handle it themselves).
+    const caPasteFlows = ["lo_paste_ca", "dca_paste_ca", "cw_paste_wallet", "cch_paste", "snipe_paste_ca", "watchlist_add_ca", "launch_paste_ca", "referral_enter_code", "referral_customize_code"];
+    if (
+      pending &&
+      !caPasteFlows.includes(pending) &&
+      text.length >= 43 && text.length <= 44 &&
+      /^[1-9A-HJ-NP-Za-km-z]+$/.test(text) &&
+      !ks
+    ) {
+      // Clear stuck state + clean up the prompt message, then show scanner
+      db.setSysConfig(`pending_${userId}`, "");
+      if (promptId) { try { await ctx.api.deleteMessage(ctx.chat.id, promptId); } catch {} }
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      const autoBought = await handleAutoBuy(ctx, user, text);
+      if (autoBought) return;
+      const { showTokenScanner } = require("./helpers.routes");
+      await showTokenScanner(ctx, user, text);
+      return;
+    }
+
     const settingsPending = [
       "set_slippage",
       "set_sell_slippage",

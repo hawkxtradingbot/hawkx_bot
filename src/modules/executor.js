@@ -427,9 +427,24 @@ async function handleAutoBuy(ctx, user, ca) {
   if ((user.mode || "beginner") !== "pro") return false;
   if (!isAutoBuyEnabled(user.user_id)) return false;
   const settings  = db.getSettings(user.user_id) || {};
-  const solAmount = settings.max_buy_sol || 0.1;
+  const solAmount = settings.auto_buy_sol || settings.max_buy_sol || 0.1;
+  const maxBuys   = settings.auto_buy_max || 1;
+
+  // Enforce max buys per token (count existing auto_buy trades for this token on the active wallet)
+  const alreadyBought = db.getDb().prepare(
+    "SELECT COUNT(*) c FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='buy' AND platform LIKE '%mock%' AND status='confirmed'"
+  ).get(user.user_id, ca, user.active_wallet_id).c;
+
+  if (alreadyBought >= maxBuys) {
+    await ctx.reply(
+      `🤖 *Auto Buy skipped*\n\nCA: \`${ca.slice(0,12)}...\`\nAlready bought *${alreadyBought}/${maxBuys}* times (max reached).\n\n_Increase Max Buys/Token in Auto Buy settings to buy more._`,
+      { parse_mode: "Markdown" }
+    );
+    return true; // handled (don't fall through to normal scanner)
+  }
+
   await ctx.reply(
-    `🤖 *Auto Buy triggered*\n\nCA: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*`,
+    `🤖 *Auto Buy triggered*\n\nCA: \`${ca.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\nBuy ${alreadyBought + 1}/${maxBuys}`,
     { parse_mode: "Markdown" }
   );
   await mockBuy(ctx, user, ca, solAmount, "auto_buy", "");
