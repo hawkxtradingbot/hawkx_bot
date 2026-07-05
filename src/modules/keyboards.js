@@ -315,9 +315,10 @@ function buildCopyTradeMenu() {
     const count = copyWallets?.length || 0;
     if (count === 0) { kb.text("No copy wallets yet", "noop").row(); }
     else {
-      copyWallets.forEach((cw) => {
-        const name = cw.label || cw.wallet_address.slice(0,12) + "...";
-        kb.text(`${cw.active ? "🟢" : "⏸"} ${name}`, `copy_wallet_view_${cw.id}`).row();
+      copyWallets.forEach((cw, idx) => {
+        const name = cw.label || cw.wallet_address.slice(0,10) + "...";
+        kb.text(`${cw.active ? "🟢" : "⏸"} ${name}`, `copy_wallet_view_${cw.id}`);
+        if (idx % 2 === 1 || idx === copyWallets.length - 1) kb.row();
       });
     }
   if (count < 5) kb.text(`➕ Add Copy Wallet (${count}/5)`, "copy_wallet_add").row();
