@@ -435,10 +435,7 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       if (data === "sniper_rt_raydium") db.updateRealtimeSniperConfig(userId, { sniper_rt_raydium: cfg.raydium ? 0 : 1 });
       if (data === "sniper_rt_migrating") db.updateRealtimeSniperConfig(userId, { sniper_rt_migrating: cfg.migrating ? 0 : 1 });
       if (data === "sniper_rt_hawkx") db.updateRealtimeSniperConfig(userId, { sniper_rt_launchlab: cfg.platform_launchlab ? 0 : 1 });
-      if (data === "sniper_rt_jito") { await ctx.answerCallbackQuery(); const m = await ctx.reply("⚡ Enter Jito tip SOL (e.g. 0.0075):"); db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id)); db.setSysConfig(`pending_${userId}`, "sniper_rt_jito"); return true; }
-      if (data === "sniper_rt_mev") db.updateRealtimeSniperConfig(userId, { sniper_rt_mev: cfg.mev ? 0 : 1 });
-      if (data === "sniper_rt_raydium") db.updateRealtimeSniperConfig(userId, { sniper_rt_raydium: cfg.raydium ? 0 : 1 });
-      if (data === "sniper_rt_migrating") db.updateRealtimeSniperConfig(userId, { sniper_rt_migrating: cfg.migrating ? 0 : 1 });
+      if (data === "sniper_rt_jito") { const m = await ctx.reply("⚡ Enter Jito tip SOL (e.g. 0.0075):"); db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id)); db.setSysConfig(`pending_${userId}`, "sniper_rt_jito"); return true; }
       const rtGuide = "⚡ *Real-Time Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Snipes ANY new Raydium pool instantly\n▸ Fastest entry — catches first block\n▸ No CA needed — fully automatic\n▸ Toggle sources: Raydium, Migrations, HawkX\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━\n\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n⚡ Jito — bundle priority tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━";
       const rtMsgId = parseInt(db.getSysConfig(`rt_msg_${userId}`) || "0");
       const rtChatId = ctx.chat?.id;
