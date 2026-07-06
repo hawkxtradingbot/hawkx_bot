@@ -11,6 +11,65 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
 
+    // ── LEADERBOARD ───────────────────────────────────────────
+    if (data === "menu_leaderboard" || data.startsWith("lb_")) {
+      await ctx.answerCallbackQuery();
+      // Parse board type + period from callback: lb_<type>_<period>
+      let board = "volume", period = "day";
+      if (data.startsWith("lb_")) {
+        const parts = data.split("_");
+        board = parts[1] || "volume";
+        period = parts[2] || "day";
+      }
+      const { InlineKeyboard } = require("grammy");
+      const rankNames = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
+      const medals = ["🥇","🥈","🥉"];
+      const periodLabel = { day: "Today", week: "This Week", month: "This Month" }[period];
+
+      const rows = board === "volume"
+        ? db.getVolumeLeaderboard(period, 10)
+        : db.getReferralLeaderboard(period, 10);
+
+      let msg = `🏆 *HawkX Leaderboard*\n`;
+      msg += board === "volume" ? `📊 *Volume* — ${periodLabel}\n` : `👥 *Referrals* — All-Time\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      if (!rows.length) {
+        msg += `_No data yet for this period.\nStart trading to appear here!_\n`;
+      } else {
+        rows.forEach(r => {
+          const pos = r.position <= 3 ? medals[r.position-1] : `#${r.position}`;
+          const rn = rankNames[r.rank] || "Scout";
+          if (board === "volume") {
+            msg += `${pos} *${r.name}* · ${rn}\n     💰 ${r.volume.toFixed(2)} SOL · 👥 ${r.referrals} refs\n`;
+          } else {
+            msg += `${pos} *${r.name}* · ${rn}\n     👥 ${r.referrals} refs · 💰 ${r.volume.toFixed(2)} SOL\n`;
+          }
+        });
+      }
+
+      // Your position (volume board only, referral shows in the list)
+      if (board === "volume") {
+        const mine = db.getUserVolumeRank(userId, period);
+        msg += `\n━━━━━━━━━━━━━━━━━━━\n📍 *You:* #${mine.position} · ${mine.volume.toFixed(2)} SOL · ${mine.referrals} refs`;
+      }
+
+      const kb = new InlineKeyboard();
+      // Board type toggle
+      kb.text(board === "volume" ? "📊 Volume ✅" : "📊 Volume", `lb_volume_${period}`)
+        .text(board === "referral" ? "👥 Referrals ✅" : "👥 Referrals", `lb_referral_${period}`).row();
+      // Period tabs (only meaningful for volume; still shown for consistency)
+      if (board === "volume") {
+        kb.text(period === "day" ? "📅 Day ✅" : "📅 Day", "lb_volume_day")
+          .text(period === "week" ? "🗓 Week ✅" : "🗓 Week", "lb_volume_week")
+          .text(period === "month" ? "📆 Month ✅" : "📆 Month", "lb_volume_month").row();
+      }
+      kb.text("🔄 Refresh", `lb_${board}_${period}`).row();
+      kb.text("← Back", "menu_main").row();
+
+      return safeEdit(ctx, msg, kb);
+    }
+
     // ── MAIN MENU ─────────────────────────────────────────────
     if (data === "menu_main" || data === "menu_main_refresh") {
       await ctx.answerCallbackQuery();

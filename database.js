@@ -76,6 +76,8 @@ function runMigrations(d) {
       "ALTER TABLE snipes ADD COLUMN mev INTEGER DEFAULT 0",
       "ALTER TABLE sniper_configs ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE snipes ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
+      "ALTER TABLE settings ADD COLUMN lb_display_name TEXT DEFAULT NULL",
+      "ALTER TABLE settings ADD COLUMN lb_anonymous INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (
@@ -1166,7 +1168,78 @@ function getDailyFeeSaved(userId) {
   const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
   return Math.max(0, Math.min(raw, 9999));
 }
+
+// ── LEADERBOARD ──────────────────────────────────────────────
+function _periodStart(period) {
+  // Return "YYYY-MM-DD HH:MM:SS" to match SQLite timestamp format (not ISO with T/Z)
+  const fmt = (dt) => {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
+  };
+  const now = new Date();
+  if (period === "day") { now.setHours(0,0,0,0); return fmt(now); }
+  if (period === "week") { const day = now.getDay(); const diff = now.getDate() - day + (day === 0 ? -6 : 1); const monday = new Date(now.setDate(diff)); monday.setHours(0,0,0,0); return fmt(monday); }
+  if (period === "month") { return fmt(new Date(now.getFullYear(), now.getMonth(), 1)); }
+  return "1970-01-01 00:00:00"; // all-time fallback
+}
+
+function _lbName(userId) {
+  const s = getDb().prepare("SELECT lb_display_name, lb_anonymous FROM settings WHERE user_id = ?").get(userId);
+  if (s && s.lb_anonymous) return "Anonymous";
+  if (s && s.lb_display_name) return s.lb_display_name;
+  const u = getUser(userId);
+  return u && u.username ? "@" + u.username.replace(/^@/, "") : "Trader";
+}
+
+function getVolumeLeaderboard(period = "week", limit = 10) {
+  const start = _periodStart(period);
+  const rows = getDb().prepare(
+    "SELECT user_id, COALESCE(SUM(sol_amount),0) vol, COUNT(*) trades FROM trades WHERE status='confirmed' AND timestamp >= ? GROUP BY user_id HAVING vol > 0 ORDER BY vol DESC LIMIT ?"
+  ).all(start, limit);
+  return rows.map((r, i) => {
+    const u = getUser(r.user_id);
+    return { position: i + 1, userId: r.user_id, name: _lbName(r.user_id), rank: u ? u.rank : 1, volume: r.vol, trades: r.trades, referrals: getReferralCount(r.user_id) };
+  });
+}
+
+function getReferralLeaderboard(period = "week", limit = 10) {
+  // Referral board is ALWAYS total count (period does not filter referrals).
+  const rows = getDb().prepare(
+    "SELECT referrer_id user_id, COUNT(*) refs FROM users WHERE referrer_id IS NOT NULL GROUP BY referrer_id ORDER BY refs DESC LIMIT ?"
+  ).all(limit);
+  return rows.map((r, i) => {
+    const u = getUser(r.user_id);
+    const vol = getDb().prepare("SELECT COALESCE(SUM(sol_amount),0) v FROM trades WHERE user_id=? AND status='confirmed'").get(r.user_id).v;
+    return { position: i + 1, userId: r.user_id, name: _lbName(r.user_id), rank: u ? u.rank : 1, referrals: r.refs, volume: vol };
+  });
+}
+
+function getReferralCount(userId) {
+  const r = getDb().prepare("SELECT COUNT(*) c FROM users WHERE referrer_id = ?").get(userId);
+  return r ? r.c : 0;
+}
+
+function getUserVolumeRank(userId, period = "week") {
+  const start = _periodStart(period);
+  const myVol = getDb().prepare("SELECT COALESCE(SUM(sol_amount),0) v FROM trades WHERE user_id=? AND status='confirmed' AND timestamp >= ?").get(userId, start).v;
+  const ahead = getDb().prepare(
+    "SELECT COUNT(*) c FROM (SELECT user_id, SUM(sol_amount) vol FROM trades WHERE status='confirmed' AND timestamp >= ? GROUP BY user_id HAVING vol > ?)"
+  ).get(start, myVol).c;
+  return { position: ahead + 1, volume: myVol, referrals: getReferralCount(userId) };
+}
+
+function setLbDisplayName(userId, name) {
+  getDb().prepare("UPDATE settings SET lb_display_name = ?, lb_anonymous = 0 WHERE user_id = ?").run(name, userId);
+}
+function setLbAnonymous(userId, anon) {
+  getDb().prepare("UPDATE settings SET lb_anonymous = ? WHERE user_id = ?").run(anon ? 1 : 0, userId);
+}
+function getLbSettings(userId) {
+  return getDb().prepare("SELECT lb_display_name, lb_anonymous FROM settings WHERE user_id = ?").get(userId) || {};
+}
+
 module.exports = {
+  getVolumeLeaderboard, getReferralLeaderboard, getReferralCount, getUserVolumeRank, setLbDisplayName, setLbAnonymous, getLbSettings,
   getDb, getUser, createUser, updateUser, getAllUsers,
   setUserMode, setSapHash, clearSap,
   touchLastActive, isSessionExpired,
