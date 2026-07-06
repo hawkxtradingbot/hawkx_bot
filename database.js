@@ -666,11 +666,36 @@ function getUserByReferralCode(code) {
 }
 
 // Ensure a user has an auto referral_code (generate if missing)
+// Built from username when possible (e.g. HAWKFAZLE139), falls back to random.
 function ensureReferralCode(userId) {
-  const u = getDb().prepare("SELECT referral_code FROM users WHERE user_id = ?").get(userId);
+  const u = getDb().prepare("SELECT referral_code, username FROM users WHERE user_id = ?").get(userId);
   if (u && u.referral_code) return u.referral_code;
   const crypto = require("crypto");
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+  // 1. Try a username-based code first: HAWK + cleaned username (letters/numbers only, max 11 chars)
+  if (u && u.username) {
+    const cleaned = u.username.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 11);
+    if (cleaned.length >= 2) {
+      const candidate = "HAWK" + cleaned;
+      const taken = getDb().prepare("SELECT 1 FROM users WHERE UPPER(referral_code) = ? OR UPPER(custom_code) = ?").get(candidate, candidate);
+      if (!taken) {
+        getDb().prepare("UPDATE users SET referral_code = ? WHERE user_id = ?").run(candidate, userId);
+        return candidate;
+      }
+      // Username taken → try appending a couple random chars
+      for (let t = 0; t < 10; t++) {
+        let c2 = candidate.slice(0, 11);
+        for (let i = 0; i < 3; i++) c2 += chars[crypto.randomInt(chars.length)];
+        if (!getDb().prepare("SELECT 1 FROM users WHERE UPPER(referral_code) = ? OR UPPER(custom_code) = ?").get(c2, c2)) {
+          getDb().prepare("UPDATE users SET referral_code = ? WHERE user_id = ?").run(c2, userId);
+          return c2;
+        }
+      }
+    }
+  }
+
+  // 2. Fallback: fully random (no username, or all username variants taken)
   for (let t = 0; t < 20; t++) {
     let c = "HAWK";
     for (let i = 0; i < 5; i++) c += chars[crypto.randomInt(chars.length)];
