@@ -124,7 +124,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         launch_f_decimals: { key: "decimals", label: "🔢 Token decimals (standard is 9):" },
         launch_f_teamalloc: { key: "teamalloc", label: "👥 Team allocation % (e.g. 10, or 0 for none):" },
         launch_f_startmc: { key: "startmc", label: "🎯 *Starting Market Cap*\n\nSet your token's starting MC in SOL.\nTypical range: 1–50 SOL. Lower = cheaper entry\nfor buyers, higher = premium start.\n\nEnter SOL (e.g. 10):" },
-        launch_f_creatorfee: { key: "creatorfee", label: "💵 *Creator Fee*\n\nYou earn this % on every trade of your token\n— passive income from volume.\n\n✅ *Trust range:* 0.5%–1% (buyers accept this)\n⚠️ 2%+ looks greedy and scares buyers\n🚩 5%+ is a red flag\n\n_Only LaunchLab & Meteora let you set this.\npump.fun, letsBONK & Moonshot use their own\nfixed creator-reward systems._\n\nEnter % (e.g. 1, or 0 for none):" },
+        launch_f_creatorfee: { key: "creatorfee", label: "💰 *Earn (Creator Fee)*\n\nYou earn this % on every trade of your token\n— passive income from volume.\n\n✅ *Trust range:* 0.5%–1% (buyers accept this)\n⚠️ 2%+ looks greedy and scares buyers\n🚩 5%+ is a red flag\n\n_Only LaunchLab & Meteora let you set a custom %.\npump.fun: auto 0.95%→0.05% by MCap.\nletsBONK: fixed 0.1% forever._\n\nEnter % (e.g. 1, or 0 for none):" },
       };
       const mm = map[data];
       await ctx.answerCallbackQuery();
@@ -268,7 +268,11 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
         g += "🔥 *Burn LP* — liquidity locked/burned automatically\nat graduation (anti-rug).\n";
         g += "👥 *Max Wallet* — cap how much one wallet can hold\n";
       } else {
-        g += `\n_This launchpad uses fixed supply, decimals &\ncurve — auto-graduation handled for you. Just\nset identity + use HawkX tools above._\n`;
+        g += `\n*💰 Earn (Creator Fee):*\n`;
+        if (lp === "pump") g += "pump.fun pays you 0.95% per trade (tokens under\n$300K MCap), scaling to 0.05% at $20M. Automatic.\nYou can send fees to charity, and pair with SOL or USDC.\n";
+        else if (lp === "letsbonk") g += "letsBONK pays you 0.1% of every swap FOREVER,\neven after graduation. 0.02 SOL launch fee, 1%/swap\n(50% buys+burns BONK). Pair with SOL or USD1.\n";
+        else g += "Moonshot uses fixed supply, decimals & curve with\nits own fee system. Auto-graduation handled for you.\n";
+        g += `\n_Just set identity + use the tools above. Supply,\ndecimals & curve are fixed by this launchpad._\n`;
       }
       g += "━━━━━━━━━━━━━━━━━━━";
       const kb = { inline_keyboard: [[{ text: "← Back to Form", callback_data: `launch_lp_back` }]] };
@@ -351,6 +355,45 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── TOGGLES (curve, vesting) ─────────────────────────────
+    // pump.fun: creator fee info (dynamic, not user-settable)
+    if (data === "launch_f_feeinfo") {
+      await ctx.answerCallbackQuery({
+        text: "pump.fun creator fee is automatic: 0.95% per trade for tokens under $300K MCap, scaling down to 0.05% at $20M MCap. You can't set it manually.",
+        show_alert: true
+      });
+      return true;
+    }
+
+    // pump.fun: toggle sending creator fees to charity
+    if (data === "launch_f_feecharity") {
+      const cur = db.getSysConfig(`launch_f_feecharity_${userId}`) === "1";
+      db.setSysConfig(`launch_f_feecharity_${userId}`, cur ? "0" : "1");
+      await ctx.answerCallbackQuery(cur ? "Creator fees: kept by you" : "❤️ Creator fees will go to charity");
+      const fc = buildLaunchForm(userId);
+      return safeEdit(ctx, fc.msg, fc.kb);
+    }
+
+    // toggle paired token: SOL <-> USDC (pump.fun) or SOL <-> USD1 (letsBONK)
+    if (data === "launch_f_pairtoken") {
+      const lp = db.getSysConfig(`launch_lp_${userId}`) || "pump";
+      const stable = lp === "letsbonk" ? "USD1" : "USDC";
+      const cur = db.getSysConfig(`launch_f_pairtoken_${userId}`) || "SOL";
+      const next = cur === "SOL" ? stable : "SOL";
+      db.setSysConfig(`launch_f_pairtoken_${userId}`, next);
+      await ctx.answerCallbackQuery(`🪙 Paired token: ${next}`);
+      const pt = buildLaunchForm(userId);
+      return safeEdit(ctx, pt.msg, pt.kb);
+    }
+
+    // letsBONK: creator fee info (fixed 0.1% forever, not settable)
+    if (data === "launch_f_feeinfo_bonk") {
+      await ctx.answerCallbackQuery({
+        text: "letsBONK creator fee is fixed: you earn 0.1% of every swap forever, even after your token graduates to Raydium. It's automatic — not settable.",
+        show_alert: true
+      });
+      return true;
+    }
+
     if (data === "launch_f_curve") {
       const lpKey = db.getSysConfig(`launch_lp_${userId}`) || "pump";
       const cur = db.getSysConfig(`launch_f_curve_${userId}`) || (lpKey === "meteora" ? "dbc" : "justsendit");

@@ -704,10 +704,10 @@ async function showLimitOrdersScreen(ctx, userId) {
 const SOL_PRICE_USD = 63;
 // SOL price for graduation $ estimates. At mainnet, fetch live.
 const LAUNCHPAD_INFO = {
-  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · 0.015 SOL grad", gradSol: 85, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: [] },
+  pump:      { name: "pump.fun", icon: "🌊", advanced: false, fee: "Free mint · dynamic creator fee", gradSol: 85, gradUsd: 69000, cta: "🚀 Launch on pump.fun", success: "is LIVE on pump.fun!", tagline: "Fastest meme launch on Solana", caps: ["pairtoken","charity"] },
   launchlab: { name: "Raydium LaunchLab", icon: "🔵", advanced: true, fee: "Free mint · 1% trade fee", gradSol: 85, cta: "🚀 Launch on LaunchLab", success: "is LIVE on Raydium LaunchLab!", tagline: "Full control over your launch", caps: ["supply","decimals","curve","grad","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
   meteora:   { name: "Meteora DBC", icon: "🟣", advanced: true, fee: "Dynamic fee", gradSol: 0, cta: "🚀 Launch on Meteora", success: "is LIVE on Meteora!", tagline: "Dynamic bonding curve", caps: ["supply","decimals","curve","migthreshold","mintfreeze","burnlp","maxwallet","vesting","teamalloc","creatorfee"] },
-  letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "Free mint · BONK launchpad", gradSol: 85, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: [] },
+  letsbonk:  { name: "letsBONK 🐶", icon: "🐶", advanced: false, fee: "0.02 SOL launch · 1%/swap · you earn 0.1% forever", gradSol: 85, gradUsd: 69000, cta: "🚀 Launch on letsBONK", success: "is LIVE — welcome to the BONK community! 🐶", tagline: "Community-driven BONK launchpad", caps: ["pairtoken"] },
   moonshot:  { name: "Moonshot", icon: "🌙", advanced: false, fee: "Free mint · simple", gradSol: 0, cta: "🚀 Launch on Moonshot", success: "is LIVE on Moonshot! 🌙", tagline: "Mobile-first simple launch", caps: [] },
 };
 
@@ -744,6 +744,8 @@ function buildLaunchForm(userId) {
   const teamAlloc = db.getSysConfig(`launch_f_teamalloc_${userId}`) || "0";
   const treasuryW = db.getSysConfig(`launch_f_treasury_${userId}`) || "";
   const creatorFee = db.getSysConfig(`launch_f_creatorfee_${userId}`) || "0";
+  const feeCharity = db.getSysConfig(`launch_f_feecharity_${userId}`) === "1";
+  const pairToken = db.getSysConfig(`launch_f_pairtoken_${userId}`) || "SOL";
   const startMc = db.getSysConfig(`launch_f_startmc_${userId}`) || "0";
   const antisnipe = db.getSysConfig(`launch_f_antisnipe_${userId}`) || "0";
   const buyback = db.getSysConfig(`launch_f_buyback_${userId}`) || "0";
@@ -820,7 +822,7 @@ function buildLaunchForm(userId) {
   const advCount = [name,symbol].filter(Boolean).length; // placeholder
   const advLabel = info.advanced
     ? (advExpanded ? "🔧 Custom Settings ▲" : "🔧 Custom Settings ▼")
-    : (advExpanded ? "⚙️ More Options ▲" : "⚙️ More Options ▼");
+    : (advExpanded ? "⚙️ Advanced ▲" : "⚙️ Advanced ▼");
   kb.inline_keyboard.push([{ text: advLabel, callback_data: "launch_f_adv_toggle" }]);
   if (advExpanded) {
     if (lpHas(info, "supply")) {
@@ -876,7 +878,7 @@ function buildLaunchForm(userId) {
   }
   // ⚡ HawkX Tools separator (bundle/schedule/antisnipe/buyback work on ALL launchpads)
   if (advExpanded) {
-    kb.inline_keyboard.push([{ text: "⚡ ── HawkX Tools ── ⚡", callback_data: "launch_f_noop" }]);
+    // (HawkX Tools separator removed — tools listed directly)
   }
   // Bundle selector — inside Advanced
   if (advExpanded && bundleExpanded) {
@@ -921,6 +923,15 @@ function buildLaunchForm(userId) {
     if (lpHas(info, "decimals")) toolBtns.push({ text: `🔢 Decimals: ${decimals}`, callback_data: "launch_f_decimals" });
     if (lpHas(info, "teamalloc")) toolBtns.push({ text: `👥 Team Alloc: ${teamAlloc > 0 ? teamAlloc+"%" : "OFF"}`, callback_data: "launch_f_teamalloc" });
     if (lpHas(info, "creatorfee")) toolBtns.push({ text: `💵 Creator Fee: ${creatorFee > 0 ? creatorFee+"%" : "OFF"}`, callback_data: "launch_f_creatorfee" });
+    if (lp === "pump") {
+      toolBtns.push({ text: "💰 Earn", callback_data: "launch_f_feeinfo" });
+      toolBtns.push({ text: feeCharity ? "❤️ Fees → Charity ✅" : "❤️ Fees → Charity", callback_data: "launch_f_feecharity" });
+      toolBtns.push({ text: `🪙 Paired: ${pairToken}`, callback_data: "launch_f_pairtoken" });
+    }
+    if (lp === "letsbonk") {
+      toolBtns.push({ text: "💰 Earn", callback_data: "launch_f_feeinfo_bonk" });
+      toolBtns.push({ text: `🪙 Paired: ${pairToken === "USD1" ? "USD1" : "SOL"}`, callback_data: "launch_f_pairtoken" });
+    }
     for (let i = 0; i < toolBtns.length; i += 2) {
       kb.inline_keyboard.push(toolBtns.slice(i, i + 2));
     }
@@ -952,14 +963,14 @@ async function showLaunchScreen(ctx, userId) {
     `Create and launch your own token in\nseconds. Pick a launchpad to start.\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
     `🌊 *pump.fun* — simplest, instant\n` +
+    `🟡 *LetsBonk* — meme focused, you earn forever\n` +
     `🔵 *Raydium LaunchLab* — advanced control\n` +
     `🟣 *Meteora DBC* — dynamic curve\n` +
-    `🟡 *LetsBonk* — meme focused\n` +
     `🌙 *Moonshot* — mobile first\n\n` +
     `📜 My Launches: *${launches.length}*`;
   const kb = { inline_keyboard: [
-    [{ text: "🌊 pump.fun", callback_data: "launch_lp_pump" }, { text: "🔵 Raydium LaunchLab", callback_data: "launch_lp_launchlab" }],
-    [{ text: "🟣 Meteora DBC", callback_data: "launch_lp_meteora" }, { text: "🟡 LetsBonk", callback_data: "launch_lp_letsbonk" }],
+    [{ text: "🌊 pump.fun", callback_data: "launch_lp_pump" }, { text: "🟡 LetsBonk", callback_data: "launch_lp_letsbonk" }],
+    [{ text: "🔵 Raydium LaunchLab", callback_data: "launch_lp_launchlab" }, { text: "🟣 Meteora DBC", callback_data: "launch_lp_meteora" }],
     [{ text: "🌙 Moonshot", callback_data: "launch_lp_moonshot" }],
     [{ text: `📜 My Launches (${launches.length})`, callback_data: "launch_my_list" }],
     [{ text: "← Back", callback_data: "menu_main" }],
