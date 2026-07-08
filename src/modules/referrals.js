@@ -13,7 +13,11 @@ const PROMOTER_L1_RATE = 0.35;
 function getReferralRate(referrerId, level) {
   const referrer = db.getUser(referrerId);
   if (!referrer) return STANDARD_RATES[level] || 0;
-  if (level === 0 && referrer.promoter_status === 1) return PROMOTER_L1_RATE;
+  if (level === 0 && referrer.promoter_status === 1) {
+    const custom = referrer.promoter_rate;
+    if (custom && custom > 0) return custom;
+    return PROMOTER_L1_RATE;
+  }
   return STANDARD_RATES[level] || 0;
 }
 

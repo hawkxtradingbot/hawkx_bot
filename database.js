@@ -107,6 +107,7 @@ function runMigrations(d) {
         tx_hash TEXT DEFAULT '',
         sent_by INTEGER,
         created_at TEXT DEFAULT (datetime('now')))`,
+      "ALTER TABLE users ADD COLUMN promoter_rate REAL DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (

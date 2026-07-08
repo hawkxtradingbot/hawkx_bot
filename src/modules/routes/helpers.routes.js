@@ -351,9 +351,11 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   const payoutLabel = payoutIdx ? `W${payoutIdx}` : "Custom";
 
   let msg = `💰 *HawkX Referrals*\n\n`;
-  if (isPromoter) msg += `🌟 *Promoter Account* — L1: 35%\n\n`;
+  const promoRate = (freshUser.promoter_rate && freshUser.promoter_rate > 0) ? Math.round(freshUser.promoter_rate * 100) : 35;
+  const l1Rate = isPromoter ? promoRate : 30;
+  if (isPromoter) msg += `🌟 *Promoter Account* — L1: ${promoRate}%\n\n`;
   msg += `*Your Rates:*\n`;
-  msg += `L1: ${isPromoter ? "35" : "30"}% | L2: 4% | L3: 3% | L4: 2% | L5: 1.5% | L6: 1%\n\n`;
+  msg += `L1: ${l1Rate}% | L2: 4% | L3: 3% | L4: 2% | L5: 1.5% | L6: 1%\n\n`;
   msg += `👥 Direct referrals: *${dirCount}*\n`;
   msg += `💎 Total earned: *${(total?.total || 0).toFixed(6)} SOL*\n`;
   msg += `✅ Claimed: *${(paid?.total || 0).toFixed(6)} SOL*\n`;

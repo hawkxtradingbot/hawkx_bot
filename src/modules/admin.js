@@ -529,37 +529,38 @@ async function handleAdminTextInput(ctx, pendingKey) {
 
   if (pendingKey === "admin_add_promoter") {
     const targetId = parseInt(text);
-    if (isNaN(targetId)) {
-      await ctx.reply("❌ Invalid user ID. Enter numbers only.");
-      return;
-    }
+    if (isNaN(targetId)) { await ctx.reply("❌ Invalid user ID. Enter numbers only."); return; }
     const targetUser = db.getUser(targetId);
     if (!targetUser) {
       await ctx.reply(`❌ User ${targetId} not found in database.`);
       db.setSysConfig(`pending_${adminId}`, "");
       return;
     }
-    const count = db.getDb()
-      .prepare("SELECT COUNT(*) as cnt FROM users WHERE promoter_status = 1")
-      .get()?.cnt || 0;
-    if (count >= 100) {
-      await ctx.reply("❌ Max 100 promoter slots reached.");
-      db.setSysConfig(`pending_${adminId}`, "");
-      return;
-    }
-    db.updateUser(targetId, { promoter_status: 1 });
+    const count = db.getDb().prepare("SELECT COUNT(*) as cnt FROM users WHERE promoter_status = 1").get()?.cnt || 0;
+    if (count >= 100) { await ctx.reply("❌ Max 100 promoter slots reached."); db.setSysConfig(`pending_${adminId}`, ""); return; }
+    // Step 1 done → store target, ask for the custom rate
+    db.setSysConfig(`promoter_target_${adminId}`, String(targetId));
+    db.setSysConfig(`pending_${adminId}`, "admin_promoter_rate");
+    await ctx.reply(`Set the L1 referral rate for *${targetUser.username || targetId}*.\n\nEnter a % (e.g. 35, 40, 50).\nStandard users get 30%.`, { parse_mode: "Markdown" });
+    return;
+  }
+
+  if (pendingKey === "admin_promoter_rate") {
+    const rate = parseFloat(text);
+    if (isNaN(rate) || rate <= 0 || rate > 90) { await ctx.reply("❌ Enter a valid % between 1 and 90."); return; }
+    const targetId = parseInt(db.getSysConfig(`promoter_target_${adminId}`) || "0");
+    const targetUser = db.getUser(targetId);
+    if (!targetUser) { await ctx.reply("❌ Target user lost, try again."); db.setSysConfig(`pending_${adminId}`, ""); return; }
+    db.updateUser(targetId, { promoter_status: 1, promoter_rate: rate / 100 });
     db.setSysConfig(`pending_${adminId}`, "");
-    await ctx.reply(
-      `✅ *${targetUser.username || targetId}* is now a Promoter.\n\nThey now earn *35%* on L1 referrals.`,
-      { parse_mode: "Markdown" }
-    );
-    // Notify the user
+    db.setSysConfig(`promoter_target_${adminId}`, "");
+    const code = db.ensureReferralCode(targetId);
+    await ctx.reply(`✅ *${targetUser.username || targetId}* is now a Promoter at *${rate}%* L1.`, { parse_mode: "Markdown" });
+    // Professional welcome DM
     try {
-      await ctx.api.sendMessage(
-        targetId,
-        `🌟 *Congratulations!*\n\nYou have been made a *Promoter* on HawkX.\n\nYour L1 referral rate is now *35%* instead of 30%.\n\nShare your referral link and earn more! 🦅`,
-        { parse_mode: "Markdown" }
-      );
+      await ctx.api.sendMessage(targetId,
+        `🦅 *Welcome to the HawkX Partner Program*\n\nYou're now an official HawkX promoter.\n\n💰 Your rate: *${rate}%* lifetime rev-share on every trader you refer\n🔗 Your code: \`${code}\`\n📊 Track referrals & earnings in the Referrals menu anytime\n\nGlad to have you with us. Let's grow together.\n\n— The HawkX Team\n_Always Watching. Always First._`,
+        { parse_mode: "Markdown" });
     } catch {}
     return;
   }
