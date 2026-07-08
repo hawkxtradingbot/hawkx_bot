@@ -25,6 +25,7 @@ async function handleStart(ctx, bot) {
 
   let user    = db.getUser(userId);
   const isNew = !user;
+  if (isNew) { try { db.setSysConfig(`terms_accepted_${ctx.from.id}`, new Date().toISOString() + "|v1"); } catch {} }
 
   if (isNew) {
     db.createUser({
@@ -81,7 +82,8 @@ async function handleStart(ctx, bot) {
       "━━━━━━━━━━━━━━━━━━\n\n" +
       "The fastest Solana trading bot.\n" +
       "✅ Your wallet is ready.\n\n" +
-      "Pick how you want to start 👇";
+      "Pick how you want to start 👇\n\n" +
+      "_By continuing, you agree to our Terms & Privacy Policy. HawkX is non-custodial and not financial advice — trade at your own risk. You must be 18+. See 📜 Terms in Help._";
     await ctx.reply(newMsg, {
       parse_mode: "Markdown",
       reply_markup: {

@@ -71,6 +71,7 @@ async function handleDevToolCallbacks(ctx, data, userId, user, bot, ks) {
         "🛟 Support: @CryptoFazl";
       const helpKb = { inline_keyboard: [
         [{ text: "📖 FAQ — Common Questions", callback_data: "help_faq" }],
+        [{ text: "📜 Terms & Privacy", callback_data: "help_legal" }],
         [{ text: "💬 Community", url: "https://t.me/HawkxUserVerify" }, { text: "📢 Updates", url: "https://t.me/HawkxUpdates" }],
         [{ text: "← Back", callback_data: "menu_main" }],
       ] };
@@ -115,6 +116,34 @@ async function handleDevToolCallbacks(ctx, data, userId, user, bot, ks) {
       const kb = { inline_keyboard: [[{ text: "← Back to FAQ", callback_data: "help_faq" }]] };
       try { await ctx.editMessageText(FAQ[data], { parse_mode: "Markdown", reply_markup: kb }); }
       catch { await ctx.reply(FAQ[data], { parse_mode: "Markdown", reply_markup: kb }); }
+      return true;
+    }
+
+    // ── TERMS & PRIVACY ──────────────────────────────────────
+    if (data === "help_legal") {
+      await ctx.answerCallbackQuery();
+      const msg = "📜 *HawkX Terms & Privacy*\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Terms — Quick Summary*\n" +
+        "• HawkX is a non-custodial tool, not a bank, broker, or advisor.\n" +
+        "• Nothing here is financial advice. Trade at your own risk.\n" +
+        "• Crypto is volatile — you can lose all your funds. Transactions are irreversible.\n" +
+        "• We charge a trading fee (shown in-bot, lower as your rank rises).\n" +
+        "• You're responsible for your keys, decisions, taxes, and local laws.\n" +
+        "• Provided \"as is\" — no guarantees on uptime/execution. Not liable for losses.\n" +
+        "• Must be 18+ and legally allowed to trade crypto where you live.\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "*Privacy — Quick Summary*\n" +
+        "• We collect only what's needed: Telegram ID, wallet addresses, trades, settings.\n" +
+        "• Private keys are encrypted (AES-256). We never sell data or access your keys.\n" +
+        "• Non-custodial — your funds are always yours.\n" +
+        "• Blockchain transactions are public and permanent.\n\n" +
+        "━━━━━━━━━━━━━━━━━━━\n" +
+        "_By using HawkX you agree to these terms._\n" +
+        "Full docs: linktr.ee/hawkxbot";
+      const kb = { inline_keyboard: [[{ text: "← Back", callback_data: "menu_help" }]] };
+      try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
+      catch { await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb }); }
       return true;
     }
 
