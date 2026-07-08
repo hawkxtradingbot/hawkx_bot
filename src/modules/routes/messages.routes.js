@@ -28,6 +28,11 @@ function setupMessages(bot) {
     const userId = ctx.from?.id;
     if (!userId) return;
     const pending = db.getSysConfig(`pending_${userId}`) || "";
+    // Admin broadcast with photo
+    if (pending === "admin_broadcast" && isAdmin(userId)) {
+      await handleAdminTextInput(ctx, "admin_broadcast");
+      return;
+    }
     if (pending === "launch_image_input") {
       const promptId = parseInt(db.getSysConfig(`prompt_msg_${userId}`) || "0");
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
@@ -61,6 +66,17 @@ function setupMessages(bot) {
         if (launchMsgId) await ctx.api.editMessageText(ctx.chat.id, launchMsgId, imgMsg, { parse_mode: "Markdown", reply_markup: imgKb });
         else { const s = await ctx.reply(imgMsg, { parse_mode: "Markdown", reply_markup: imgKb }); db.setSysConfig(`launch_msg_${userId}`, String(s.message_id)); }
       } catch { const s = await ctx.reply(imgMsg, { parse_mode: "Markdown", reply_markup: imgKb }); db.setSysConfig(`launch_msg_${userId}`, String(s.message_id)); }
+    }
+  });
+
+  // Admin broadcast with video / gif / document
+  bot.on(["message:video", "message:animation", "message:document"], async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+    const pending = db.getSysConfig(`pending_${userId}`) || "";
+    if (pending === "admin_broadcast" && isAdmin(userId)) {
+      await handleAdminTextInput(ctx, "admin_broadcast");
+      return;
     }
   });
 
@@ -105,10 +121,11 @@ function setupMessages(bot) {
     // If the user pastes a full valid Solana CA while stuck in some other
     // input flow, treat it as "scan this token" and jump to the scanner.
     // EXCLUDES flows where pasting a CA is the expected input (they handle it themselves).
-    const caPasteFlows = ["lo_paste_ca", "dca_paste_ca", "cw_paste_wallet", "cch_paste", "snipe_paste_ca", "watchlist_add_ca", "launch_paste_ca", "referral_enter_code", "referral_customize_code"];
+    const caPasteFlows = ["lo_paste_ca", "dca_paste_ca", "cw_paste_wallet", "cch_paste", "snipe_paste_ca", "watchlist_add_ca", "launch_paste_ca", "referral_enter_code", "referral_customize_code", "admin_track_add"];
     if (
       pending &&
       !caPasteFlows.includes(pending) &&
+      !pending.startsWith("admin_") &&
       text.length >= 43 && text.length <= 44 &&
       /^[1-9A-HJ-NP-Za-km-z]+$/.test(text) &&
       !ks

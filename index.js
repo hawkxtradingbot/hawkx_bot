@@ -6,6 +6,7 @@ const db      = require("./database");
 
 const { setupRouter }          = require("./src/modules/router");
 const { startRankCron } = require("./src/modules/ranks");
+const { startPriceNotifier } = require("./src/modules/priceNotifier");
 const { startPayoutCron } = require("./src/modules/referrals");
 const { startHealthMonitor }   = require("./src/modules/rpcFailover");
 const { setBotRef, notify }    = require("./src/modules/notifications");
@@ -167,6 +168,7 @@ bot.start({
 
 // ── BACKGROUND JOBS ──────────────────────────────────────────
 startRankCron(notifyCallback);
+startPriceNotifier(bot);
 startPayoutCron(bot);
 startHealthMonitor();
 

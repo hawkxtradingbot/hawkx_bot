@@ -78,6 +78,35 @@ function runMigrations(d) {
       "ALTER TABLE snipes ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       "ALTER TABLE settings ADD COLUMN lb_display_name TEXT DEFAULT NULL",
       "ALTER TABLE settings ADD COLUMN lb_anonymous INTEGER DEFAULT 0",
+      `CREATE TABLE IF NOT EXISTS tracked_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_ca TEXT UNIQUE NOT NULL,
+        label TEXT DEFAULT '',
+        added_by INTEGER,
+        active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS airdrop_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_ca TEXT NOT NULL,
+        label TEXT DEFAULT '',
+        criteria_json TEXT DEFAULT '[]',
+        rows_json TEXT DEFAULT '[]',
+        total_amount REAL DEFAULT 0,
+        recipient_count INTEGER DEFAULT 0,
+        reward_type TEXT DEFAULT 'SOL',
+        created_by INTEGER,
+        created_at TEXT DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS reward_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token_ca TEXT,
+        reward_type TEXT DEFAULT 'SOL',
+        amount REAL DEFAULT 0,
+        reason TEXT DEFAULT '',
+        status TEXT DEFAULT 'sent',
+        tx_hash TEXT DEFAULT '',
+        sent_by INTEGER,
+        created_at TEXT DEFAULT (datetime('now')))`,
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (
@@ -1263,7 +1292,176 @@ function getLbSettings(userId) {
   return getDb().prepare("SELECT lb_display_name, lb_anonymous FROM settings WHERE user_id = ?").get(userId) || {};
 }
 
+
+// ── ADMIN: TRACKED TOKENS + REWARDS ──────────────────────────
+function addTrackedToken(ca, label, adminId) {
+  try {
+    getDb().prepare("INSERT OR IGNORE INTO tracked_tokens (token_ca, label, added_by) VALUES (?, ?, ?)").run(ca, label || '', adminId);
+    return { ok: true };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+function getTrackedTokens() {
+  return getDb().prepare("SELECT * FROM tracked_tokens WHERE active=1 ORDER BY created_at DESC").all();
+}
+function removeTrackedToken(id) {
+  getDb().prepare("UPDATE tracked_tokens SET active=0 WHERE id=?").run(id);
+}
+function getTrackedTokenTraders(ca) {
+  return getDb().prepare(
+    "SELECT user_id, COALESCE(SUM(sol_amount),0) vol, COUNT(*) trades FROM trades WHERE token_ca=? AND status='confirmed' GROUP BY user_id ORDER BY vol DESC"
+  ).all(ca).map(r => {
+    const u = getUser(r.user_id);
+    return { userId: r.user_id, name: u && u.username ? '@'+u.username : 'user'+r.user_id, rank: u?u.rank:1, volume: r.vol, trades: r.trades };
+  });
+}
+function logReward(userId, tokenCa, type, amount, reason, adminId, txHash) {
+  getDb().prepare("INSERT INTO reward_log (user_id, token_ca, reward_type, amount, reason, sent_by, tx_hash) VALUES (?,?,?,?,?,?,?)")
+    .run(userId, tokenCa||'', type, amount, reason||'', adminId, txHash||'');
+}
+function getRewardHistory(limit=20) {
+  return getDb().prepare("SELECT * FROM reward_log ORDER BY created_at DESC LIMIT ?").all(limit);
+}
+function alreadyRewarded(userId, reason) {
+  const r = getDb().prepare("SELECT 1 FROM reward_log WHERE user_id=? AND reason=? LIMIT 1").get(userId, reason);
+  return !!r;
+}
+
+
+// ── AIRDROP: RICH TRADER ANALYTICS ───────────────────────────
+function getTokenTraderAnalytics(ca) {
+  // Per-user stats for a token, derived from the trades table
+  const rows = getDb().prepare(`
+    SELECT user_id, wallet_id,
+      COALESCE(SUM(sol_amount),0) volume,
+      SUM(CASE WHEN action='buy' THEN 1 ELSE 0 END) buys,
+      SUM(CASE WHEN action='sell' THEN 1 ELSE 0 END) sells,
+      SUM(CASE WHEN action='buy' THEN token_amount ELSE 0 END) bought_tokens,
+      SUM(CASE WHEN action='sell' THEN token_amount ELSE 0 END) sold_tokens,
+      MIN(timestamp) first_trade,
+      MAX(timestamp) last_trade,
+      MIN(CASE WHEN action='buy' THEN timestamp END) first_buy,
+      MAX(CASE WHEN action='sell' THEN timestamp END) last_sell
+    FROM trades
+    WHERE token_ca=? AND status='confirmed'
+    GROUP BY user_id, wallet_id
+    ORDER BY volume DESC
+  `).all(ca);
+
+  return rows.map(r => {
+    const u = getUser(r.user_id);
+    const w = getDb().prepare("SELECT public_key FROM wallets WHERE wallet_id=?").get(r.wallet_id);
+    // Hold time: first buy -> last sell (or now if still holding)
+    let holdDays = 0, stillHolding = false;
+    if (r.first_buy) {
+      const start = new Date(r.first_buy).getTime();
+      const end = r.last_sell ? new Date(r.last_sell).getTime() : Date.now();
+      holdDays = Math.max(0, (end - start) / 86400000);
+      stillHolding = (r.bought_tokens - r.sold_tokens) > 0.000001;
+    }
+    return {
+      userId: r.user_id,
+      walletId: r.wallet_id,
+      wallet: w ? w.public_key : '',
+      name: u && u.username ? '@'+u.username : 'user'+r.user_id,
+      rank: u ? u.rank : 1,
+      volume: r.volume,
+      buys: r.buys,
+      sells: r.sells,
+      netTokens: r.bought_tokens - r.sold_tokens,
+      holdDays: Math.round(holdDays * 10) / 10,
+      stillHolding,
+      firstTrade: r.first_trade,
+      lastTrade: r.last_trade,
+    };
+  });
+}
+
+// Apply criteria tiers to traders. criteria = [{field, op, value, amount}], mode = 'stack'|'highest'
+function applyCriteria(traders, criteria, mode) {
+  const results = [];
+  for (const t of traders) {
+    const matched = [];
+    for (const c of criteria) {
+      let val;
+      if (c.field === 'volume') val = t.volume;
+      else if (c.field === 'buys') val = t.buys;
+      else if (c.field === 'sells') val = t.sells;
+      else if (c.field === 'holdDays') val = t.holdDays;
+      else if (c.field === 'any') { matched.push(c); continue; }
+      else continue;
+      let ok = false;
+      if (c.op === '>=') ok = val >= c.value;
+      else if (c.op === '>') ok = val > c.value;
+      else if (c.op === '<=') ok = val <= c.value;
+      else if (c.op === '<') ok = val < c.value;
+      else if (c.op === '==') ok = val == c.value;
+      if (ok) matched.push(c);
+    }
+    if (!matched.length) continue;
+    let amount = 0, tierLabel = '';
+    if (mode === 'highest') {
+      const best = matched.reduce((a,b) => b.amount > a.amount ? b : a);
+      amount = best.amount; tierLabel = best.label || (best.field+best.op+best.value);
+    } else { // stack
+      amount = matched.reduce((s,c) => s + c.amount, 0);
+      tierLabel = matched.map(c => c.label || (c.field+c.op+c.value)).join('+');
+    }
+    results.push({ wallet: t.wallet, name: t.name, userId: t.userId, amount, tier: tierLabel, volume: t.volume, buys: t.buys, sells: t.sells, holdDays: t.holdDays });
+  }
+  return results;
+}
+
+function saveSnapshot(ca, label, criteria, rows, rewardType, adminId) {
+  const total = rows.reduce((s,r) => s + r.amount, 0);
+  const info = getDb().prepare("INSERT INTO airdrop_snapshots (token_ca, label, criteria_json, rows_json, total_amount, recipient_count, reward_type, created_by) VALUES (?,?,?,?,?,?,?,?)")
+    .run(ca, label||'', JSON.stringify(criteria), JSON.stringify(rows), total, rows.length, rewardType, adminId);
+  return info.lastInsertRowid;
+}
+function getSnapshot(id) {
+  const s = getDb().prepare("SELECT * FROM airdrop_snapshots WHERE id=?").get(id);
+  if (s) { s.criteria = JSON.parse(s.criteria_json||'[]'); s.rows = JSON.parse(s.rows_json||'[]'); }
+  return s;
+}
+function getSnapshots(limit=20) {
+  return getDb().prepare("SELECT id, token_ca, label, total_amount, recipient_count, reward_type, created_at FROM airdrop_snapshots ORDER BY created_at DESC LIMIT ?").all(limit);
+}
+
+
+function getTokenName(ca) {
+  const r = getDb().prepare("SELECT token_name FROM trades WHERE token_ca=? AND token_name IS NOT NULL AND token_name != '' ORDER BY timestamp DESC LIMIT 1").get(ca);
+  return r && r.token_name ? r.token_name : ca.slice(0,8);
+}
+
+// ── TRENDING TOKENS (admin) ──────────────────────────────────
+function getTrendingTokens(hours = 24, limit = 10) {
+  const since = new Date(Date.now() - hours*3600000).toISOString().replace('T',' ').slice(0,19);
+  return getDb().prepare(`
+    SELECT token_ca, token_name,
+      COUNT(DISTINCT user_id) buyers,
+      COUNT(*) trades,
+      COALESCE(SUM(sol_amount),0) volume
+    FROM trades
+    WHERE action='buy' AND status='confirmed' AND timestamp >= ?
+    GROUP BY token_ca
+    ORDER BY buyers DESC, volume DESC
+    LIMIT ?
+  `).all(since, limit);
+}
+
+// ── PRICE-MOVEMENT NOTIFICATIONS ─────────────────────────────
+// Each user's open positions with entry price, for the notifier to compare vs live price.
+function getAllOpenPositionsForNotify() {
+  return getDb().prepare(`
+    SELECT position_id, user_id, token_ca, token_name, buy_price, wallet_id
+    FROM positions
+    WHERE token_amount > 0 AND buy_price > 0 AND status='open'
+  `).all();
+}
+
 module.exports = {
+  getTrendingTokens, getAllOpenPositionsForNotify, getTokenName,
+  getTokenTraderAnalytics, applyCriteria, saveSnapshot, getSnapshot, getSnapshots,
+  addTrackedToken, getTrackedTokens, removeTrackedToken, getTrackedTokenTraders, logReward, getRewardHistory, alreadyRewarded,
   getVolumeLeaderboard, getReferralLeaderboard, getReferralCount, getUserVolumeRank, setLbDisplayName, setLbAnonymous, getLbSettings,
   getDb, getUser, createUser, updateUser, getAllUsers,
   setUserMode, setSapHash, clearSap,
