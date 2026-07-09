@@ -179,9 +179,41 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   const settings    = db.getSettings(user.user_id) || {};
   const slippage    = settings.slippage_pct || 10;
-  const price       = getMockPrice(ca);
-  const tokenAmount = (solAmount / price) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
-  const txHash      = `DEVNET_BUY_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
+
+  // ── REAL EXECUTION (mainnet, MOCK_TRADES=false) ──────────────
+  const REAL = process.env.MOCK_TRADES === "false";
+  let realTxHash = null, realTokenAmount = null, realPrice = null;
+  if (REAL) {
+    try {
+      const { realBuy } = require("./jupiterSwap");
+      const { decryptWallet } = require("./walletVault");
+      const keypair = decryptWallet(user.active_wallet_id);
+      const solLamports = Math.floor(solAmount * 1e9);
+      const slippageBps = Math.floor(slippage * 100); // 10% -> 1000 bps
+      const speed = settings.speed_mode || "standard";
+      const jitoTipLamports = settings.jito_tip_lamports || 0;
+      const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports });
+      if (!r.ok) {
+        const em = String(r.error||"swap failed").replace(/[_*`[\]]/g,"");
+        if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy failed: " + em); } catch {} }
+        else { await ctx.reply("❌ Buy failed: " + em); }
+        return null;
+      }
+      realTxHash = r.signature;
+      // outAmount is in token base units; convert using token decimals if known (default 9)
+      realTokenAmount = Number(r.outAmount) / 1e9;
+      realPrice = realTokenAmount > 0 ? solAmount / realTokenAmount : 0;
+    } catch (err) {
+      const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
+      if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy error: " + em); } catch {} }
+      else { await ctx.reply("❌ Buy error: " + em); }
+      return null;
+    }
+  }
+
+  const price       = REAL ? (realPrice || getMockPrice(ca)) : getMockPrice(ca);
+  const tokenAmount = REAL ? realTokenAmount : (solAmount / price) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
+  const txHash      = REAL ? realTxHash : `DEVNET_BUY_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
   const feeRate     = getEffectiveFeeRate(user);
   const feeSol      = solAmount * feeRate;
   let tokenName = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
@@ -202,8 +234,8 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     } catch {}
   }
   
-  // Update mock wallet balance (devnet) — deduct SOL spent
-  try {
+  // Update mock wallet balance (devnet only) — deduct SOL spent
+  if (!REAL) try {
     const buyWallet = db.getWallet(user.active_wallet_id);
     if (buyWallet) {
       const curBal = parseFloat(db.getSysConfig(`mock_balance_${buyWallet.public_key}`) || "0");
@@ -213,7 +245,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   const tradeId = db.recordTrade({
     userId: user.user_id, walletId: user.active_wallet_id,
-    tokenCa: ca, tokenName, platform: "devnet_mock",
+    tokenCa: ca, tokenName, platform: (process.env.MOCK_TRADES === "false") ? "jupiter" : "devnet_mock",
     action: "buy", solAmount, tokenAmount,
     priceSol: price, feeSol, feeRate, txHash, status: "confirmed",
   });
@@ -307,18 +339,53 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
     return null;
   }
 
-  const currentPrice  = simulatePriceMovement(position.token_ca);
-  const pnlPct        = position.buy_price > 0
-    ? ((currentPrice - position.buy_price) / position.buy_price * 100)
-    : 0;
   const sellFraction  = pctToSell / 100;
-  const solReceived   = position.sol_invested * (1 + pnlPct / 100) * sellFraction;
+  const REAL_S = process.env.MOCK_TRADES === "false";
+
+  let currentPrice, pnlPct, solReceived, txHash, realSellDone = false;
+
+  if (REAL_S) {
+    try {
+      const { realSell } = require("./jupiterSwap");
+      const { decryptWallet } = require("./walletVault");
+      const settingsS = db.getSettings(user.user_id) || {};
+      const sellWalletId = position.wallet_id || user.active_wallet_id;
+      const keypair = decryptWallet(sellWalletId);
+      // Tokens to sell = position token_amount * fraction, in base units (default 9 decimals)
+      const tokensToSell = (position.token_amount || 0) * sellFraction;
+      const tokenAmountRaw = Math.floor(tokensToSell * 1e9);
+      if (tokenAmountRaw <= 0) { await ctx.reply("❌ Nothing to sell."); return null; }
+      const slippageBpsS = Math.floor(((db.getSettings(user.user_id)||{}).slippage_pct || 10) * 100);
+      const speedS = settingsS.speed_mode || "standard";
+      const jitoTipS = settingsS.jito_tip_lamports || 0;
+      const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS });
+      if (!rs.ok) {
+        const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
+        await ctx.reply("❌ Sell failed: " + em);
+        return null;
+      }
+      solReceived = Number(rs.outAmount) / 1e9;
+      currentPrice = (position.token_amount > 0) ? (solReceived / (position.token_amount * sellFraction)) : position.buy_price;
+      pnlPct = position.buy_price > 0 ? ((currentPrice - position.buy_price) / position.buy_price * 100) : 0;
+      txHash = rs.signature;
+      realSellDone = true;
+    } catch (err) {
+      const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
+      await ctx.reply("❌ Sell error: " + em);
+      return null;
+    }
+  } else {
+    currentPrice  = simulatePriceMovement(position.token_ca);
+    pnlPct        = position.buy_price > 0 ? ((currentPrice - position.buy_price) / position.buy_price * 100) : 0;
+    solReceived   = position.sol_invested * (1 + pnlPct / 100) * sellFraction;
+    txHash        = `DEVNET_SELL_${Date.now()}`;
+  }
+
   const feeRate       = getEffectiveFeeRate(user);
   const feeSol        = solReceived * feeRate;
-  const txHash        = `DEVNET_SELL_${Date.now()}`;
 
-  // Update mock wallet balance (devnet) — credit proceeds minus fee
-  try {
+  // Update mock wallet balance (devnet only) — credit proceeds minus fee
+  if (!REAL_S) try {
     const sellWalletId = user.active_wallet_id || position.wallet_id;
     const sellWallet = db.getWallet(sellWalletId);
     if (sellWallet) {
