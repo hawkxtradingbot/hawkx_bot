@@ -157,6 +157,7 @@ function setupMessages(bot) {
       "set_sell_pct_2",
       "set_sell_pct_3",
       "sap_set_new",
+      "sap_confirm",
       "sap_verify_change",
       "ab_set_amount",
         "ab_set_slippage",

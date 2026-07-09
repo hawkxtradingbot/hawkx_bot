@@ -341,14 +341,37 @@ async function handleTextInput(ctx, user, pendingKey) {
             if (text.length < 6 || text.length > 34) {
               await ctx.reply("❌ PIN must be 6–34 characters."); handled = false; break;
             }
-            const hash = await bcrypt.hash(text, 10);
-            db.setSapHash(userId, hash);
+            db.setSysConfig(`sap_pin1_${userId}`, text);
+            db.setSysConfig(`pending_${userId}`, "sap_confirm");
             await ctx.reply(
-              "✅ *Security PIN set!*\n\n" +
-              "Required before: withdrawing and exporting your key.\n" +
-              "⚠️ *Save it — cannot be recovered.*",
+              "🔁 *Confirm Your PIN*\n\nYou entered:\n`" + text + "`\n\nRe-type the same PIN to confirm.",
               { parse_mode: "Markdown" }
             );
+            break;
+          }
+
+      case "sap_confirm": {
+            const pin1 = db.getSysConfig(`sap_pin1_${userId}`) || "";
+            if (text !== pin1) {
+              db.setSysConfig(`sap_pin1_${userId}`, "");
+              db.setSysConfig(`pending_${userId}`, "sap_set_new");
+              await ctx.reply(
+                "❌ *PINs Don't Match*\n\nFirst:  `" + pin1 + "`\nSecond: `" + text + "`\n\nLet's try again — enter a new PIN.",
+                { parse_mode: "Markdown" }
+              );
+              break;
+            }
+            const hash = await bcrypt.hash(text, 10);
+            db.setSapHash(userId, hash);
+            db.setSysConfig(`sap_pin1_${userId}`, "");
+            const okMsg = await ctx.reply(
+              "✅ *PIN Set Successfully!*\n\nYour PIN:  `" + text + "`\n\n⚠️ *Save it now* — HawkX can't recover a lost PIN.\n_This message self-deletes in 15s._",
+              { parse_mode: "Markdown" }
+            );
+            setTimeout(async () => {
+              try { await ctx.api.deleteMessage(ctx.chat.id, okMsg.message_id); } catch {}
+              try { await ctx.api.sendMessage(userId, "🔐 PIN saved. Required before withdrawing or exporting your key."); } catch {}
+            }, 15000);
             break;
           }
             case "sap_verify_remove": {
