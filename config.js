@@ -50,16 +50,11 @@ const config = Object.freeze({
     rank7: 0.0050,
   },
 
-  // ── RANK THRESHOLDS (devnet = lowered for fast testing) ──
-  RANK_THRESHOLDS: {
-    1: 0,
-    2: 0.1,    // mainnet: 10 SOL
-    3: 0.5,    // mainnet: 50 SOL
-    4: 1,      // mainnet: 200 SOL
-    5: 2,      // mainnet: 500 SOL
-    6: 5,      // mainnet: 1000 SOL
-    7: 10,     // mainnet: 2000 SOL
-  },
+  // ── RANK THRESHOLDS — auto-switch by network ──
+  // Mainnet uses real SOL-volume thresholds; devnet uses tiny ones for fast testing.
+  RANK_THRESHOLDS: (process.env.MOCK_TRADES === "false")
+    ? { 1: 0, 2: 10, 3: 50, 4: 200, 5: 500, 6: 1000, 7: 2000 }   // MAINNET (real)
+    : { 1: 0, 2: 0.1, 3: 0.5, 4: 1, 5: 2, 6: 5, 7: 10 },          // DEVNET (test)
 
   // ── RANK NAMES — #02 Option A ──
   RANK_NAMES: {

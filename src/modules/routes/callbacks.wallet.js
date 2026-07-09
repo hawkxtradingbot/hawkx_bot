@@ -631,17 +631,73 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       const parts = data.split("_");
       const raw = parts[2];
       const token = parts[3];
-      // Handle both "2SOL" (custom) and "50" (percent)
+      const walletId = parts[4];
       const amtLabel = String(raw).endsWith("SOL") ? String(raw).replace("SOL", " SOL") : raw + "%";
+      const destAddr = db.getSysConfig(`withdraw_addr_${userId}`) || "";
       await ctx.answerCallbackQuery(`Sending ${amtLabel} ${token}...`);
-      // Clear withdraw session
-      db.setSysConfig(`withdraw_pending_${userId}`, "");
-      db.setSysConfig(`withdraw_addr_${userId}`, "");
-      await ctx.reply(
-        `✅ *Withdraw Sent* [DEVNET]\n\nSent *${amtLabel}* of ${token}.\n\n_Devnet simulation — no real funds moved._`,
-        { parse_mode: "Markdown" }
-      );
-      return;
+
+      const REAL_W = process.env.MOCK_TRADES === "false";
+
+      if (!REAL_W) {
+        db.setSysConfig(`withdraw_pending_${userId}`, "");
+        db.setSysConfig(`withdraw_addr_${userId}`, "");
+        await ctx.reply(
+          `✅ *Withdraw Sent* [DEVNET]\n\nSent *${amtLabel}* of ${token}.\n\n_Devnet simulation — no real funds moved._`,
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
+      // ── REAL WITHDRAW (mainnet) ──
+      try {
+        const { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = require("@solana/web3.js");
+        const { decryptWallet } = require("../walletVault");
+        const wId = walletId || (db.getUser(userId) || {}).active_wallet_id;
+        const keypair = decryptWallet(wId);
+        const url = process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL;
+        const connection = new Connection(url, "confirmed");
+
+        // Validate destination
+        let destPubkey;
+        try { destPubkey = new PublicKey(destAddr); } catch { await ctx.reply("❌ Invalid destination address."); return true; }
+
+        // Determine lamports to send
+        const balLamports = await connection.getBalance(keypair.publicKey);
+        let lamports;
+        if (String(raw).endsWith("SOL")) {
+          lamports = Math.floor(parseFloat(String(raw).replace("SOL","")) * LAMPORTS_PER_SOL);
+        } else {
+          const pct = parseFloat(raw) / 100;
+          lamports = Math.floor(balLamports * pct);
+        }
+        // Leave a small buffer for fees (~5000 lamports) if sending "max"/100%
+        const feeBuffer = 5000;
+        if (lamports > balLamports - feeBuffer) lamports = balLamports - feeBuffer;
+        if (lamports <= 0) { await ctx.reply("❌ Insufficient balance after fees."); return true; }
+
+        const tx = new Transaction().add(SystemProgram.transfer({
+          fromPubkey: keypair.publicKey, toPubkey: destPubkey, lamports,
+        }));
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = keypair.publicKey;
+        tx.sign(keypair);
+
+        const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
+        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+
+        db.setSysConfig(`withdraw_pending_${userId}`, "");
+        db.setSysConfig(`withdraw_addr_${userId}`, "");
+        const sentSol = (lamports / LAMPORTS_PER_SOL).toFixed(6);
+        await ctx.reply(
+          `✅ *Withdraw Complete*\n\nSent *${sentSol} SOL*\nTo: \`${destAddr}\`\n\n🔗 [View on Solscan](https://solscan.io/tx/${sig})`,
+          { parse_mode: "Markdown", disable_web_page_preview: true }
+        );
+      } catch (err) {
+        const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
+        await ctx.reply("❌ Withdraw failed: " + em);
+      }
+      return true;
     }
 
 

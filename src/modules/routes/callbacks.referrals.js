@@ -36,17 +36,60 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     if (data === "referral_claim_confirm") {
+      const wallets = db.getWallets(userId) || [];
+      let payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
+      const pw = wallets.find(w => w.public_key === payoutAddr);
+      const pwLabel = pw ? `W${wallets.indexOf(pw)+1}` : "Custom";
+      const REAL_P = process.env.MOCK_TRADES === "false";
+
+      if (REAL_P) {
+        // Real payout from treasury — check treasury is configured
+        const treasuryKey = process.env.TREASURY_PRIVATE_KEY || "";
+        if (!treasuryKey) {
+          await ctx.answerCallbackQuery({ text: "Payouts not active yet. Contact support.", show_alert: true });
+          return true;
+        }
+        // Peek pending BEFORE marking paid, so we know how much to send
+        const pendingRow = db.getPendingEarnings(userId);
+        const pendingSol = (pendingRow && pendingRow.total) ? pendingRow.total : 0;
+        if (pendingSol < 0.01) {
+          await ctx.answerCallbackQuery({ text: `Need 0.01 SOL. You have ${pendingSol.toFixed(4)}.`, show_alert: true });
+          return true;
+        }
+        try {
+          const { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Keypair } = require("@solana/web3.js");
+          const bs58 = require("bs58");
+          const connection = new Connection(process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL, "confirmed");
+          const treasury = Keypair.fromSecretKey(bs58.decode(treasuryKey));
+          const dest = new PublicKey(payoutAddr);
+          const lamports = Math.floor(pendingSol * LAMPORTS_PER_SOL);
+          const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: dest, lamports }));
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = blockhash; tx.feePayer = treasury.publicKey; tx.sign(treasury);
+          const sig = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
+          await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+          // Only mark paid AFTER the transfer confirms
+          db.claimEarnings(userId, 0.01);
+          await ctx.answerCallbackQuery("✅ Sent!");
+          await ctx.reply(
+            `✅ *Claimed ${pendingSol.toFixed(4)} SOL!*\n\nSent to: *${pwLabel}*\n\`${payoutAddr.slice(0,16)}...\`\n\n🔗 [Solscan](https://solscan.io/tx/${sig})`,
+            { parse_mode: "Markdown", disable_web_page_preview: true }
+          );
+        } catch (err) {
+          const em = String(err.message||"error").replace(/[_*\`[\]]/g,"");
+          await ctx.answerCallbackQuery({ text: "Payout failed: " + em.slice(0,60), show_alert: true });
+          return true;
+        }
+        return buildReferralScreen(ctx, userId, false);
+      }
+
+      // DEVNET simulated
       const result = db.claimEarnings(userId, 0.01);
       if (!result.ok) {
         await ctx.answerCallbackQuery({ text: `⏳ Need ${result.min} SOL. You have ${result.pending.toFixed(4)} SOL.`, show_alert: true });
         return true;
       }
-      const wallets = db.getWallets(userId) || [];
-      let payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
-      const pw = wallets.find(w => w.public_key === payoutAddr);
-      const pwLabel = pw ? `W${wallets.indexOf(pw)+1}` : "Custom";
       await ctx.answerCallbackQuery("✅ Claimed!");
-      // DEVNET: simulated. MAINNET TODO: real SOL transfer to payoutAddr.
       await ctx.reply(
         `✅ *Claimed ${result.claimed.toFixed(4)} SOL!*\n\nSent to: *${pwLabel}*\n\`${payoutAddr.slice(0,16)}...\`\n\n_[DEVNET — simulated. Real transfer on mainnet.]_`,
         { parse_mode: "Markdown" }
