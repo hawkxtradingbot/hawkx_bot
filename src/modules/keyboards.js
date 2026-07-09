@@ -100,7 +100,7 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
     kb.text('📍 Limit', 'menu_limit_orders').text('📉 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('🏆 Leaderboard', 'menu_leaderboard').text('❓ Help', 'menu_help').row();
-    kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
+    if (process.env.MOCK_TRADES !== "false") kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
     kb.text('⚡ Pro Mode →', 'mode_set_pro').row();
   }
   return kb;
@@ -254,7 +254,8 @@ function buildWalletMenu(wallets, activeWalletId, mode = "pro") {
     kb.text("📋 Copy Address", "wallet_copy_address").text("✏️ Rename", "wallet_rename").row();
     kb.text(" Deposit 🟢",  "wallet_deposit").text("🔴 Withdraw ", "wallet_withdraw").row();
     kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
-    kb.text("➕ New Wallet",  "wallet_generate").text("🚰 Airdrop SOL", "devnet_faucet").row();
+    if (process.env.MOCK_TRADES !== "false") kb.text("➕ New Wallet", "wallet_generate").text("🚰 Airdrop SOL", "devnet_faucet").row();
+    else kb.text("➕ New Wallet", "wallet_generate").row();
   } else {
     // BEGINNER — simplified (Delete on top, then Deposit/Withdraw/Import/Export/New)
     if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
@@ -692,7 +693,7 @@ function buildRankUpBanner(user, rankName, fee) {
     6:"Shark in the water. 🦅", 7:"The Hawk never misses. 🦅",
   };
   return (
-    `🦅 *RANK UP!* [DEVNET]\n\n` +
+    `🦅 *RANK UP!*\n\n` +
     `👤 ${user.username||"Trader"}\n` +
     `🏅 Rank: *${rankName}* (${user.rank}/7)\n` +
     `📈 Volume: *${(user.cumulative_volume_sol||0).toFixed(2)} SOL*\n` +

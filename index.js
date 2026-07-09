@@ -15,7 +15,7 @@ const { isActive: killSwitchActive } = require("./src/modules/killSwitch");
 
 // ── STARTUP LOG ───────────────────────────────────────────────
 console.log("");
-console.log("🦅 HawkX Bot V11 — DEVNET MODE");
+console.log("🦅 HawkX Bot V11 — " + (process.env.MOCK_TRADES === "false" ? "MAINNET (LIVE)" : "DEVNET MODE"));
 console.log("================================");
 console.log(`Network:     ${config.NETWORK}`);
 console.log(`RPC:         ${config.HELIUS_RPC_URL}`);
@@ -134,7 +134,7 @@ bot.on("channel_post", async (ctx) => {
 bot.start({
   onStart: async (info) => {
     console.log("");
-    console.log(`[Bot] ✅ @${info.username} is LIVE on DEVNET`);
+    console.log(`[Bot] ✅ @${info.username} is LIVE on ${process.env.MOCK_TRADES === "false" ? "MAINNET" : "DEVNET"}`);
     console.log(
       `[Kill-Switch] ${killSwitchActive() ? "🔴 ACTIVE" : "✅ OFF"}`
     );
@@ -142,7 +142,7 @@ bot.start({
     console.log("[Rate Limit]  ✅ 10 trades/min per user (#29)");
     console.log("");
     console.log("─────────────────────────────────");
-    console.log("🦅 HawkX V11 Devnet Ready!");
+    console.log(`🦅 HawkX V11 ${process.env.MOCK_TRADES === "false" ? "MAINNET" : "Devnet"} Ready!`);
     console.log("Always Watching. Always First.");
     console.log("─────────────────────────────────");
     console.log("");

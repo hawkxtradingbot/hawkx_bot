@@ -609,14 +609,14 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       db.setSysConfig(`withdraw_pending_${userId}`, `${pct}_${token}_${walletId}`);
       if (hasPIN) {
         const m = await ctx.reply(
-          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n🔐 Enter your Security PIN to confirm:`,
+          `💸 *Confirm Withdraw*\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n🔐 Enter your Security PIN to confirm:`,
           { parse_mode: "Markdown" }
         );
         db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
         db.setSysConfig(`pending_${userId}`, "withdraw_confirm_pin");
       } else {
         return safeEdit(ctx,
-          `💸 *Confirm Withdraw* [DEVNET]\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n⚠️ No Security PIN set.`,
+          `💸 *Confirm Withdraw*\n\nSending *${pct}%* of ${token}\nTo:\n\`${addr}\`\n\n⚠️ Verify the address before confirming.\n\n⚠️ No Security PIN set.`,
           { inline_keyboard: [
             [{ text: "✅ Confirm Withdraw", callback_data: `withdraw_finalsend_${pct}_${token}_${walletId}` }],
             [{ text: "🔐 Set PIN First", callback_data: "set_sap" }],

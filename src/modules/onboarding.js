@@ -54,7 +54,7 @@ async function handleStart(ctx, bot) {
   const refLink      = `https://t.me/${botUsername}?start=${myCode}`;
 
   const welcomeMsg =
-    `🦅 Welcome to HawkX [DEVNET]\n` +
+    `🦅 Welcome to HawkX\n` +
     `━━━━━━━━━━━━━━━━━━\n\n` +
     `The fastest Solana trading bot.\n\n` +
     `Rank: ${rank.name} (${freshUser.rank}/7)\n` +
@@ -77,11 +77,16 @@ async function handleStart(ctx, bot) {
 
   if (isNew) {
     // CLEAN onboarding — ONE message: short welcome + mode pick
+    const isMainnet = process.env.MOCK_TRADES === "false";
+    const startLine = isMainnet
+      ? "💰 Deposit SOL to your wallet to start trading."
+      : "🚰 Get free test SOL from the faucet to start.";
     const newMsg =
-      "🦅 *Welcome to HawkX* [DEVNET]\n" +
+      "🦅 *Welcome to HawkX*\n" +
       "━━━━━━━━━━━━━━━━━━\n\n" +
       "The fastest Solana trading bot.\n" +
-      "✅ Your wallet is ready.\n\n" +
+      "✅ Your wallet is ready.\n" +
+      startLine + "\n\n" +
       "Pick how you want to start 👇\n\n" +
       "_By continuing, you agree to our Terms & Privacy Policy. HawkX is non-custodial and not financial advice — trade at your own risk. You must be 18+. See 📜 Terms in Help._";
     await ctx.reply(newMsg, {

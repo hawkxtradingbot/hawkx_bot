@@ -62,7 +62,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const rankNames = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
       const fees = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
       const menuMsg = 
-        `🦅 *HawkX* [DEVNET] — ${mode} Mode\n\n` +
+        `🦅 *HawkX* — ${mode} Mode\n\n` +
         `🏅 Rank: *${rankNames[rank]||"Scout"}* (${rank}/7)\n` +
         `💸 Fee: *${fees[rank]||1.00}%*\n\n` +
         `${getGuide(freshUser.mode === "pro" ? "main_pro" : "main_beginner")}`;
@@ -95,7 +95,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       }
       const guide = mode === "pro" ? "main_pro" : "main_beginner";
       const label = mode === "pro" ? "⚡ Pro Mode" : "🌱 Beginner Mode";
-      return safeEdit(ctx, `🦅 *HawkX* [DEVNET] — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
+      return safeEdit(ctx, `🦅 *HawkX* — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
     }
 
     // ── RANK INFO ─────────────────────────────────────────────
