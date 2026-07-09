@@ -138,7 +138,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const name     = (pos.token_name || pos.token_ca.slice(0, 8)).slice(0, 12);
     const srcTag   = getSourceLabel(pos);
     const isSel    = selPos && pos.position_id === selPos.position_id;
-    const holdTime = formatHoldTime(pos.created_at || Date.now());
+    const holdTime = formatHoldTime(pos.opened_at || pos.created_at || Date.now());
 
     // Automation status icons (🤖 auto-sell · 📉 DCA · 📍 limit)
     let autoTag = "";
@@ -281,7 +281,7 @@ async function getTokenPosition(ctx, user, positionId) {
   const pnlUsd       = Math.abs(pnlSol * 150);
   const icon         = pnlPct >= 0 ? "🟢" : "🔴";
   const sign         = pnlPct >= 0 ? "+" : "";
-  const holdTime     = formatHoldTime(pos.created_at || Date.now());
+  const holdTime     = formatHoldTime(pos.opened_at || pos.created_at || Date.now());
 
   // Buy/sell counts + totals for this token
   let sbCount = 0, sbSol = 0, ssCount = 0, ssSol = 0;

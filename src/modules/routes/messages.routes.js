@@ -278,7 +278,7 @@ function setupMessages(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       const pct = parseInt(text);
       if (isNaN(pct) || pct <= 0 || pct > 100) { await ctx.reply("❌ Enter 1-100%."); return; }
-      const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1").get(userId, ca);
+      const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1").get(userId, ca);
       if (!pos) { await ctx.reply("❌ No position found!"); return; }
       const { mockSell } = require("../executor");
       await mockSell(ctx, user, pos, pct);

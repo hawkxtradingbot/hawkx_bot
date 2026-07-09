@@ -8,7 +8,7 @@ async function refreshLaunchTradeScreen(ctx, userId, ca) {
   const savedName = db.getSysConfig(`launched_name_${ca}`) || ca.slice(0,8);
   const savedSymbol = db.getSysConfig(`launched_symbol_${ca}`) || "???";
   const price = getMockPrice(ca);
-  const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1").get(userId, ca);
+  const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1").get(userId, ca);
   const holding = pos ? (pos.token_amount || 0) : 0;
   const holdingSol = pos ? ((pos.token_amount||0) * price) : 0;
   // Mock stats (real at mainnet)
@@ -680,7 +680,7 @@ async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
       const parts = data.replace("launch_token_sell_", "").split("_");
       const pct = parseInt(parts[parts.length-1]);
       const ca = parts.slice(0,-1).join("_");
-      const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1").get(userId, ca);
+      const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1").get(userId, ca);
       if (!pos) { await ctx.answerCallbackQuery({ text: "❌ You don't hold this token", show_alert: true }); return true; }
       const { mockSell } = require("../executor");
       try {

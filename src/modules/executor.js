@@ -299,7 +299,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     });
 
     positionId = result?.lastInsertRowid || db.getDb()
-      .prepare("SELECT position_id FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1")
+      .prepare("SELECT position_id FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1")
       .get(user.user_id, ca)?.position_id;
 
     // Save template to position
