@@ -347,6 +347,7 @@ async function handleTextInput(ctx, user, pendingKey) {
               "🔁 *Confirm Your PIN*\n\nYou entered:\n`" + text + "`\n\nRe-type the same PIN to confirm.",
               { parse_mode: "Markdown" }
             );
+            handled = false; // keep sap_confirm pending — don't let cleanup clear it
             break;
           }
 
@@ -359,6 +360,7 @@ async function handleTextInput(ctx, user, pendingKey) {
                 "❌ *PINs Don't Match*\n\nFirst:  `" + pin1 + "`\nSecond: `" + text + "`\n\nLet's try again — enter a new PIN.",
                 { parse_mode: "Markdown" }
               );
+              handled = false; // keep sap_set_new pending for the retry
               break;
             }
             const hash = await bcrypt.hash(text, 10);
