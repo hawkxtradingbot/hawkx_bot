@@ -406,6 +406,15 @@ const t = text.trim().toLowerCase();
         return;
       }
       const loType = db.getSysConfig(`lo_type_${userId}`) || "buy";
+      // Deposit-first guard for BUY limit orders (sell orders need tokens, not SOL)
+      if (loType === "buy") {
+        const loUser = db.getUser(userId);
+        const loAddr = (db.getWallet(loUser.active_wallet_id) || {}).public_key;
+        const loBal = await db.getWalletBalance(loAddr);
+        if (!loBal || loBal <= 0) {
+          return ctx.reply("💰 *Deposit SOL first*\n\nYour wallet is empty. Add SOL in the Wallet menu before setting a buy limit order.", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "💼 Go to Wallet", callback_data: "menu_wallets" }]] } });
+        }
+      }
       const tInfo = await getTokenInfo(text);
       const tName = tInfo?.name || text.slice(0,8);
       db.setSysConfig(`lo_pending_ca_${userId}`, text);
@@ -505,6 +514,13 @@ const t = text.trim().toLowerCase();
       const ca = text.trim();
       if (!ca || ca.length < 32) { await ctx.reply("❌ Invalid token CA. Try again."); return; }
       db.setSysConfig(`pending_${userId}`, "");
+      // Deposit-first guard: block only if zero balance
+      const dcaUser = db.getUser(userId);
+      const dcaAddr = (db.getWallet(dcaUser.active_wallet_id) || {}).public_key;
+      const dcaBal = await db.getWalletBalance(dcaAddr);
+      if (!dcaBal || dcaBal <= 0) {
+        return ctx.reply("💰 *Deposit SOL first*\n\nYour wallet is empty. Add SOL in the Wallet menu before setting up a DCA order.", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "💼 Go to Wallet", callback_data: "menu_wallets" }]] } });
+      }
       db.setSysConfig(`dca_msg_${userId}`, ""); // fresh screen
       const { showTokenDca } = require("./callbacks.dca");
       return showTokenDca(ctx, userId, ca);

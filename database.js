@@ -412,7 +412,13 @@ async function getWalletBalance(address) {
     const saved = getSysConfig(`mock_balance_${address}`);
     return saved ? parseFloat(saved) : 0;
   }
-  return 0;
+  // MAINNET: fetch real on-chain balance
+  try {
+    const { Connection, PublicKey, LAMPORTS_PER_SOL } = require("@solana/web3.js");
+    const conn = new Connection(process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL, "confirmed");
+    const lamports = await conn.getBalance(new PublicKey(address));
+    return lamports / LAMPORTS_PER_SOL;
+  } catch { return 0; }
 }
 
 function getWithdrawalWhitelist(userId) {
