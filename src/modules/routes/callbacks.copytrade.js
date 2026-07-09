@@ -187,8 +187,8 @@ function buildChScreen(ch, expanded = false) {
     try { bl = JSON.parse(ch.blacklist || "[]"); } catch {}
     msg += `\n\n🔍 *FILTERS:*\n` +
       `💧 Min Liquidity: *${ch.min_liquidity ? ch.min_liquidity + " SOL" : "OFF"}*\n` +
-      `📊 Max MCap: *${ch.max_mcap ? "$" + (ch.max_mcap/1000) + "K" : "OFF"}*\n` +
-      `📉 Min MCap: *${ch.min_mcap ? "$" + (ch.min_mcap/1000) + "K" : "OFF"}*\n` +
+      `🧢 Max MCap: *${ch.max_mcap ? "$" + (ch.max_mcap/1000) + "K" : "OFF"}*\n` +
+      `🧢 Min MCap: *${ch.min_mcap ? "$" + (ch.min_mcap/1000) + "K" : "OFF"}*\n` +
       `⏰ Min Token Age: *${ch.min_token_age ? ch.min_token_age + " min" : "OFF"}*\n` +
       `🚫 Blacklist: *${bl.length ? bl.join(", ") : "None"}*`;
   }

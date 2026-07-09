@@ -459,7 +459,7 @@ async function refreshMsnipeScreen(ctx, userId) {
          { text: `⛽ ${gas}SOL`, callback_data: "msnipe_set_gas" }],
         [{ text: mev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ❌", callback_data: "msnipe_toggle_mev" }],
         [{ text: `🤖 Auto Sell: ${asOn ? `ON ✅ — ${tpl?.name||"No template"}` : "OFF ❌"}`, callback_data: "msnipe_open_as" }],
-        [{ text: `💧 Min Liq: ${db.getSysConfig("msnipe_minliq_" + userId) || 0} SOL`, callback_data: "msnipe_set_minliq" }, { text: `📊 Max MCap: ${db.getSysConfig("msnipe_maxmcap_" + userId) || 0}`, callback_data: "msnipe_set_maxmcap" }],
+        [{ text: `💧 Min Liq: ${db.getSysConfig("msnipe_minliq_" + userId) || 0} SOL`, callback_data: "msnipe_set_minliq" }, { text: `🧢 Max MCap: ${db.getSysConfig("msnipe_maxmcap_" + userId) || 0}`, callback_data: "msnipe_set_maxmcap" }],
         [{ text: "✏️ Rename Setup", callback_data: "msnipe_rename" }, { text: "✅ Start Sniping", callback_data: "msnipe_confirm" }],
         [{ text: "← Back", callback_data: "sniper_migration_menu" }],
       ]};

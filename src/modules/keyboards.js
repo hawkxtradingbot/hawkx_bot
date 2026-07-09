@@ -91,13 +91,13 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
 
   if (isProMode) {
     kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
-    kb.text('📍 Limit', 'menu_limit_orders').text('📉 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
+    kb.text('📍 Limit', 'menu_limit_orders').text('🔁 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
     kb.text('🚀 Launch Token', 'menu_launch').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('🏆 Leaderboard', 'menu_leaderboard').text('❓ Help', 'menu_help').row();
     kb.text('🌱 Beginner Mode →', 'mode_set_beginner').row();
   } else {
-    kb.text('📍 Limit', 'menu_limit_orders').text('📉 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
+    kb.text('📍 Limit', 'menu_limit_orders').text('🔁 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('🏆 Leaderboard', 'menu_leaderboard').text('❓ Help', 'menu_help').row();
     if (process.env.MOCK_TRADES !== "false") kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
@@ -252,14 +252,14 @@ function buildWalletMenu(wallets, activeWalletId, mode = "pro") {
     // PRO — full menu
     if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
     kb.text("📋 Copy Address", "wallet_copy_address").text("✏️ Rename", "wallet_rename").row();
-    kb.text(" Deposit 🟢",  "wallet_deposit").text("🔴 Withdraw ", "wallet_withdraw").row();
+    kb.text(" Deposit 🟢",  "wallet_deposit").text("📤 Withdraw ", "wallet_withdraw").row();
     kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
     if (process.env.MOCK_TRADES !== "false") kb.text("➕ New Wallet", "wallet_generate").text("🚰 Airdrop SOL", "devnet_faucet").row();
     else kb.text("➕ New Wallet", "wallet_generate").row();
   } else {
     // BEGINNER — simplified (Delete on top, then Deposit/Withdraw/Import/Export/New)
     if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
-    kb.text(" Deposit 🟢",  "wallet_deposit").text("🔴 Withdraw ", "wallet_withdraw").row();
+    kb.text(" Deposit 🟢",  "wallet_deposit").text("📤 Withdraw ", "wallet_withdraw").row();
     kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
     kb.text("➕ New Wallet",  "wallet_generate").row();
   }
@@ -361,9 +361,9 @@ function buildCopyChannelSettingsMenu(ch, expanded = false) {
   if (expanded) {
     kb.text("🔍 Filters ▲", `cch_filters_collapse_${ch.id}`).row();
     kb.text(`💧 Min Liq: ${ch.min_liquidity ? ch.min_liquidity + " SOL" : "OFF"}`, `cch_minliq_${ch.id}`)
-      .text(`📊 Max MCap: ${ch.max_mcap ? (ch.max_mcap/1000) + "K" : "OFF"}`, `cch_maxmcap_${ch.id}`)
+      .text(`🧢 Max MCap: ${ch.max_mcap ? (ch.max_mcap/1000) + "K" : "OFF"}`, `cch_maxmcap_${ch.id}`)
       .row();
-    kb.text(`📉 Min MCap: ${ch.min_mcap ? (ch.min_mcap/1000) + "K" : "OFF"}`, `cch_minmcap_${ch.id}`)
+    kb.text(`🧢 Min MCap: ${ch.min_mcap ? (ch.min_mcap/1000) + "K" : "OFF"}`, `cch_minmcap_${ch.id}`)
       .text(`⏰ Min Age: ${ch.min_token_age ? ch.min_token_age + "m" : "OFF"}`, `cch_minage_${ch.id}`)
       .row();
     kb.text("🚫 Blacklist Words", `cch_blacklist_${ch.id}`).row();
@@ -430,7 +430,7 @@ function buildSniperConfigMenu(cfg) {
   kb.text(cfg.use_lightning_rpc ? "✅ ⚡ Lightning RPC" : "◻️ ⚡ Lightning RPC", `scfg_rpc_${cfg.id}`).row();
   kb.text(`Max Snipes: ${cfg.max_snipes||5}`, `scfg_max_${cfg.id}`).row();
   // Filters
-  kb.text(`💧 Min Liq: ${cfg.min_liquidity||0} SOL`, `scfg_minliq_${cfg.id}`).text(`📊 Max MCap: ${cfg.market_cap_min||0}`, `scfg_maxmcap_${cfg.id}`).row();
+  kb.text(`💧 Min Liq: ${cfg.min_liquidity||0} SOL`, `scfg_minliq_${cfg.id}`).text(`🧢 Max MCap: ${cfg.market_cap_min||0}`, `scfg_maxmcap_${cfg.id}`).row();
   kb.text(`👤 Dev%: ${cfg.dev_holding_max||100}%`, `scfg_dev_${cfg.id}`).text(cfg.mint_auth_revoked ? "✅ Mint Rev" : "◻️ Mint Rev", `scfg_mint_${cfg.id}`).row();
   kb.text(cfg.freeze_auth_revoked ? "✅ Freeze Rev" : "◻️ Freeze Rev", `scfg_freeze_${cfg.id}`).text(cfg.platform_launchlab ? "✅ HawkX Launch" : "◻️ HawkX Launch", `scfg_hawkx_${cfg.id}`).row();
   kb.text("✏️ Rename", `scfg_rename_${cfg.id}`).text(cfg.active ? "✅ Active — tap to pause" : "⏸ Paused — tap to activate", `sniper_config_toggle_${cfg.id}`).row();
@@ -707,7 +707,7 @@ function buildRankUpBanner(user, rankName, fee) {
 const GUIDES = {
   main_beginner: "🌱 *Beginner Mode*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n⚙️ Settings — customise bot\n💰 Referrals — earn rewards\n❓ Help — support & guide\n━━━━━━━━━━━━━━━━━━━",
 
-  main_pro: "🦅 HawkX — Always Watching. Always First.\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n📍 Limit Orders — set price targets\n📉 DCA — auto-buy in chunks over time\n⚙️ Settings — customise bot\n🚀 Launch Token — launch your token\n🔔 Watchlist — track tokens & set price alerts\n💰 Referrals — earn rewards\n❓ Help — support\n━━━━━━━━━━━━━━━━━━━",
+  main_pro: "🦅 HawkX — Always Watching. Always First.\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n📍 Limit Orders — set price targets\n🔁 DCA — auto-buy in chunks over time\n⚙️ Settings — customise bot\n🚀 Launch Token — launch your token\n🔔 Watchlist — track tokens & set price alerts\n💰 Referrals — earn rewards\n❓ Help — support\n━━━━━━━━━━━━━━━━━━━",
 
   positions:     "📂 Filter by All / Manual / Channel / Copy Wallet. Tap token name to manage.",
   wallets:       "💼 Tap wallet to switch. Deposit · Withdraw · Import · Export all here.",

@@ -32,7 +32,7 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
       const cfg = db.getSniperConfig(id, userId);
       return safeEdit(
         ctx,
-        "🎯 *Auto Sniper Setup*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause",
+        "🎯 *Auto Sniper Setup*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n🧢 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause",
         buildSniperConfigMenu(cfg),
       );
     }
@@ -45,7 +45,7 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
         return true;
       }
       await ctx.answerCallbackQuery();
-      await safeEdit(ctx, `🎯 *${cfg.label}*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n📊 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause`, buildSniperConfigMenu(cfg));
+      await safeEdit(ctx, `🎯 *${cfg.label}*\n\n━━━━━━━━━━━━━━━━━━━\n⚡ *Trade Settings*\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n🎯 Tip — Jito bundle tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n🔍 *Safety Filters*\n💧 Min Liq — min pool SOL\n🧢 Max MCap — max market cap\n👤 Dev% — max dev holdings\n✅ Mint Rev — mint authority off\n✅ Freeze Rev — freeze auth off\n━━━━━━━━━━━━━━━━━━━\n📦 *Platforms*\nRaydium | Pumpfun | Moonshot\n🦅 HawkX Launch\n━━━━━━━━━━━━━━━━━━━\n💾 *Auto-saves instantly* — no save button needed\n✏️ Rename | ✅ Activate | ⏸ Pause`, buildSniperConfigMenu(cfg));
       db.setSysConfig(`scfg_msg_${userId}`, String(ctx.callbackQuery?.message?.message_id || 0));
       return true;
     }
@@ -147,7 +147,7 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
       }
       if (data === "msnipe_set_maxmcap") {
         await ctx.answerCallbackQuery();
-        const m = await ctx.reply("📊 Max MCap USD (0=off, e.g. 500000 or 500K):");
+        const m = await ctx.reply("🧢 Max MCap USD (0=off, e.g. 500000 or 500K):");
         db.setSysConfig(`prompt_msg_${userId}`, String(m.message_id));
         db.setSysConfig(`pending_${userId}`, "msnipe_maxmcap");
         return true;
@@ -648,7 +648,7 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
         tip: { pending: `scfg_set_tip_${id}`, msg: "Enter Jito tip SOL:" },
         max: { pending: `scfg_set_max_${id}`, msg: "Enter max snipes (e.g. 5):" },
         minliq: { pending: `scfg_set_minliq_${id}`, msg: "💧 Min Liquidity SOL (0=off, e.g. 5):" },
-        maxmcap: { pending: `scfg_set_maxmcap_${id}`, msg: "📊 Max MCap USD (0=off, e.g. 500000):" },
+        maxmcap: { pending: `scfg_set_maxmcap_${id}`, msg: "🧢 Max MCap USD (0=off, e.g. 500000):" },
         dev: { pending: `scfg_set_dev_${id}`, msg: "👤 Max Dev Holding % (100=off, e.g. 10):" },
       };
 
