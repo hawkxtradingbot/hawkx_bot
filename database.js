@@ -613,7 +613,7 @@ function openPosition(data) {
 }
 
 function getOpenPositions(userId) {
-  return getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND status = 'open' ORDER BY created_at DESC")
+  return getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC")
     .all(userId);
 }
 
@@ -621,17 +621,17 @@ function getPositionsBySource(userId, source) {
   if (!source || source === "all") return getOpenPositions(userId);
   if (source === "manual") {
     return getDb().prepare(
-      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source IN ('manual','sniper','auto_buy') ORDER BY created_at DESC"
+      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source IN ('manual','sniper','auto_buy') ORDER BY opened_at DESC"
     ).all(userId);
   }
   if (source === "channel") {
     return getDb().prepare(
-      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source = 'copy_channel' ORDER BY created_at DESC"
+      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source = 'copy_channel' ORDER BY opened_at DESC"
     ).all(userId);
   }
   if (source === "copy_wallet") {
     return getDb().prepare(
-      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source = 'copy_wallet' ORDER BY created_at DESC"
+      "SELECT * FROM positions WHERE user_id = ? AND status = 'open' AND source = 'copy_wallet' ORDER BY opened_at DESC"
     ).all(userId);
   }
   return getOpenPositions(userId);
