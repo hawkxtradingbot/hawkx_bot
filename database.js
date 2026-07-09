@@ -20,6 +20,8 @@ function getDb() {
 
 function runMigrations(d) {
   const migrations = [
+    "ALTER TABLE users ADD COLUMN referral_code TEXT",
+    "ALTER TABLE users ADD COLUMN custom_code TEXT",
     "ALTER TABLE positions ADD COLUMN source TEXT DEFAULT 'manual'",
     "ALTER TABLE positions ADD COLUMN source_ref TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN promoter_status INTEGER DEFAULT 0",
