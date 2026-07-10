@@ -1,7 +1,7 @@
 // M26 — Portfolio V13
 const db  = require("../../database");
 const { simulatePriceMovement } = require("./executor");
-const { getTokenInfo, formatNum, formatPrice } = require("./tokenInfo");
+const { getTokenInfo, getTokenSafety, formatAge, formatNum, formatPrice } = require("./tokenInfo");
 const { InlineKeyboard } = require("grammy");
 
 const SOURCE_LABELS = {
