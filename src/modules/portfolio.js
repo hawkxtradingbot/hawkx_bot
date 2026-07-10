@@ -371,21 +371,37 @@ async function getTokenPosition(ctx, user, positionId) {
     }
   }
 
+  // ── Redesigned position card (Option 3: entry vs current + % change) ──
+  const entryMcStr = (pos.entry_mcap && pos.entry_mcap > 0) ? formatNum(pos.entry_mcap) : "—";
+  const entryPxStr = pos.buy_price > 0 ? formatPrice(pos.buy_price) : "—";
+  const curMcStr   = tokenData.mcap ? formatNum(tokenData.mcap) : "—";
+  const curPxStr   = tokenData.price ? formatPrice(tokenData.price) : formatPrice(currentPrice);
+  const liqStr     = tokenData.liquidity ? formatNum(tokenData.liquidity) : "—";
+  const ageStr2    = formatAge(tokenData.pairCreatedAt) || "—";
+  // price change since entry
+  const chgPct = pos.buy_price > 0 && tokenData.price ? ((tokenData.price - pos.buy_price) / pos.buy_price * 100) : pnlPct;
+  const chgChip = `${chgPct >= 0 ? "🟢 +" : "🔴 "}${chgPct.toFixed(1)}%`;
+  // holdings USD value = tokens * current USD price
+  const holdUsd = (pos.token_amount || 0) * (tokenData.price || 0);
+  const boughtUsd = sbSol * solPriceUsd;
+  const soldUsd   = ssSol * solPriceUsd;
+  const pnlUsdSigned = pnlSol * solPriceUsd;
+
   const msg =
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
     `📋 <code>${pos.token_ca}</code>\n\n` +
-    `💰 Bought <b>${sbSol.toFixed(3)} SOL</b> (${(sbSol*solPriceUsd).toFixed(2)}) · ${sbCount} times\n` +
-    `📤 Sold <b>${ssSol.toFixed(3)} SOL</b> (${(ssSol*solPriceUsd).toFixed(2)}) · ${ssCount} times\n` +
-    `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
-    `📈 Current Value: <b>${currentValue.toFixed(4)} SOL</b>\n` +
-    `P&L: <b>${formatPnl(pnlPct)}</b> | ${formatSol(pnlSol)} SOL | ${pnlUsd.toFixed(2)}\n` +
+    `📥 <b>Entry:</b> MC ${entryMcStr} · 💰 ${entryPxStr}\n` +
+    `💰 <b>Bought:</b> ${sbSol.toFixed(3)} SOL (${boughtUsd.toFixed(2)}) · ${sbCount}x\n` +
+    `📊 <b>Current:</b> MC ${curMcStr} · 💰 ${curPxStr} (${chgChip})\n` +
+    `💧 Liq ${liqStr} · 🕐 Age ${ageStr2}\n` +
+    `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount}x\n\n` +
+    `💎 <b>Holding:</b> ${(pos.token_amount||0).toLocaleString()} (≈ ${holdUsd.toFixed(2)})\n` +
+    `📈 <b>P&L:</b> ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL · ${pnlUsdSigned.toFixed(2)})\n` +
     `⏱ Held: <b>${holdTime}</b>\n` +
-    (marketLine ? `\n${marketLine}` : "") +
-    (scannerLine ? scannerLine : "") +
+    (scannerLine ? `\n${scannerLine}` : "") +
     (autoSummary ? autoSummary : "") +
     (autoSellLine || "") +
-    `\n💼 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>`;
+    `\n👛 ${activeWallet?.label || "Wallet"}: <b>${walletBal.toFixed(4)} SOL</b>`;
 
   const b1 = settings.buy_amt_1 || 0.1;
   const b2 = settings.buy_amt_2 || 0.5;
