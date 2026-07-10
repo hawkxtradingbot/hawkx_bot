@@ -9,8 +9,10 @@ const { SystemProgram, TransactionMessage, PublicKey: PK } = require("@solana/we
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const JITO_ENGINE = process.env.JITO_BLOCK_ENGINE_URL || "https://mainnet.block-engine.jito.wtf";
 const JITO_TIP_ACCOUNT = process.env.JITO_TIP_ACCOUNT || "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5";
-const JUP_QUOTE = "https://quote-api.jup.ag/v6/quote";
-const JUP_SWAP  = "https://quote-api.jup.ag/v6/swap";
+// Jupiter API base — configurable via .env. Free tier: lite-api.jup.ag/swap/v1. Pro (with key): api.jup.ag/swap/v1
+const JUP_BASE  = process.env.JUPITER_API_BASE || "https://lite-api.jup.ag/swap/v1";
+const JUP_QUOTE = JUP_BASE + "/quote";
+const JUP_SWAP  = JUP_BASE + "/swap";
 
 function getConnection() {
   const url = process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL || "https://api.mainnet-beta.solana.com";
