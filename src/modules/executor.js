@@ -231,12 +231,17 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
       const pairs  = dexRes.data?.pairs;
       if (pairs && pairs.length > 0) {
-        entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
-        const sym = pairs[0].baseToken?.symbol;
+        // Prefer the most-liquid pair (pairs[0] is usually it, but pick highest liquidity to be safe)
+        const best = pairs.reduce((a, b) => ((b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a), pairs[0]);
+        entryMcap = Number(best.marketCap || best.fdv || 0);
+        const sym = best.baseToken?.symbol;
         if (sym) tokenName = sym;
-        // Capture real USD price at buy time so P&L compares like-for-like (USD vs USD)
-        const pxUsd = parseFloat(pairs[0].priceUsd || 0);
+        const pxUsd = parseFloat(best.priceUsd || 0);
         if (REAL && pxUsd > 0) realUsdPrice = pxUsd;
+        // Fallback: if mcap missing but we have price + supply, estimate it
+        if (!entryMcap && pxUsd > 0 && best.baseToken?.totalSupply) {
+          entryMcap = pxUsd * Number(best.baseToken.totalSupply);
+        }
       }
     } catch {}
   }
