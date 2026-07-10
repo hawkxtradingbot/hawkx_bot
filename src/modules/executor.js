@@ -202,8 +202,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
         return null;
       }
       realTxHash = r.signature;
-      // outAmount is in token base units; convert using token decimals if known (default 9)
-      realTokenAmount = Number(r.outAmount) / 1e9;
+      // outAmount is in token base units; convert using the token's REAL decimals
+      const buyDecimals = (typeof r.decimals === "number") ? r.decimals : 9;
+      realTokenAmount = Number(r.outAmount) / Math.pow(10, buyDecimals);
       realPrice = realTokenAmount > 0 ? solAmount / realTokenAmount : 0;
     } catch (err) {
       const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
@@ -372,8 +373,10 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const sellWalletId = position.wallet_id || user.active_wallet_id;
       const keypair = decryptWallet(sellWalletId);
       // Tokens to sell = position token_amount * fraction, in base units (default 9 decimals)
+      const { getTokenDecimals } = require("./jupiterSwap");
+      const sellDecimals = await getTokenDecimals(position.token_ca);
       const tokensToSell = (position.token_amount || 0) * sellFraction;
-      const tokenAmountRaw = Math.floor(tokensToSell * 1e9);
+      const tokenAmountRaw = Math.floor(tokensToSell * Math.pow(10, sellDecimals));
       if (tokenAmountRaw <= 0) { await ctx.reply("❌ Nothing to sell."); return null; }
       const slippageBpsS = Math.floor(((db.getSettings(user.user_id)||{}).slippage_pct || 10) * 100);
       const speedS = settingsS.speed_mode || "standard";

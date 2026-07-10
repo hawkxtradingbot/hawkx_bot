@@ -102,11 +102,22 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
 }
 
 // High-level: buy a token with SOL
+async function getTokenDecimals(mint) {
+  try {
+    const conn = getConnection();
+    const { PublicKey } = require("@solana/web3.js");
+    const info = await conn.getParsedAccountInfo(new PublicKey(mint));
+    const dec = info?.value?.data?.parsed?.info?.decimals;
+    return (typeof dec === "number") ? dec : 9;
+  } catch { return 9; }
+}
+
 async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol }) {
   const quote = await getQuote(SOL_MINT, tokenMint, String(solLamports), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
   const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
-  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount };
+  const decimals = await getTokenDecimals(tokenMint);
+  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.
@@ -114,7 +125,8 @@ async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed
   const quote = await getQuote(tokenMint, SOL_MINT, String(tokenAmountRaw), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
   const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
-  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount };
+  const decimals = await getTokenDecimals(tokenMint);
+  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
 }
 
 // Send a signed, serialized transaction as a Jito bundle (tip must already be in the tx or Jupiter's fee)
@@ -133,4 +145,4 @@ async function sendViaJito(base64Tx) {
 }
 
 module.exports = {
-  sendViaJito, getConnection, getQuote, executeSwap, realBuy, realSell, priorityFeeForSpeed, SOL_MINT };
+  sendViaJito, getConnection, getQuote, executeSwap, realBuy, realSell, getTokenDecimals, priorityFeeForSpeed, SOL_MINT };
