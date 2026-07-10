@@ -145,9 +145,7 @@ function buildBeginnerSettingsMenu(user) {
   kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set Security PIN", "set_sap").row();
   kb.text("🌐 Language",   "set_language").row();
   kb.text("⚡ Pro Mode →", "mode_set_pro").row();
-  kb.text("← Back",    "menu_main")
-    .text("🔄 Refresh", "menu_settings")
-    .row();
+  kb.text("← Back",    "menu_main").row();
   return kb;
 }
 
@@ -163,7 +161,7 @@ function buildProSettingsMenu(user) {
   kb.text("🔐 PIN", "set_sap").text("⏱ Session", "set_session").row();
   kb.text("🌐 Language", "set_language").text(`📊 PnL: ${s.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
   kb.text("🌱 Beginner Mode", "mode_set_beginner").row();
-  kb.text("← Back", "menu_main").text("🔄 Refresh", "menu_settings").row();
+  kb.text("← Back", "menu_main").row();
   return kb;
 }
 

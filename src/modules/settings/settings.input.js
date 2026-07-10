@@ -3,6 +3,15 @@ const bcrypt = require("bcryptjs");
 const { buildProSettingsMenu, buildBeginnerSettingsMenu, buildAutoSellTemplateScreen, buildSniperConfigMenu, buildMigrationSniperMenu, buildRealtimeSnipeMenu, buildExecutionSettingsMenu, buildRiskSettingsMenu } = require("../keyboards");
 const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./settings.helpers");
 
+// Send a confirmation that auto-deletes after 2 seconds
+async function replyTemp(ctx, text, opts = {}) {
+  try {
+    const m = await ctx.reply(text, opts);
+    setTimeout(async () => { try { await ctx.api.deleteMessage(ctx.chat.id, m.message_id); } catch {} }, 2000);
+    return m;
+  } catch {}
+}
+
 async function refreshBeginnerSettings(ctx, userId) {
   try {
     const u = db.getUser(userId);
@@ -183,28 +192,28 @@ async function handleTextInput(ctx, user, pendingKey) {
         const v = parseFloat(text);
         if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
         db.updateSettings(userId, { auto_buy_sol: v });
-        await ctx.reply(`✅ Amount set: *${v} SOL*`, { parse_mode: "Markdown" });
+        await replyTemp(ctx, `✅ Amount set: *${v} SOL*`, { parse_mode: "Markdown" });
         break;
       }
       case "ab_set_slippage": {
         const v = parseFloat(text);
         if (isNaN(v) || v < 1 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
         db.updateSettings(userId, { auto_buy_slippage: v });
-        await ctx.reply(`✅ Slippage set: *${v}%*`, { parse_mode: "Markdown" });
+        await replyTemp(ctx, `✅ Slippage set: *${v}%*`, { parse_mode: "Markdown" });
         break;
       }
       case "ab_set_gas": {
         const v = parseFloat(text);
         if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
         db.updateSettings(userId, { auto_buy_gas: v });
-        await ctx.reply(`✅ Gas set: *${v} SOL*`, { parse_mode: "Markdown" });
+        await replyTemp(ctx, `✅ Gas set: *${v} SOL*`, { parse_mode: "Markdown" });
         break;
       }
       case "ab_set_max": {
         const v = parseInt(text);
         if (isNaN(v) || v < 1) { await ctx.reply("❌ Enter 1 or more."); handled = false; break; }
         db.updateSettings(userId, { auto_buy_max: v });
-        await ctx.reply(`✅ Max buys set: *${v}*`, { parse_mode: "Markdown" });
+        await replyTemp(ctx, `✅ Max buys set: *${v}*`, { parse_mode: "Markdown" });
         break;
       }
     case "set_slippage": {
@@ -213,7 +222,7 @@ async function handleTextInput(ctx, user, pendingKey) {
         await ctx.reply("❌ Enter 1–50."); handled = false; break;
       }
       db.updateSettings(userId, { slippage_pct: v });
-      await ctx.reply(`✅ Buy slippage: *${v}%*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Buy slippage: *${v}%*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       await refreshBeginnerSettings(ctx, userId);
       break;
@@ -224,7 +233,7 @@ async function handleTextInput(ctx, user, pendingKey) {
         await ctx.reply("❌ Enter 1–50."); handled = false; break;
       }
       db.updateSettings(userId, { sell_slippage_pct: v });
-      await ctx.reply(`✅ Sell slippage: *${v}%*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Sell slippage: *${v}%*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       await refreshBeginnerSettings(ctx, userId);
       break;
@@ -246,7 +255,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const v = parseFloat(text);
       if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
       db.updateSettings(userId, { jito_tip: v });
-      await ctx.reply(`✅ Jito Tip: *${v} SOL*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Jito Tip: *${v} SOL*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
     }
@@ -254,7 +263,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const v = parseFloat(text);
       if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid SOL amount."); handled = false; break; }
       db.updateSettings(userId, { speed_mode: "custom", priority_fee_manual_sol: v });
-      await ctx.reply(`✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
       await refreshBeginnerSettings(ctx, userId);
       break;
     }
@@ -314,7 +323,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const v = parseFloat(text);
       if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
       db.setSysConfig(`custom_buy_amt_${userId}`, String(v));
-      await ctx.reply(`✅ Custom buy: *${v} SOL*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Custom buy: *${v} SOL*`, { parse_mode: "Markdown" });
       break;
     }
     case "set_buy_amt_1": case "set_buy_amt_2": case "set_buy_amt_3": {
@@ -322,7 +331,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const v = parseFloat(text);
       if (isNaN(v) || v <= 0) { await ctx.reply("❌ Invalid amount."); handled = false; break; }
       db.updateSettings(userId, { [`buy_amt_${n}`]: v });
-      await ctx.reply(`✅ Buy Amount ${n}: *${v} SOL*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Buy Amount ${n}: *${v} SOL*`, { parse_mode: "Markdown" });
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       await refreshBeginnerSettings(ctx, userId);
       break;
@@ -332,7 +341,7 @@ async function handleTextInput(ctx, user, pendingKey) {
       const v = parseFloat(text);
       if (isNaN(v) || v <= 0 || v > 100) { await ctx.reply("❌ Enter 1–100."); handled = false; break; }
       db.updateSettings(userId, { [`sell_pct_${n}`]: v });
-      await ctx.reply(`✅ Sell ${n}: *${v}%*`, { parse_mode: "Markdown" });
+      await replyTemp(ctx, `✅ Sell ${n}: *${v}%*`, { parse_mode: "Markdown" });
       await refreshBeginnerSettings(ctx, userId);
       db.setSysConfig(`refresh_to_${userId}`, "pset_execution");
       break;
