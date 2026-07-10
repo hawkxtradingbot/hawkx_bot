@@ -27,6 +27,18 @@ function getSourceLabel(pos) {
   return SOURCE_LABELS[pos.source] || "🏷 Manual";
 }
 
+let _solPxCache = { px: 0, t: 0 };
+async function getSolPriceUsd() {
+  if (Date.now() - _solPxCache.t < 60000 && _solPxCache.px > 0) return _solPxCache.px;
+  try {
+    const axios = require("axios");
+    const { data } = await axios.get("https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112", { timeout: 5000 });
+    const px = data && data.pairs && data.pairs[0] ? parseFloat(data.pairs[0].priceUsd) : 0;
+    if (px > 0) { _solPxCache = { px, t: Date.now() }; return px; }
+  } catch {}
+  return _solPxCache.px || 150;
+}
+
 function formatHoldTime(createdAt) {
   const ms = Date.now() - new Date(createdAt).getTime();
   const m = Math.floor(ms / 60000);
@@ -274,11 +286,15 @@ async function getTokenPosition(ctx, user, positionId) {
   db.setSysConfig(`pending_ca_${user.user_id}`, pos.token_ca);
   db.setSysConfig(`pending_ca_time_${user.user_id}`, String(Date.now()));
 
-  const currentPrice = simulatePriceMovement(pos.token_ca);
+  const REAL_PX = process.env.MOCK_TRADES === "false";
+  // On mainnet use the live DexScreener USD price (matches stored buy_price which is USD); devnet uses mock
+  const _tokData = await getTokenInfo(pos.token_ca);
+  const currentPrice = REAL_PX ? (_tokData.price || pos.buy_price) : simulatePriceMovement(pos.token_ca);
+  const solPriceUsd  = REAL_PX ? (await getSolPriceUsd()) : 150;
   const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
   const currentValue = pos.sol_invested * (1 + pnlPct / 100);
   const pnlSol       = currentValue - pos.sol_invested;
-  const pnlUsd       = Math.abs(pnlSol * 150);
+  const pnlUsd       = Math.abs(pnlSol * solPriceUsd);
   const icon         = pnlPct >= 0 ? "🟢" : "🔴";
   const sign         = pnlPct >= 0 ? "+" : "";
   const holdTime     = formatHoldTime(pos.opened_at || pos.created_at || Date.now());
@@ -290,7 +306,7 @@ async function getTokenPosition(ctx, user, positionId) {
     const sq = db.getDb().prepare("SELECT COUNT(*) c, COALESCE(SUM(sol_amount),0) s FROM trades WHERE user_id=? AND token_ca=? AND wallet_id=? AND action='sell' AND status='confirmed'").get(pos.user_id, pos.token_ca, pos.wallet_id);
     sbCount = bq.c; sbSol = bq.s; ssCount = sq.c; ssSol = sq.s;
   } catch {}
-  const tokenData = await getTokenInfo(pos.token_ca);
+  const tokenData = _tokData;
   const dexUrl    = `https://dexscreener.com/solana/${pos.token_ca}`;
   const tokenName = tokenData.name || pos.token_name || pos.token_ca.slice(0,8);
 
@@ -359,8 +375,8 @@ async function getTokenPosition(ctx, user, positionId) {
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `📋 <code>${pos.token_ca}</code>\n\n` +
-    `💰 Bought <b>${sbSol.toFixed(3)} SOL</b> (${(sbSol*150).toFixed(2)}) · ${sbCount} times\n` +
-    `📤 Sold <b>${ssSol.toFixed(3)} SOL</b> (${(ssSol*150).toFixed(2)}) · ${ssCount} times\n` +
+    `💰 Bought <b>${sbSol.toFixed(3)} SOL</b> (${(sbSol*solPriceUsd).toFixed(2)}) · ${sbCount} times\n` +
+    `📤 Sold <b>${ssSol.toFixed(3)} SOL</b> (${(ssSol*solPriceUsd).toFixed(2)}) · ${ssCount} times\n` +
     `💎 Hold <b>${(pos.token_amount||0).toLocaleString()}</b> ${tokenName}\n` +
     `📈 Current Value: <b>${currentValue.toFixed(4)} SOL</b>\n` +
     `P&L: <b>${formatPnl(pnlPct)}</b> | ${formatSol(pnlSol)} SOL | ${pnlUsd.toFixed(2)}\n` +
