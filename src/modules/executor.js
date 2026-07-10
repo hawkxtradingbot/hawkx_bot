@@ -334,9 +334,14 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   // Open position screen (unless caller wants to handle the UI itself, e.g. refreshing a list)
   if (positionId && !opts.skipPositionScreen) {
-    const { getTokenPosition } = require("./portfolio");
-    const freshUser = db.getUser(user.user_id);
-    await getTokenPosition(ctx, freshUser, positionId);
+    try {
+      const { getTokenPosition } = require("./portfolio");
+      const freshUser = db.getUser(user.user_id);
+      await getTokenPosition(ctx, freshUser, positionId);
+    } catch (posErr) {
+      console.log("[Buy] position screen failed to open:", posErr.message);
+      try { await ctx.reply("✅ Buy complete! Open Positions to view it."); } catch {}
+    }
   }
 
   return { tradeId, txHash, feeSol };
