@@ -169,7 +169,7 @@ function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false
   const kb = new InlineKeyboard();
   const spd = s?.speed_mode || "standard";
   const mev = s?.mev_protect ?? 1;
-  const cur = s?.jito_tip || 0.0075;
+  const cur = s?.jito_tip || 0.001;
   const buySl = s?.slippage_pct || 10;
   const sellSl = s?.sell_slippage_pct || 10;
 
@@ -200,7 +200,7 @@ function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false
 
   // Jito
   if (jitoExpanded) {
-    kb.text(cur===0.0001?"✅ Min":"Min", "pset_jito_preset_0.0001").text(cur===0.005?"✅ Std":"Std", "pset_jito_preset_0.005").text(cur===0.0075?"✅ Def":"Def", "pset_jito_preset_0.0075").row();
+    kb.text(cur===0.0001?"✅ Min":"Min", "pset_jito_preset_0.0001").text(cur===0.001?"✅ Std":"Std", "pset_jito_preset_0.001").text(cur===0.005?"✅ Fast":"Fast", "pset_jito_preset_0.005").row();
     kb.text(cur===0.01?"✅ Fast":"Fast", "pset_jito_preset_0.01").text(cur===0.05?"✅ Pri":"Pri", "pset_jito_preset_0.05").text("✏️", "pset_jito_custom").row();
   } else {
     kb.text(`⚡ Jito: ${cur} SOL`, "pset_jito").row();
@@ -214,7 +214,7 @@ function buildMevSettingsMenu(s) {
   const kb  = new InlineKeyboard();
   const mev = s?.mev_protect ?? 1;
   kb.text(mev ? "✅ MEV Protection" : "⬜ MEV Protection", "set_mev").row();
-  kb.text(`⚡ Jito Tip: ${s?.jito_tip||0.0075} SOL`, "pset_jito").row();
+  kb.text(`⚡ Jito Tip: ${s?.jito_tip||0.001} SOL`, "pset_jito").row();
   kb.text("← Back", "menu_settings").row();
   return kb;
 }
@@ -417,7 +417,7 @@ function buildSniperConfigMenu(cfg) {
     .text(`📉 ${cfg.snipe_slippage||50}%`,   `scfg_slip_${cfg.id}`)
     .text(`⛽ ${cfg.snipe_fee||0.003}SOL`,   `scfg_fee_${cfg.id}`)
     .row();
-  kb.text(`🎯 Tip:${cfg.snipe_tip||0.0075}`, `scfg_tip_${cfg.id}`)
+  kb.text(`🎯 Tip:${cfg.snipe_tip||0.005}`, `scfg_tip_${cfg.id}`)
   .text(cfg.mev_protection ? "✅ MEV" : "◻️ MEV", `scfg_mev_${cfg.id}`)
     .row();
   kb.text(cfg.auto_sell_enabled ? "🤖 AutoSell ON ✅" : "🤖 AutoSell OFF ❌", `sniper_autosell_${cfg.id}`).row();

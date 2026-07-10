@@ -31,7 +31,7 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN sell_slippage_pct REAL DEFAULT 10",
     "ALTER TABLE settings ADD COLUMN confirm_trades INTEGER DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN weekly_summary INTEGER DEFAULT 1",
-    "ALTER TABLE settings ADD COLUMN jito_tip REAL DEFAULT 0.0075",
+    "ALTER TABLE settings ADD COLUMN jito_tip REAL DEFAULT 0.001",
     "ALTER TABLE settings ADD COLUMN buy_amt_1 REAL DEFAULT 0.1",
     "ALTER TABLE settings ADD COLUMN buy_amt_2 REAL DEFAULT 0.5",
     "ALTER TABLE settings ADD COLUMN buy_amt_3 REAL DEFAULT 1.0",
@@ -43,7 +43,7 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN daily_trade_limit INTEGER DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN sniper_rt_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN sniper_rt_launchlab INTEGER DEFAULT 0",
-      "ALTER TABLE settings ADD COLUMN sniper_rt_jito REAL DEFAULT 0.0075",
+      "ALTER TABLE settings ADD COLUMN sniper_rt_jito REAL DEFAULT 0.005",
     "ALTER TABLE settings ADD COLUMN sniper_rt_amount REAL DEFAULT 0.1",
     "ALTER TABLE settings ADD COLUMN sniper_rt_slippage REAL DEFAULT 50",
     "ALTER TABLE settings ADD COLUMN sniper_rt_fee REAL DEFAULT 0.003",
@@ -165,7 +165,7 @@ function runMigrations(d) {
       status TEXT DEFAULT 'active',
       buy_amount REAL DEFAULT 0.1,
       slippage REAL DEFAULT 50,
-      tip REAL DEFAULT 0.0075,
+      tip REAL DEFAULT 0.001,
       mev_protection INTEGER DEFAULT 1,
       auto_sell_enabled INTEGER DEFAULT 0,
       stop_loss_pct REAL DEFAULT 0,
@@ -190,7 +190,7 @@ function runMigrations(d) {
       snipe_type TEXT DEFAULT 'auto',
       snipe_amount REAL DEFAULT 0.1,
       snipe_slippage REAL DEFAULT 50,
-      snipe_tip REAL DEFAULT 0.0075,
+      snipe_tip REAL DEFAULT 0.005,
       snipe_fee REAL DEFAULT 0.003,
       mev_protection INTEGER DEFAULT 1,
       auto_sell INTEGER DEFAULT 0,
@@ -876,7 +876,7 @@ function addCopyChannel(userId, channelId, channelName, settings) {
       mev_protection, auto_sell_enabled, stop_loss_pct, take_profit_pct, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
   ).run(userId, channelId, channelName || channelId,
-    s.buyAmount || 0.1, s.slippage || 50, s.tip || 0.0075,
+    s.buyAmount || 0.1, s.slippage || 50, s.tip || 0.001,
     1, s.autoSell ? 1 : 0, s.stopLoss || 0, s.takeProfit || 0);
   return { success: true };
 }
@@ -959,7 +959,7 @@ function getRealtimeSniperConfig(userId) {
     auto_sell_enabled: s.sniper_rt_auto_sell_enabled || 0,
     auto_sell_template_id: s.sniper_rt_auto_sell_template_id || 0,
     platform_launchlab: !!(s.sniper_rt_launchlab ?? 0),
-    jito_tip: Number(s.sniper_rt_jito ?? 0.0075),
+    jito_tip: Number(s.sniper_rt_jito ?? 0.005),
   };
 }
 
