@@ -387,8 +387,18 @@ Edit your sniper setup:`, buildSniperConfigMenu(updated));
         db.getDb().prepare("UPDATE sniper_configs SET active = 1 WHERE user_id = ?").run(userId);
         await ctx.answerCallbackQuery("▶ All resumed.");
       }
-      const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
-      return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
+      const screen = db.getSysConfig(`sniper_screen_${userId}`) || "main";
+      if (screen === "migration") {
+        return safeEdit(ctx, `🔀 *Migration Sniper*\n\n${getGuide("sniper")}\n\nSnipes tokens migrating from PumpFun → Raydium.`, buildMigrationSniperMenu(db.getActiveSnipes(userId)));
+      }
+      if (screen === "realtime") {
+        return safeEdit(ctx, `⚡ *Real-Time Snipe*\n\n${getGuide("sniper")}\n\nSnipe Raydium launches or migrating tokens live without pasting a CA.`, buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)));
+      }
+      if (screen === "auto") {
+        const AUTO_GUIDE = "🎯 *Auto Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Create multiple setups with different settings\n▸ Each setup targets different platforms\n▸ Filters prevent sniping rugs\n▸ Auto sell templates apply per setup\n━━━━━━━━━━━━━━━━━━━";
+        return safeEdit(ctx, AUTO_GUIDE, buildAutoSniperMenu(db.getSniperConfigs(userId)));
+      }
+      return safeEdit(ctx, `🎯 *Sniper*\n\n${getGuide("sniper")}`, buildSniperMainMenu());
     }
 
     if (data === "sniper_realtime_menu") {
