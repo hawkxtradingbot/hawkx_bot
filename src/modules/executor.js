@@ -270,7 +270,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   if (existingPos) {
     const newSolInvested = existingPos.sol_invested + solAmount;
     const newTokenAmount = existingPos.token_amount + tokenAmount;
-    const avgBuyPrice    = newSolInvested / newTokenAmount;
+    // Weighted-average USD entry price (price is USD-per-token on mainnet). Weight by SOL invested.
+    const thisPxUsd = price; // 'price' is USD-per-token on mainnet, mock on devnet
+    const avgBuyPrice = (((existingPos.buy_price || 0) * existingPos.sol_invested) + (thisPxUsd * solAmount)) / newSolInvested;
     // Weighted-average entry MC too (was only ever set on the first buy)
     const newEntryMcap = entryMcap > 0
       ? (((existingPos.entry_mcap || 0) * existingPos.sol_invested) + (entryMcap * solAmount)) / newSolInvested

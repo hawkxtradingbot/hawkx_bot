@@ -403,13 +403,13 @@ async function getTokenPosition(ctx, user, positionId) {
   const msg =
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
     `📋 <code>${pos.token_ca}</code>\n\n` +
-    `📥 <b>Entry:</b> MC ${entryMcStr} · 💰 ${entryPxStr}\n` +
+    `📥 <b>Ent:</b> MC ${entryMcStr} · 💰 ${entryPxStr}\n` +
     `💰 <b>Bought:</b> ${sbSol.toFixed(3)} SOL (${boughtUsd.toFixed(2)}) · ${sbCount} times\n` +
-    `📊 <b>Current:</b> MC ${curMcStr} · 💰 ${curPxStr} (${chgChip})\n` +
+    `📊 <b>Cur:</b> MC ${curMcStr} · 💰 ${curPxStr}\n` +
     `💧 Liq ${liqStr} · 🕐 Age ${ageStr2}\n` +
     `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount} times\n` +
     `💎 <b>Holding:</b> ${(pos.token_amount||0).toLocaleString(undefined,{maximumFractionDigits:4})} tokens · ${holdSol.toFixed(4)} SOL (≈ $${holdUsd.toFixed(2)})\n` +
-    `📈 <b>P&L:</b> ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL · $${pnlUsdSigned.toFixed(2)})\n` +
+    `📈 <b>P&L:</b> ${formatPnl(pnlPct)} (${pnlSol >= 0 ? "+" : ""}${pnlSol.toFixed(4)} SOL · ${pnlUsdSigned.toFixed(2)})\n` +
     `⏱ Held: <b>${holdTime}</b>\n` +
     (scannerLine ? `\n${scannerLine}` : "") +
     (autoSummary ? autoSummary : "") +
