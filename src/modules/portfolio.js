@@ -297,9 +297,12 @@ async function getTokenPosition(ctx, user, positionId) {
 
   const REAL_PX = process.env.MOCK_TRADES === "false";
   // On mainnet use the live DexScreener USD price (matches stored buy_price which is USD); devnet uses mock
-  const _tokData = await getTokenInfo(pos.token_ca);
+  const [_tokData, _solPx] = await Promise.all([
+    getTokenInfo(pos.token_ca),
+    REAL_PX ? getSolPriceUsd() : Promise.resolve(150),
+  ]);
   const currentPrice = REAL_PX ? (_tokData.price || pos.buy_price) : simulatePriceMovement(pos.token_ca);
-  const solPriceUsd  = REAL_PX ? (await getSolPriceUsd()) : 150;
+  const solPriceUsd  = _solPx;
   const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
   const currentValue = pos.sol_invested * (1 + pnlPct / 100);
   const pnlSol       = currentValue - pos.sol_invested;
@@ -331,7 +334,7 @@ async function getTokenPosition(ctx, user, positionId) {
     const safety = await getTokenSafety(pos.token_ca);
     if (safety && tokenData.holders) safety.holders = tokenData.holders;
     const ageStr = formatAge(tokenData.pairCreatedAt);
-    if (ageStr) scannerLine += `🕐 Age: ${ageStr}\n`;
+    // age shown in main layout; scannerLine keeps safety only
     const mk = (v) => v === true ? "✅" : v === false ? "🔴" : null;
     const sb = [];
     if (mk(safety.mintRevoked)) sb.push(`${mk(safety.mintRevoked)} Mint`);
@@ -390,8 +393,9 @@ async function getTokenPosition(ctx, user, positionId) {
   // price change since entry
   const chgPct = pos.buy_price > 0 && tokenData.price ? ((tokenData.price - pos.buy_price) / pos.buy_price * 100) : pnlPct;
   const chgChip = `${chgPct >= 0 ? "🟢 +" : "🔴 "}${chgPct.toFixed(1)}%`;
-  // holdings USD value = tokens * current USD price
+  // holdings: token amount, current SOL value, USD value
   const holdUsd = (pos.token_amount || 0) * (tokenData.price || 0);
+  const holdSol = solPriceUsd > 0 ? (holdUsd / solPriceUsd) : 0;
   const boughtUsd = sbSol * solPriceUsd;
   const soldUsd   = ssSol * solPriceUsd;
   const pnlUsdSigned = pnlSol * solPriceUsd;
@@ -403,8 +407,8 @@ async function getTokenPosition(ctx, user, positionId) {
     `💰 <b>Bought:</b> ${sbSol.toFixed(3)} SOL (${boughtUsd.toFixed(2)}) · ${sbCount} times\n` +
     `📊 <b>Current:</b> MC ${curMcStr} · 💰 ${curPxStr} (${chgChip})\n` +
     `💧 Liq ${liqStr} · 🕐 Age ${ageStr2}\n` +
-    `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount} times\n\n` +
-    `💎 <b>Holding:</b> ${(pos.token_amount||0).toLocaleString()} (≈ ${holdUsd.toFixed(2)})\n` +
+    `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount} times\n` +
+    `💎 <b>Holding:</b> ${(pos.token_amount||0).toLocaleString(undefined,{maximumFractionDigits:4})} tokens · ${holdSol.toFixed(4)} SOL (${holdUsd.toFixed(2)})\n` +
     `📈 <b>P&L:</b> ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL · ${pnlUsdSigned.toFixed(2)})\n` +
     `⏱ Held: <b>${holdTime}</b>\n` +
     (scannerLine ? `\n${scannerLine}` : "") +
