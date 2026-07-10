@@ -604,8 +604,8 @@ function openPosition(data) {
     `INSERT INTO positions
      (user_id, wallet_id, token_ca, token_name, buy_price,
       sol_invested, token_amount, platform, stop_loss_pct, take_profit_pct,
-      source, source_ref)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      source, source_ref, entry_mcap)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     data.userId, data.walletId, data.tokenCa,
     data.tokenName || "Unknown", data.buyPrice || 0,
@@ -615,6 +615,7 @@ function openPosition(data) {
     0,
     data.source    || "manual",
     data.sourceRef || "",
+    data.entryMcap || 0,
   );
 }
 
