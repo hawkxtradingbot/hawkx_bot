@@ -191,7 +191,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       const solLamports = Math.floor(solAmount * 1e9);
       const slippageBps = Math.floor(slippage * 100); // 10% -> 1000 bps
       const speed = settings.speed_mode || "standard";
-      const jitoTipLamports = settings.jito_tip_lamports || 0;
+      // MEV protection: only route through Jito when mev_protect is ON; tip comes from jito_tip (SOL)
+      const mevOn = (settings.mev_protect ?? 1) ? true : false;
+      const jitoTipLamports = mevOn ? Math.floor((settings.jito_tip || 0) * 1e9) : 0;
       const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol: settings.priority_fee_manual_sol });
       if (!r.ok) {
         const em = String(r.error||"swap failed").replace(/[_*`[\]]/g,"");
@@ -357,7 +359,8 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       if (tokenAmountRaw <= 0) { await ctx.reply("❌ Nothing to sell."); return null; }
       const slippageBpsS = Math.floor(((db.getSettings(user.user_id)||{}).slippage_pct || 10) * 100);
       const speedS = settingsS.speed_mode || "standard";
-      const jitoTipS = settingsS.jito_tip_lamports || 0;
+      const mevOnS = (settingsS.mev_protect ?? 1) ? true : false;
+      const jitoTipS = mevOnS ? Math.floor((settingsS.jito_tip || 0) * 1e9) : 0;
       const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol });
       if (!rs.ok) {
         const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
