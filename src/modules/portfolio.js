@@ -30,13 +30,22 @@ function getSourceLabel(pos) {
 let _solPxCache = { px: 0, t: 0 };
 async function getSolPriceUsd() {
   if (Date.now() - _solPxCache.t < 60000 && _solPxCache.px > 0) return _solPxCache.px;
+  const axios = require("axios");
+  // Primary: Jupiter price API (direct SOL/USD, reliable)
   try {
-    const axios = require("axios");
-    const { data } = await axios.get("https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112", { timeout: 5000 });
-    const px = data && data.pairs && data.pairs[0] ? parseFloat(data.pairs[0].priceUsd) : 0;
+    const { data } = await axios.get("https://lite-api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", { timeout: 5000 });
+    const px = parseFloat(data?.data?.["So11111111111111111111111111111111111111112"]?.price || 0);
     if (px > 0) { _solPxCache = { px, t: Date.now() }; return px; }
   } catch {}
-  return _solPxCache.px || 150;
+  // Fallback: DexScreener, but pick the SOL/USDC or SOL/USDT pair (not random pairs[0])
+  try {
+    const { data } = await axios.get("https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112", { timeout: 5000 });
+    const pairs = (data && data.pairs) || [];
+    const stable = pairs.find(pr => ["USDC","USDT"].includes(pr.quoteToken?.symbol) && pr.baseToken?.symbol === "SOL");
+    const px = stable ? parseFloat(stable.priceUsd) : 0;
+    if (px > 0) { _solPxCache = { px, t: Date.now() }; return px; }
+  } catch {}
+  return _solPxCache.px || 200;
 }
 
 function formatHoldTime(createdAt) {
@@ -181,7 +190,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const eMc = pos.entry_mcap && pos.entry_mcap > 0 ? formatNum(pos.entry_mcap) : "—";
     const cMcVal = pos.entry_mcap > 0 ? pos.entry_mcap * (1 + pnlPct/100) : 0;
     const cMc = cMcVal > 0 ? formatNum(cMcVal) : "—";
-    const usd = (sol) => "$" + (sol * 150).toFixed(2);
+    const usd = (sol) => "$" + (sol * (globalThis.__solPx || 200)).toFixed(2);
 
     const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
     const mcN = cMc !== "—" ? ` · <b>MC</b> ${cMc}` : "";
@@ -391,10 +400,10 @@ async function getTokenPosition(ctx, user, positionId) {
     `${icon} <a href="${dexUrl}"><b>${tokenName}</b></a> — ${getSourceLabel(pos)}\n` +
     `📋 <code>${pos.token_ca}</code>\n\n` +
     `📥 <b>Entry:</b> MC ${entryMcStr} · 💰 ${entryPxStr}\n` +
-    `💰 <b>Bought:</b> ${sbSol.toFixed(3)} SOL (${boughtUsd.toFixed(2)}) · ${sbCount}x\n` +
+    `💰 <b>Bought:</b> ${sbSol.toFixed(3)} SOL (${boughtUsd.toFixed(2)}) · ${sbCount} times\n` +
     `📊 <b>Current:</b> MC ${curMcStr} · 💰 ${curPxStr} (${chgChip})\n` +
     `💧 Liq ${liqStr} · 🕐 Age ${ageStr2}\n` +
-    `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount}x\n\n` +
+    `📤 <b>Sold:</b> ${ssSol.toFixed(3)} SOL (${soldUsd.toFixed(2)}) · ${ssCount} times\n\n` +
     `💎 <b>Holding:</b> ${(pos.token_amount||0).toLocaleString()} (≈ ${holdUsd.toFixed(2)})\n` +
     `📈 <b>P&L:</b> ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL · ${pnlUsdSigned.toFixed(2)})\n` +
     `⏱ Held: <b>${holdTime}</b>\n` +

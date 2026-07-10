@@ -380,7 +380,16 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
         return null;
       }
       solReceived = Number(rs.outAmount) / 1e9;
-      currentPrice = (position.token_amount > 0) ? (solReceived / (position.token_amount * sellFraction)) : position.buy_price;
+      // P&L in USD terms to match buy_price (which is stored as USD-per-token).
+      // Fetch live USD price of the token; fall back to SOL-rate conversion if unavailable.
+      let curUsdPrice = 0;
+      try {
+        const axSell = require("axios");
+        const drS = await axSell.get("https://api.dexscreener.com/latest/dex/tokens/" + position.token_ca, { timeout: 5000 });
+        const prS = drS.data && drS.data.pairs && drS.data.pairs[0];
+        if (prS && prS.priceUsd) curUsdPrice = parseFloat(prS.priceUsd);
+      } catch {}
+      currentPrice = curUsdPrice > 0 ? curUsdPrice : position.buy_price;
       pnlPct = position.buy_price > 0 ? ((currentPrice - position.buy_price) / position.buy_price * 100) : 0;
       txHash = rs.signature;
       realSellDone = true;
