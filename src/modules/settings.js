@@ -1011,7 +1011,7 @@ async function handleTextInput(ctx, user, pendingKey) {
     case "set_custom_speed": {
       const v = parseFloat(text);
       if (isNaN(v) || v < 0) { await ctx.reply("❌ Invalid SOL amount."); handled = false; break; }
-      db.updateSettings(userId, { speed_mode: "custom", custom_fee: v });
+      db.updateSettings(userId, { speed_mode: "custom", priority_fee_manual_sol: v });
       await ctx.reply(`✅ *Custom Fee Active: ${v} SOL per trade*\n\nThis will be used as priority fee for all trades.`, { parse_mode: "Markdown" });
       break;
     }

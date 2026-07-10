@@ -18,7 +18,10 @@ function getConnection() {
 }
 
 // speed: "standard" | "fast" | "turbo" -> priority fee in micro-lamports
-function priorityFeeForSpeed(speed) {
+function priorityFeeForSpeed(speed, customFeeSol) {
+  if (speed === "custom" && customFeeSol && customFeeSol > 0) {
+    return Math.floor(customFeeSol * 1e9); // user-set SOL -> lamports
+  }
   if (speed === "turbo") return 1000000;   // ~0.01 SOL-ish ceiling via Jupiter
   if (speed === "fast")  return 200000;
   return 50000;                              // standard
@@ -34,9 +37,9 @@ async function getQuote(inputMint, outputMint, amountLamports, slippageBps) {
 }
 
 // Build + send a swap. Returns { ok, signature, error }.
-async function executeSwap({ keypair, quote, speed, jitoTipLamports }) {
+async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol }) {
   const connection = getConnection();
-  const priorityFee = priorityFeeForSpeed(speed);
+  const priorityFee = priorityFeeForSpeed(speed, customFeeSol);
 
   // Ask Jupiter to build the swap transaction
   const useJito = jitoTipLamports && jitoTipLamports > 0;
@@ -97,18 +100,18 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports }) {
 }
 
 // High-level: buy a token with SOL
-async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports }) {
+async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol }) {
   const quote = await getQuote(SOL_MINT, tokenMint, String(solLamports), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
   return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount };
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.
-async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports }) {
+async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports, customFeeSol }) {
   const quote = await getQuote(tokenMint, SOL_MINT, String(tokenAmountRaw), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
   return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount };
 }
 

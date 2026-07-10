@@ -192,7 +192,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       const slippageBps = Math.floor(slippage * 100); // 10% -> 1000 bps
       const speed = settings.speed_mode || "standard";
       const jitoTipLamports = settings.jito_tip_lamports || 0;
-      const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports });
+      const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol: settings.priority_fee_manual_sol });
       if (!r.ok) {
         const em = String(r.error||"swap failed").replace(/[_*`[\]]/g,"");
         if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy failed: " + em); } catch {} }
@@ -358,7 +358,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const slippageBpsS = Math.floor(((db.getSettings(user.user_id)||{}).slippage_pct || 10) * 100);
       const speedS = settingsS.speed_mode || "standard";
       const jitoTipS = settingsS.jito_tip_lamports || 0;
-      const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS });
+      const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol });
       if (!rs.ok) {
         const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
         await ctx.reply("❌ Sell failed: " + em);
