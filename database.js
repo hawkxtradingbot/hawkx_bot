@@ -1472,11 +1472,11 @@ async function getSolPriceUsdShared() {
   if (Date.now() - _solPxC.t < 60000 && _solPxC.px > 0) return _solPxC.px;
   const axios = require("axios");
   try {
-    const { data } = await axios.get("https://lite-api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", { timeout: 5000 });
-    const px = parseFloat(data?.data?.["So11111111111111111111111111111111111111112"]?.price || 0);
+    const { data } = await axios.get("https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112", { timeout: 5000 });
+    const px = parseFloat(data?.["So11111111111111111111111111111111111111112"]?.usdPrice || 0);
     if (px > 0) { _solPxC = { px, t: Date.now() }; return px; }
   } catch {}
-  return _solPxC.px || 200;
+  return _solPxC.px || 150;
 }
 
 module.exports = {

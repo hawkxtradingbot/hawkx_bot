@@ -27,7 +27,9 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
       totalCur += p.sol_invested * (1 + pnlPct / 100);
     });
     const totalPnlSol = totalCur - totalInv;
-    const totalPnlUsd = totalPnlSol * 150;
+    const _solPxW = await db.getSolPriceUsdShared();
+    const totalPnlUsd = totalPnlSol * _solPxW;
+    const balUsd = balance * _solPxW;
     const sign = totalPnlSol >= 0 ? "+" : "";
     const walletIdx = wallets.findIndex(w => w.wallet_id === walletId) + 1;
     const walletLimit = config.WALLET_LIMITS[freshUser.rank] || 5;
@@ -38,9 +40,9 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
 ` +
       `Active: *W${walletIdx} — ${label}*
 ` +
-      `💰 Balance: *${balance.toFixed(4)} SOL*
+      `💰 Balance: *${balance.toFixed(4)} SOL* (≈ ${balUsd.toFixed(2)})
 ` +
-      `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / $${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
+      `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / ${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
 ` +
       `📋 Address:
 \`${address}\`

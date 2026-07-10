@@ -33,8 +33,8 @@ async function getSolPriceUsd() {
   const axios = require("axios");
   // Primary: Jupiter price API (direct SOL/USD, reliable)
   try {
-    const { data } = await axios.get("https://lite-api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", { timeout: 5000 });
-    const px = parseFloat(data?.data?.["So11111111111111111111111111111111111111112"]?.price || 0);
+    const { data } = await axios.get("https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112", { timeout: 5000 });
+    const px = parseFloat(data?.["So11111111111111111111111111111111111111112"]?.usdPrice || 0);
     if (px > 0) { _solPxCache = { px, t: Date.now() }; return px; }
   } catch {}
   // Fallback: DexScreener, but pick the SOL/USDC or SOL/USDT pair (not random pairs[0])
@@ -45,7 +45,7 @@ async function getSolPriceUsd() {
     const px = stable ? parseFloat(stable.priceUsd) : 0;
     if (px > 0) { _solPxCache = { px, t: Date.now() }; return px; }
   } catch {}
-  return _solPxCache.px || 200;
+  return _solPxCache.px || 150;
 }
 
 function formatHoldTime(createdAt) {
