@@ -6,13 +6,24 @@ const db = require("../../database");
 
 const THRESHOLDS = [25, 50, 100, 200, -25, -50]; // % moves worth alerting on
 
+async function getRealPrice(tokenCa) {
+  try {
+    const axios = require("axios");
+    const { data } = await axios.get("https://api.dexscreener.com/latest/dex/tokens/" + tokenCa, { timeout: 5000 });
+    const pairs = data && data.pairs;
+    if (pairs && pairs.length > 0 && pairs[0].priceUsd) return parseFloat(pairs[0].priceUsd);
+  } catch {}
+  return null;
+}
+
 async function runPriceNotifier(bot) {
   try {
+    const REAL = process.env.MOCK_TRADES === "false";
     const { getMockPrice } = require("./executor");
     const positions = db.getAllOpenPositionsForNotify();
     for (const p of positions) {
       try {
-        const cur = getMockPrice(p.token_ca);
+        const cur = REAL ? await getRealPrice(p.token_ca) : getMockPrice(p.token_ca);
         if (!cur || !p.buy_price) continue;
         const pct = ((cur - p.buy_price) / p.buy_price) * 100;
 

@@ -213,8 +213,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     }
   }
 
-  const price       = REAL ? (realPrice || getMockPrice(ca)) : getMockPrice(ca);
-  const tokenAmount = REAL ? realTokenAmount : (solAmount / price) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
+  let realUsdPrice = 0; // set from DexScreener below if available
+  const _priceSolPerToken = REAL ? (realPrice || getMockPrice(ca)) : getMockPrice(ca);
+  const tokenAmount = REAL ? realTokenAmount : (solAmount / _priceSolPerToken) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
   const txHash      = REAL ? realTxHash : `DEVNET_BUY_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
   const feeRate     = getEffectiveFeeRate(user);
   const feeSol      = solAmount * feeRate;
@@ -232,10 +233,16 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
         entryMcap = pairs[0].fdv || pairs[0].marketCap || 0;
         const sym = pairs[0].baseToken?.symbol;
         if (sym) tokenName = sym;
+        // Capture real USD price at buy time so P&L compares like-for-like (USD vs USD)
+        const pxUsd = parseFloat(pairs[0].priceUsd || 0);
+        if (REAL && pxUsd > 0) realUsdPrice = pxUsd;
       }
     } catch {}
   }
   
+  // Final stored price: USD-per-token on mainnet (matches P&L display), mock on devnet
+  const price = REAL ? (realUsdPrice || _priceSolPerToken) : _priceSolPerToken;
+
   // Update mock wallet balance (devnet only) — deduct SOL spent
   if (!REAL) try {
     const buyWallet = db.getWallet(user.active_wallet_id);
