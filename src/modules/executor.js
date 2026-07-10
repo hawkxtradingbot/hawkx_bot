@@ -392,7 +392,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol });
       if (!rs.ok) {
         const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
-        await ctx.reply("❌ Sell failed: " + em);
+        await ctx.reply("❌ *Sell failed:* " + em + "\n\n✅ Your tokens are safe — nothing was sold. Please try again.", { parse_mode: "Markdown" });
         return null;
       }
       solReceived = Number(rs.outAmount) / 1e9;

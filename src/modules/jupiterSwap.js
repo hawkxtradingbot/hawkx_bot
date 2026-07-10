@@ -98,9 +98,28 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
       }
       await new Promise(r => setTimeout(r, 1000)); // poll every 1s
     }
-    if (!confirmed) return { ok: true, signature, warning: "confirm timeout — verify on Solscan" };
+    if (!confirmed) {
+      // Do a final check via searchTransactionHistory before giving up
+      try {
+        const finalSt = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+        const fs2 = finalSt && finalSt.value && finalSt.value[0];
+        if (fs2 && !fs2.err && (fs2.confirmationStatus === "confirmed" || fs2.confirmationStatus === "finalized")) {
+          return { ok: true, signature };
+        }
+      } catch {}
+      // Genuinely not confirmed — treat as FAILURE so we never record a fake trade
+      return { ok: false, error: "transaction did not confirm on-chain (timeout)", signature };
+    }
   } catch (e) {
-    return { ok: true, signature, warning: "confirm check failed — verify on Solscan" };
+    // Confirmation check errored — verify once more, else fail safe
+    try {
+      const chk = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const c = chk && chk.value && chk.value[0];
+      if (c && !c.err && (c.confirmationStatus === "confirmed" || c.confirmationStatus === "finalized")) {
+        return { ok: true, signature };
+      }
+    } catch {}
+    return { ok: false, error: "could not verify confirmation — assumed failed", signature };
   }
 
   return { ok: true, signature };
