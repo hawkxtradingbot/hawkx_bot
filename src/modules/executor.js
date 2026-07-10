@@ -346,7 +346,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   return { tradeId, txHash, feeSol };
 }
-
+// (buy end)
 async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   if (killSwitch.isActive()) {
     await ctx.reply("🔴 *Trading Paused*", { parse_mode: "Markdown" });
@@ -355,6 +355,12 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
 
   const sellFraction  = pctToSell / 100;
   const REAL_S = process.env.MOCK_TRADES === "false";
+
+  // Immediate feedback so the sell doesn't feel frozen during on-chain confirmation
+  const sellProcMsg = opts.silent ? null : await ctx.reply(
+    "🔄 *Processing sell...*\n\n" + (pctToSell < 100 ? "Selling *" + pctToSell + "%*" : "Selling *all*") + " · confirming on-chain…",
+    { parse_mode: "Markdown" }
+  ).catch(() => null);
 
   let currentPrice, pnlPct, solReceived, txHash, realSellDone = false;
 
@@ -440,15 +446,19 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   const { checkAndPromote } = require("./ranks");
   checkAndPromote(user.user_id, require("./notifications").notify);
 
+  // Remove the "Processing sell..." message now that we have a result
+  try { if (sellProcMsg) await ctx.api.deleteMessage(ctx.chat.id, sellProcMsg.message_id); } catch {}
+
   const sign = pnlPct >= 0 ? "+" : "";
+  const solscanLink = (REAL_S && txHash && !String(txHash).startsWith("DEVNET")) ? `\n🔗 [Solscan](https://solscan.io/tx/${txHash})` : "";
   if (!opts.silent) await ctx.reply(
-    `✅ *Sell Confirmed!* [DEVNET]\n\n` +
+    `✅ *Sell Confirmed!*\n\n` +
     `Token: *${position.token_name || position.token_ca.slice(0,8)}*\n` +
     `Sold: *${pctToSell}%*\n` +
     `Received: *${solReceived.toFixed(4)} SOL*\n` +
     `P&L: *${sign}${pnlPct.toFixed(1)}%*\n` +
-    `Fee: *${feeSol.toFixed(6)} SOL*`,
-    { parse_mode: "Markdown" }
+    `Fee: *${feeSol.toFixed(6)} SOL*` + solscanLink,
+    { parse_mode: "Markdown", disable_web_page_preview: true }
   );
   // Auto PnL card on every sell
   let exitMcap = 0;
