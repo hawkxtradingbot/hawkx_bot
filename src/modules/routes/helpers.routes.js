@@ -1006,46 +1006,59 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   if (tInfo.change1h !== undefined && tInfo.change1h !== null) _chP.push("1h " + _fmtC(tInfo.change1h));
   if (tInfo.change24h !== undefined && tInfo.change24h !== null) _chP.push("24h " + _fmtC(tInfo.change24h));
   const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
-  let infoLines = `${tName}\n📋 <code>${ca}</code>\n━━━━━━━━━━━━━━━\n`;
-  if (tInfo.price) infoLines += `💰 ${formatPrice(tInfo.price)}${ch24}\n`;
+  // Per-timeframe colored change chips
+  const chip = (label, v) => (v === undefined || v === null) ? null : `${v >= 0 ? "🟢" : "🔴"} ${label} ${v >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`;
+  const chips = [chip("5m", tInfo.change5m), chip("1h", tInfo.change1h), chip("24h", tInfo.change24h)].filter(Boolean);
+
+  let infoLines = `${tName}\n📋 <code>${ca}</code>\n\n`;
+  // Line 1: MC · price · liq · vol
   const statBits = [];
-  if (tInfo.mcap) statBits.push(`MC ${formatNum(tInfo.mcap)}`);
-  if (tInfo.liquidity) statBits.push(`Liq ${formatNum(tInfo.liquidity)}`);
-  if (tInfo.volume24h) statBits.push(`Vol ${formatNum(tInfo.volume24h)}`);
-  if (statBits.length) infoLines += `📊 ${statBits.join(" · ")}\n`;
-  if (tInfo.holders) infoLines += `👥 ${tInfo.holders.toLocaleString()} holders\n`;
+  if (tInfo.mcap) statBits.push(`📊 MC ${formatNum(tInfo.mcap)}`);
+  if (tInfo.price) statBits.push(`💰 ${formatPrice(tInfo.price)}`);
+  if (tInfo.liquidity) statBits.push(`💧 Liq ${formatNum(tInfo.liquidity)}`);
+  if (tInfo.volume24h) statBits.push(`📈 Vol ${formatNum(tInfo.volume24h)}`);
+  if (statBits.length) infoLines += statBits.join(" · ") + `\n`;
+  // Line 2: holders · age
+  const line2 = [];
+  if (tInfo.holders) line2.push(`👥 ${tInfo.holders.toLocaleString()} holders`);
   const ageStr = formatAge(tInfo.pairCreatedAt);
-  if (ageStr) {
-    const isNew = (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
-    infoLines += `🕐 Age: ${ageStr}${isNew ? " 🆕" : ""}`;
-    if (tInfo.buys24h || tInfo.sells24h) infoLines += `  ·  Buys: ${tInfo.buys24h}  Sells: ${tInfo.sells24h}`;
-    infoLines += `\n`;
-    if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
+  const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
+  if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕" : ""} old`);
+  if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
+  // Line 3: change chips
+  if (chips.length) infoLines += chips.join("  ") + `\n`;
+  // Line 4: buy/sell pressure
+  if (tInfo.buys24h || tInfo.sells24h) {
+    const b = tInfo.buys24h || 0, s = tInfo.sells24h || 0, tot = b + s;
+    const pct = tot > 0 ? Math.round((b / tot) * 100) : 0;
+    infoLines += `🟢 Buys ${b.toLocaleString()}  🔴 Sells ${s.toLocaleString()}  (${pct}% buy)\n`;
   }
+  if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
   if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
+  // Safety block
   const sc = formatSafetyCard(safety);
   if (sc.l1 || sc.l2) {
-    infoLines += `━━━━━━━━━━━━━━━\n🛡 SAFETY\n`;
+    infoLines += `\n🛡 <b>SAFETY</b>\n`;
     if (sc.l1) infoLines += `${sc.l1}\n`;
     if (sc.l2) infoLines += `${sc.l2}\n`;
     if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
   }
+  // Wallet
   const activeWallet = db.getWallet(user.active_wallet_id) || null;
   const walletBal = activeWallet ? (await db.getWalletBalance(activeWallet.public_key)) || 0 : 0;
   if (activeWallet) {
     const label = activeWallet.label && !activeWallet.label.match(/^W\d+$/) ? activeWallet.label : "Wallet";
-    infoLines += `━━━━━━━━━━━━━━━\n👛 ${label} · ${walletBal.toFixed(4)} SOL\n`;
+    infoLines += `\n👛 ${label} · ${walletBal.toFixed(4)} SOL\n`;
   }
   infoLines += `\nSelect amount to buy:`;
   const kb = { inline_keyboard: [
     [
       { text: `🟢 ${b1} SOL`, callback_data: `buy_ca_amt_${b1}` },
       { text: `🟢 ${b2} SOL`, callback_data: `buy_ca_amt_${b2}` },
-      { text: `🟢 ${b3} SOL`, callback_data: `buy_ca_amt_${b3}` },
       { text: "✏️ Custom", callback_data: "buy_ca_custom" },
     ],
     [
-      { text: "📉 DCA", callback_data: "scanner_dca" },
+      { text: "🔁 DCA", callback_data: "scanner_dca" },
       { text: "📍 Limit Order", callback_data: "scanner_limit" },
     ],
     [
