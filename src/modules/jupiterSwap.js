@@ -85,17 +85,22 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
     }
   }
 
-  // Confirm
+  // Confirm — poll signature status quickly (real confirmation, faster than confirmTransaction)
   try {
-    const latest = await connection.getLatestBlockhash("confirmed");
-    await connection.confirmTransaction({
-      signature,
-      blockhash: latest.blockhash,
-      lastValidBlockHeight: latest.lastValidBlockHeight,
-    }, "confirmed");
+    const started = Date.now();
+    let confirmed = false;
+    while (Date.now() - started < 30000) { // up to 30s
+      const st = await connection.getSignatureStatuses([signature]);
+      const s = st && st.value && st.value[0];
+      if (s) {
+        if (s.err) return { ok: false, error: "transaction failed on-chain", signature };
+        if (s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized") { confirmed = true; break; }
+      }
+      await new Promise(r => setTimeout(r, 1000)); // poll every 1s
+    }
+    if (!confirmed) return { ok: true, signature, warning: "confirm timeout — verify on Solscan" };
   } catch (e) {
-    // Might still succeed; return signature so caller can verify on Solscan
-    return { ok: true, signature, warning: "confirm timeout — verify on Solscan" };
+    return { ok: true, signature, warning: "confirm check failed — verify on Solscan" };
   }
 
   return { ok: true, signature };
