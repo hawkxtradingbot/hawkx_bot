@@ -87,6 +87,7 @@ async function injectInstructions(tx, extraInstructions, connection) {
 
 // Build + send a swap. Returns { ok, signature, error }.
 async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports }) {
+  // returns feeCollected: true/false so callers know if the fee actually made it into the tx
   const connection = getConnection();
   const priorityFee = priorityFeeForSpeed(speed, customFeeSol);
 
@@ -109,12 +110,21 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
   const txBuf = Buffer.from(swapData.swapTransaction, "base64");
   let tx = VersionedTransaction.deserialize(txBuf);
 
-  // Optionally fold a fee transfer (user -> treasury) into this same transaction
+  // Fold the fee transfer (user -> treasury) AND the HawkX memo into this same transaction
+  const extraIx = [];
+  let feeInjected = false;
   if (feeLamports && feeLamports > 0 && process.env.TREASURY_WALLET) {
+    extraIx.push(SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: new PublicKey(process.env.TREASURY_WALLET), lamports: feeLamports }));
+    feeInjected = true;
+  }
+  extraIx.push(buildMemoInstruction("HawkX"));
+
+  if (extraIx.length > 0) {
     try {
-      tx = await injectTransferInstruction(tx, keypair.publicKey, new PublicKey(process.env.TREASURY_WALLET), feeLamports, connection);
+      tx = await injectInstructions(tx, extraIx, connection);
     } catch (e) {
-      console.log("[Fee Inject] failed, proceeding WITHOUT fee transfer:", e.message);
+      console.log("[Instruction Inject] failed, proceeding WITHOUT fee/memo:", e.message);
+      feeInjected = false;
     }
   }
 
@@ -161,7 +171,7 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
         const finalSt = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
         const fs2 = finalSt && finalSt.value && finalSt.value[0];
         if (fs2 && !fs2.err && (fs2.confirmationStatus === "confirmed" || fs2.confirmationStatus === "finalized")) {
-          return { ok: true, signature };
+          return { ok: true, signature, feeCollected: feeInjected };
         }
       } catch {}
       // Genuinely not confirmed — treat as FAILURE so we never record a fake trade
@@ -173,13 +183,13 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
       const chk = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
       const c = chk && chk.value && chk.value[0];
       if (c && !c.err && (c.confirmationStatus === "confirmed" || c.confirmationStatus === "finalized")) {
-        return { ok: true, signature };
+        return { ok: true, signature, feeCollected: feeInjected };
       }
     } catch {}
     return { ok: false, error: "could not verify confirmation — assumed failed", signature };
   }
 
-  return { ok: true, signature };
+  return { ok: true, signature, feeCollected: feeInjected };
 }
 
 // High-level: buy a token with SOL
@@ -193,19 +203,19 @@ async function getTokenDecimals(mint) {
   } catch { return 9; }
 }
 
-async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol }) {
+async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol, feeLamports }) {
   const quote = await getQuote(SOL_MINT, tokenMint, String(solLamports), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports });
   const decimals = await getTokenDecimals(tokenMint);
   return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.
-async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports, customFeeSol }) {
+async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports, customFeeSol, feeLamports }) {
   const quote = await getQuote(tokenMint, SOL_MINT, String(tokenAmountRaw), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports });
   const decimals = await getTokenDecimals(tokenMint);
   return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
 }
