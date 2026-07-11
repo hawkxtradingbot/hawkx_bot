@@ -691,8 +691,9 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
         db.setSysConfig(`withdraw_pending_${userId}`, "");
         db.setSysConfig(`withdraw_addr_${userId}`, "");
         const sentSol = (lamports / LAMPORTS_PER_SOL).toFixed(6);
+        const withdrawTime = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
         await ctx.reply(
-          `✅ *Withdraw Complete*\n\nSent *${sentSol} SOL*\nTo: \`${destAddr}\`\n\n🔗 [View on Solscan](https://solscan.io/tx/${sig})`,
+          `✅ *Withdraw Complete*\n\nSent: *${sentSol} SOL*\nTo: \`${destAddr}\`\n🕐 ${withdrawTime}\n\n🔗 [View on Solscan](https://solscan.io/tx/${sig})`,
           { parse_mode: "Markdown", disable_web_page_preview: true }
         );
       } catch (err) {
