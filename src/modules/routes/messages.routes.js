@@ -122,9 +122,13 @@ function setupMessages(bot) {
     // input flow, treat it as "scan this token" and jump to the scanner.
     // EXCLUDES flows where pasting a CA is the expected input (they handle it themselves).
     const caPasteFlows = ["lo_paste_ca", "dca_paste_ca", "cw_paste_wallet", "cch_paste", "snipe_paste_ca", "watchlist_add_ca", "launch_paste_ca", "referral_enter_code", "referral_customize_code", "admin_track_add"];
+    // Prefix-based flows where the expected input is a destination/withdraw address, NOT a token CA -
+    // must be excluded too, since withdraw addresses are the same base58 length/format as a token CA.
+    const caPastePrefixes = ["withdraw_address_", "withdraw_customamt_"];
     if (
       pending &&
       !caPasteFlows.includes(pending) &&
+      !caPastePrefixes.some(p => pending.startsWith(p)) &&
       !pending.startsWith("admin_") &&
       text.length >= 43 && text.length <= 44 &&
       /^[1-9A-HJ-NP-Za-km-z]+$/.test(text) &&
