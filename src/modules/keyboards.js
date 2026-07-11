@@ -5,13 +5,17 @@
 const { InlineKeyboard } = require("grammy");
 const config = require("../../config");
 
+// nextSol values pull from config.RANK_THRESHOLDS so the display always matches the REAL
+// promotion thresholds (this was previously hardcoded to devnet test values even on mainnet,
+// making progress bars/rank screens show misleadingly low "SOL needed" numbers).
+const _rt = config.RANK_THRESHOLDS;
 const RANKS = {
-  1: { name: "Scout",      fee: 1.00, nextSol: 0.1  },
-  2: { name: "Tracker",    fee: 0.85, nextSol: 0.5  },
-  3: { name: "Hunter",     fee: 0.80, nextSol: 1    },
-  4: { name: "Predator",   fee: 0.75, nextSol: 2    },
-  5: { name: "Apex",       fee: 0.70, nextSol: 5    },
-  6: { name: "Hawk",       fee: 0.60, nextSol: 10   },
+  1: { name: "Scout",      fee: 1.00, nextSol: _rt[2] },
+  2: { name: "Tracker",    fee: 0.85, nextSol: _rt[3] },
+  3: { name: "Hunter",     fee: 0.80, nextSol: _rt[4] },
+  4: { name: "Predator",   fee: 0.75, nextSol: _rt[5] },
+  5: { name: "Apex",       fee: 0.70, nextSol: _rt[6] },
+  6: { name: "Hawk",       fee: 0.60, nextSol: _rt[7] },
   7: { name: "Hawk Elite", fee: 0.50, nextSol: null },
 };
 
@@ -43,7 +47,7 @@ function buildRankInfoMessage(user, feeSavedUsd) {
     const info = RANKS[r];
     const icon = rankIcons[r];
     const isYou = curRank === r;
-    const volReq = r === 1 ? "0 SOL" : `${info.nextSol} SOL`;
+    const volReq = r === 1 ? "0 SOL" : `${config.RANK_THRESHOLDS[r]} SOL`;
     if (isYou) {
       msg += `▶ ${icon} *${info.name}* — *${info.fee.toFixed(2)}%* ◀ YOU\n`;
     } else if (r < curRank) {
