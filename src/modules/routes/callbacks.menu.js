@@ -103,7 +103,9 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       await ctx.answerCallbackQuery();
       const freshUser = db.getUser(userId);
       const { buildRankInfoMessage } = require("../keyboards");
-      const rankMsg = buildRankInfoMessage(freshUser);
+      const _feeSavedSol = db.getAllTimeFeeSaved(freshUser.user_id);
+      const _rankSolPx = await db.getSolPriceUsdShared().catch(() => 150);
+      const rankMsg = buildRankInfoMessage(freshUser, _feeSavedSol * _rankSolPx);
       const rankKb = { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] };
       try { await ctx.editMessageText(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }
       catch { await ctx.reply(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }

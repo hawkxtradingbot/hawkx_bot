@@ -24,14 +24,15 @@ function getFeeDisplay(user) {
 function buildQuickStats(s) {
   if (!s) return "📊 No trades yet";
   const sign = (s.pnl || 0) >= 0 ? "+" : "";
-  return `📊 ${sign}${(s.pnl||0).toFixed(3)} SOL · ${s.trades||0} trades · ${s.winRate||0}% win`;
+  const wl = (s.wins !== undefined && s.losses !== undefined) ? ` (${s.wins}W-${s.losses}L)` : "";
+  return `📊 ${sign}${(s.pnl||0).toFixed(3)} SOL · ${s.trades||0} trades · ${s.winRate||0}% win${wl}`;
 }
 
 function getModeLabel(user) {
   return (user && user.mode === "pro") ? "⚡ Pro" : "🌱 Beginner";
 }
 
-function buildRankInfoMessage(user) {
+function buildRankInfoMessage(user, feeSavedUsd) {
   const vol     = Math.max(0, user?.cumulative_volume_sol || 0);
   const curRank = user?.rank || 1;
   const rankIcons = { 1:"🥉", 2:"🥈", 3:"🥇", 4:"🏆", 5:"💎", 6:"🦅", 7:"👑" };
@@ -66,6 +67,7 @@ function buildRankInfoMessage(user) {
     msg += `📉 Need *${needed} SOL* → ${rankIcons[curRank+1]} ${nextRank.name}\n`;
     const savings = (1.00 - rank.fee) * 100;
     msg += `💰 Fee savings: *${savings.toFixed(2)}%* vs base rate\n`;
+    if (feeSavedUsd !== undefined && feeSavedUsd !== null) msg += `💵 Total saved: *$${feeSavedUsd.toFixed(2)}*\n`;
   } else {
     msg += `👑 *Maximum rank achieved!*\n`;
   }
