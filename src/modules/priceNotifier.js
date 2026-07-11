@@ -19,6 +19,10 @@ async function getRealPrice(tokenCa) {
 async function runPriceNotifier(bot) {
   try {
     const REAL = process.env.MOCK_TRADES === "false";
+    // Keep a fresh cached SOL/USD price available globally for PnL card USD conversions (stopLoss.js etc.)
+    if (REAL) {
+      try { global.__hawkxSolPx = await db.getSolPriceUsdShared(); } catch {}
+    }
     const { getMockPrice } = require("./executor");
     const positions = db.getAllOpenPositionsForNotify();
     for (const p of positions) {

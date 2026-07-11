@@ -225,6 +225,12 @@ async function generateStatsCard(opts) {
   const mSign = monthPnl >= 0 ? '+' : '';
   const periodPnl = period === 'today' ? pnlSol : period === 'week' ? weekPnl : monthPnl;
   const periodSign = periodPnl >= 0 ? '+' : '';
+  // Real SOL/USD price for the card's dollar figure (was hardcoded to 150)
+  let _cardSolPx = 150;
+  try {
+    const db = require("../../database");
+    _cardSolPx = await db.getSolPriceUsdShared();
+  } catch {}
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -255,7 +261,7 @@ async function generateStatsCard(opts) {
   <line x1="40" y1="68" x2="${W-40}" y2="68" stroke="${periodAccent}" stroke-width="1" opacity="0.5"/>
   <text x="40" y="100" font-family="Arial" font-size="12" fill="${periodAccent}" letter-spacing="4">${periodLabel}</text>
   <text x="40" y="200" font-family="Arial Black" font-size="74" fill="url(#pnlGrad)">${periodPnl >= 0 ? '&#9650;' : '&#9660;'} ${periodSign}${Math.abs(periodPnl) < 0.001 ? Math.abs(periodPnl).toFixed(6) : Math.abs(periodPnl).toFixed(3)} SOL</text>
-  <text x="42" y="235" font-family="Arial" font-size="24" fill="#F5A623">${periodSign}$${(Math.abs(periodPnl)*150).toFixed(2)}</text>
+  <text x="42" y="235" font-family="Arial" font-size="24" fill="#F5A623">${periodSign}$${(Math.abs(periodPnl)*_cardSolPx).toFixed(2)}</text>
   <line x1="40" y1="255" x2="${W-40}" y2="255" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
   <text x="40" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">WIN RATE</text>
   <text x="40" y="315" font-family="Arial Black" font-size="36" fill="white">${winRate}%</text>

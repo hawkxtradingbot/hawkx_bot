@@ -507,6 +507,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
     const pnlSolVal = solReceived - soldInvested;
     // Fee saved vs 1% base rate
     const feeSaved = parseFloat(((1.00 - rank.fee) * solReceived).toFixed(4));
+    const _cardSolPxE = await db.getSolPriceUsdShared().catch(() => 150);
     const result = await generateTradeCard({
       username: user.username || "Trader",
       rankName: rank.name,
@@ -514,7 +515,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       tokenName: position.token_name || position.token_ca.slice(0,8),
       pnlSol: hideAmounts ? 0 : pnlSolVal,
       pnlPct,
-      pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * 150),
+      pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * _cardSolPxE),
       entryMcap: position.entry_mcap || 0,
       exitMcap,
       invested: hideAmounts ? 0 : soldInvested,
@@ -535,7 +536,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       pnlPct, sellPct: pctToSell,
       entryMcap: position.entry_mcap || 0, exitMcap,
       feeRate: rank.fee,
-      _pnlSol: pnlSolVal, _pnlUsd: Math.abs(pnlSolVal * 150),
+      _pnlSol: pnlSolVal, _pnlUsd: Math.abs(pnlSolVal * _cardSolPxE),
       _invested: soldInvested, _returned: solReceived,
       _feeSaved: feeSaved,
       _dailyFeeSaved: db.getDailyFeeSaved(user.user_id),
