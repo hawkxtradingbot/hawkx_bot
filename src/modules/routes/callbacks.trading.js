@@ -139,7 +139,17 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       const positions = posId ? [db.getPosition(posId, userId)] : db.getOpenPositions(userId);
       const pos = positions[0];
       if (!pos) { await ctx.reply("No open positions."); return true; }
-      const currentPrice = simulatePriceMovement(pos.token_ca);
+      // Use REAL price on mainnet to compute how much to sell to recover initial investment
+      let currentPrice;
+      if (process.env.MOCK_TRADES === "false") {
+        try {
+          const { getTokenInfo } = require("../tokenInfo");
+          const ti = await getTokenInfo(pos.token_ca);
+          currentPrice = ti.price || pos.buy_price;
+        } catch { currentPrice = pos.buy_price; }
+      } else {
+        currentPrice = simulatePriceMovement(pos.token_ca);
+      }
       const pnlPct = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price) * 100 : 0;
       const currentValue = pos.sol_invested * (1 + pnlPct / 100);
       const initialPct = currentValue > 0 ? Math.min(100, (pos.sol_invested / currentValue) * 100) : 100;

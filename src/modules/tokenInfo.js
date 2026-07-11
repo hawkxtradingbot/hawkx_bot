@@ -20,10 +20,35 @@ async function getTokenInfo(ca) {
     return { name: "DevTest", symbol: "DEV", price: 0, mcap: 0, liquidity: 0, volume24h: 0, holders: 0 };
   }
 
-  let data = { name: null, symbol: null, price: 0, mcap: 0, liquidity: 0, volume24h: 0, holders: 0, dexUrl: `https://dexscreener.com/solana/${ca}` };
+  let data = { name: null, symbol: null, price: 0, mcap: 0, liquidity: 0, volume24h: 0, holders: 0, top10Pct: null, dexUrl: `https://dexscreener.com/solana/${ca}` };
+
+  // ── PRIMARY: Birdeye (faster + richer) ──
+  let birdeyeOk = false;
+  try {
+    const birdeye = require("./birdeye");
+    if (birdeye.isConfigured()) {
+      const ov = await birdeye.getTokenOverview(ca);
+      if (ov && ov.price > 0) {
+        data.name = ov.name; data.symbol = ov.symbol;
+        data.price = ov.price; data.mcap = ov.mcap;
+        data.liquidity = ov.liquidity; data.volume24h = ov.volume24h;
+        data.holders = ov.holders;
+        data.change5m = ov.priceChange5m; data.change1h = ov.priceChange1h; data.change24h = ov.priceChange24h;
+        data.buys24h = ov.buys24h; data.sells24h = ov.sells24h;
+        data.decimals = ov.decimals;
+        birdeyeOk = true;
+        // Top 10 holder concentration
+        try {
+          const th = await birdeye.getTopHolders(ca, ov.totalSupply, 10);
+          if (th && th.top10Pct !== null) data.top10Pct = th.top10Pct;
+        } catch {}
+      }
+    }
+  } catch {}
 
   try {
-    // DexScreener API — price, mcap, liquidity, volume
+    // DexScreener API — fallback / fills gaps (age, any missing fields)
+    if (birdeyeOk && data.pairCreatedAt) throw new Error("skip-dex"); // have what we need
     const dexRes = await axios.get(
       `https://api.dexscreener.com/latest/dex/tokens/${ca}`,
       { timeout: 5000 }
@@ -31,19 +56,18 @@ async function getTokenInfo(ca) {
     const pairs = dexRes.data?.pairs;
     if (pairs && pairs.length > 0) {
       const pair       = pairs[0];
-      data.name        = pair.baseToken?.name    || null;
-      data.symbol      = pair.baseToken?.symbol  || null;
-      data.price       = parseFloat(pair.priceUsd || 0);
-      data.mcap        = pair.marketCap || pair.fdv || 0;
-      data.liquidity   = pair.liquidity?.usd    || 0;
-      data.volume24h   = pair.volume?.h24       || 0;
-      data.change24h   = pair.priceChange?.h24  || 0;
-      data.change6h    = pair.priceChange?.h6   || 0;
-      data.change1h    = pair.priceChange?.h1   || 0;
-      data.change5m    = pair.priceChange?.m5   || 0;
-      data.pairCreatedAt = pair.pairCreatedAt   || 0;
-      data.buys24h     = pair.txns?.h24?.buys    || 0;
-      data.sells24h    = pair.txns?.h24?.sells   || 0;
+      data.name        = data.name || pair.baseToken?.name    || null;
+      data.symbol      = data.symbol || pair.baseToken?.symbol  || null;
+      if (!data.price)     data.price     = parseFloat(pair.priceUsd || 0);
+      if (!data.mcap)      data.mcap      = pair.marketCap || pair.fdv || 0;
+      if (!data.liquidity) data.liquidity = pair.liquidity?.usd || 0;
+      if (!data.volume24h) data.volume24h = pair.volume?.h24 || 0;
+      if (data.change24h === undefined) data.change24h = pair.priceChange?.h24;
+      if (data.change1h === undefined)  data.change1h  = pair.priceChange?.h1;
+      if (data.change5m === undefined)  data.change5m  = pair.priceChange?.m5;
+      data.pairCreatedAt = pair.pairCreatedAt || data.pairCreatedAt || 0;
+      if (!data.buys24h)   data.buys24h   = pair.txns?.h24?.buys || 0;
+      if (!data.sells24h)  data.sells24h  = pair.txns?.h24?.sells || 0;
     }
   } catch {}
 
@@ -97,7 +121,7 @@ async function getTokenSafety(ca) {
     return { mintRevoked: true, freezeRevoked: true, lpLocked: true, topHolderPct: 8, holders: 0, isMock: true };
   }
 
-  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, isMock: false };
+  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, rugScore: null, rugged: null, insiders: null, devPct: null, isMock: false };
 
   try {
     const rpcUrl = config.HELIUS_API_KEY
@@ -127,6 +151,20 @@ async function getTokenSafety(ca) {
     if (accounts.length && totalSupply > 0) {
       const topAmount = parseFloat(accounts[0]?.uiAmount || 0);
       safety.topHolderPct = Math.round((topAmount / totalSupply) * 100);
+    }
+  } catch {}
+
+  // RugCheck: rug risk score, rugged flag, insiders, dev holdings
+  try {
+    const rc = await axios.get(`https://api.rugcheck.xyz/v1/tokens/${ca}/report`, { timeout: 6000 });
+    const d = rc.data || {};
+    if (typeof d.score_normalised === "number") safety.rugScore = d.score_normalised;
+    if (typeof d.rugged === "boolean") safety.rugged = d.rugged;
+    if (typeof d.graphInsidersDetected === "number") safety.insiders = d.graphInsidersDetected;
+    // Dev holdings: creatorBalance / total supply
+    if (d.creatorBalance && d.token?.supply) {
+      const supply = parseFloat(d.token.supply) / Math.pow(10, d.token.decimals || 0);
+      if (supply > 0) safety.devPct = ((parseFloat(d.creatorBalance) / Math.pow(10, d.token.decimals || 0)) / supply) * 100;
     }
   } catch {}
 
