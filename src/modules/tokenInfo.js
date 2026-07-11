@@ -131,7 +131,7 @@ async function getTokenSafety(ca) {
     return { mintRevoked: true, freezeRevoked: true, lpLocked: true, topHolderPct: 8, holders: 0, isMock: true };
   }
 
-  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, rugScore: null, rugged: null, insiders: null, insiderNetworks: null, devPct: null, isMock: false };
+  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, lpStatus: null, topHolderPct: null, holders: null, rugScore: null, rugged: null, insiders: null, insiderNetworks: null, devPct: null, isMock: false };
 
   try {
     const rpcUrl = config.HELIUS_API_KEY
@@ -172,6 +172,16 @@ async function getTokenSafety(ca) {
     if (typeof d.rugged === "boolean") safety.rugged = d.rugged;
     if (typeof d.graphInsidersDetected === "number") safety.insiders = d.graphInsidersDetected;
     if (Array.isArray(d.insiderNetworks)) safety.insiderNetworks = d.insiderNetworks.length;
+    // LP status: locked (via program), burned (incinerator), or unknown/unlocked
+    const BURN_ADDR = "1nc1nerator11111111111111111111111111111111";
+    const lockers = d.lockers || {};
+    const lockerList = Object.values(lockers);
+    if (lockerList.length > 0) {
+      const anyBurned = lockerList.some(l => l.owner === BURN_ADDR || l.tokenAccount === BURN_ADDR);
+      safety.lpStatus = anyBurned ? "burned" : "locked";
+    } else if (d.totalLPProviders !== undefined) {
+      safety.lpStatus = "unlocked";
+    }
     // Dev holdings: creatorBalance / total supply
     if (d.creatorBalance && d.token?.supply) {
       const supply = parseFloat(d.token.supply) / Math.pow(10, d.token.decimals || 0);
@@ -208,7 +218,9 @@ function formatSafetyCard(safety) {
   else if (safety.mintRevoked === false) bits1.push("🔴 Mint Active");
   if (safety.freezeRevoked === true) bits1.push("✅ Freeze Revoked");
   else if (safety.freezeRevoked === false) bits1.push("🔴 Freeze Active");
-  if (mark(safety.lpLocked)) bits1.push(`${mark(safety.lpLocked)} LP locked`);
+  if (safety.lpStatus === "burned") bits1.push("🔥 LP Burned");
+  else if (safety.lpStatus === "locked") bits1.push("🔒 LP Locked");
+  else if (safety.lpStatus === "unlocked") bits1.push("⚠️ LP Unlocked");
   // Top holder % and holder count are shown in the main info section, not duplicated here
   const l1 = bits1.length ? bits1.join("  ") : null;
   const l2 = null;
