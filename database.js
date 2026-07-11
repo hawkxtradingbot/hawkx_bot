@@ -645,7 +645,9 @@ function getPositionsBySource(userId, source) {
 }
 
 function closePosition(positionId) {
-  getDb().prepare("UPDATE positions SET status = 'closed' WHERE position_id = ?").run(positionId);
+  // Also zero out token_amount and sol_invested - a closed position (100% sold) holds nothing,
+  // so stale non-zero amounts shouldn't linger and confuse balance/holdings checks later.
+  getDb().prepare("UPDATE positions SET status = 'closed', token_amount = 0, sol_invested = 0 WHERE position_id = ?").run(positionId);
 }
 
 function getAllOpenPositions() {
