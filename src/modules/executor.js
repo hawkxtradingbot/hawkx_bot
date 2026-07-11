@@ -149,6 +149,16 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     return null;
   }
 
+  // Low-balance pre-check (real trades only) - avoid a confusing on-chain failure
+  if (process.env.MOCK_TRADES === "false") {
+    const buyWalletObj = db.getWallet(user.active_wallet_id);
+    const curWalletBal = buyWalletObj ? (await db.getWalletBalance(buyWalletObj.public_key)) || 0 : 0;
+    if (curWalletBal < solAmount + 0.002) {
+      await ctx.reply(`⚠️ Balance too low: you have ${curWalletBal.toFixed(4)} SOL, need ~${(solAmount + 0.002).toFixed(4)} SOL (trade + fees).`);
+      return null;
+    }
+  }
+
   // Safety check
   const safety = await checkSafety(ca, user.mode || "beginner");
   if (safety.status === "BLOCK" && !opts.skipSafety) {

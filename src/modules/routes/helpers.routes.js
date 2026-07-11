@@ -350,7 +350,7 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   const payoutIdx = payoutWallet ? wallets.indexOf(payoutWallet) + 1 : null;
   const payoutLabel = payoutIdx ? `W${payoutIdx}` : "Custom";
 
-  let msg = `💰 *HawkX Referrals*\n\n`;
+  let msg = `💰 *HawkX Referrals*\n\n🎁 Friends who join with your link get *10% off* trading fees!\n\n`;
   const promoRate = (freshUser.promoter_rate && freshUser.promoter_rate > 0) ? Math.round(freshUser.promoter_rate * 100) : 35;
   const l1Rate = isPromoter ? promoRate : 30;
   if (isPromoter) msg += `🌟 *Promoter Account* — L1: ${promoRate}%\n\n`;
