@@ -184,19 +184,19 @@ async function generateTradeCard(opts) {
   <rect width="3" height="${H}" fill="url(#ogGrad)"/>
   <rect x="${W-3}" width="3" height="${H}" fill="url(#ogGrad)"/>
 
-  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="24" y="34" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
   <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
   <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
   <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
 
   <text x="24" y="60" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="2">SOLD ${sellPct}%${holdTime ? "  ·  HELD " + holdTime.toUpperCase() : ""}</text>
-  <text x="24" y="96" font-family="Arial Black" font-size="30" fill="#FFD27A">${tokenName.slice(0,14)}</text>
+  <text x="24" y="96" font-family="Arial Black" font-size="30" fill="#FFD27A">$${tokenName.slice(0,14)}</text>
   ${isProfit ? '<text x="' + (W-24) + '" y="92" font-family="Arial Black" font-size="22" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
 
-  <text x="24" y="146" font-family="Arial Black" font-size="40" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
-  <text x="26" y="172" font-family="Arial Black" font-size="17" fill="${pnlColor}">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
-  <text x="110" y="172" font-family="Arial" font-size="14" fill="#FF9500">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
-  <text x="24" y="194" font-family="Arial" font-size="11" fill="rgba(255,255,255,0.6)">${memeText}</text>
+  <text x="24" y="150" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
+  <text x="${W-24}" y="146" font-family="Arial Black" font-size="20" fill="${pnlColor}" text-anchor="end">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
+  <text x="${W-24}" y="168" font-family="Arial" font-size="16" fill="#FF9500" text-anchor="end">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
+  <text x="24" y="196" font-family="Arial" font-size="13" fill="rgba(255,255,255,0.65)">${memeText}</text>
   <line x1="24" y1="206" x2="${W-24}" y2="206" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
 
   <text x="24" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">ENTRY</text>
@@ -222,7 +222,7 @@ async function generateTradeCard(opts) {
 </svg>`;
 
   try {
-    const buf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const buf = await sharp(Buffer.from(svg), { density: 288 }).png({ quality: 100, compressionLevel: 6 }).toBuffer();
     return { type: 'photo', buffer: buf };
   } catch(e) {
     console.error('[TradeCard] Error:', e.message);
@@ -330,7 +330,7 @@ async function generateStatsCard(opts) {
 </svg>`;
 
   try {
-    const buf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const buf = await sharp(Buffer.from(svg), { density: 288 }).png({ quality: 100, compressionLevel: 6 }).toBuffer();
     return { type: 'photo', buffer: buf };
   } catch(e) {
     console.error('[StatsCard] Error:', e.message);
@@ -404,7 +404,7 @@ async function generateRankCard(opts) {
 </svg>`;
 
   try {
-    const buf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const buf = await sharp(Buffer.from(svg), { density: 288 }).png({ quality: 100, compressionLevel: 6 }).toBuffer();
     return { type: 'photo', buffer: buf };
   } catch(e) {
     console.error('[RankCard] Error:', e.message);
