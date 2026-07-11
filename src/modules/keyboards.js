@@ -142,8 +142,7 @@ function buildBeginnerSettingsMenu(user) {
   kb.text(bMev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ⬜", "set_mev")
     .text("👁 Show/Hide", "bset_show_hide")
     .row();
-  kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set Security PIN", "set_sap").row();
-  kb.text("🌐 Language",   "set_language").row();
+  kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set PIN", "set_sap").text("🌐 Language", "set_language").row();
   kb.text("⚡ Pro Mode →", "mode_set_pro").row();
   kb.text("← Back",    "menu_main").row();
   return kb;
