@@ -1032,7 +1032,6 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
   const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
   if (ageStr) line2.push(`🕐 <b>${ageStr}${isNew ? " new" : " old"}</b>`);
   if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
-  if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} <b>Dex Paid</b>\n`;
   // Line 4: Top 10 holders / dev holdings / insiders
   const holderBits = [];
   if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 <b>Top 10 hold:</b> ${tInfo.top10Pct.toFixed(2)}%`);
@@ -1048,6 +1047,7 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
     const pressureLabel = buyPct >= 50 ? `🟢 ${buyPct}%` : `🔴 -${100-buyPct}%`;
     infoLines += `📊 <b>Buy Pressure:</b> ${pressureLabel} (${formatNum(b)} / ${formatNum(s)})\n`;
   }
+  if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} <b>Dex Paid</b>\n`;
   if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
   if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
   // Safety block

@@ -252,7 +252,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
         if (!entryMcap && ov.price > 0 && ov.totalSupply) entryMcap = ov.price * Number(ov.totalSupply);
       } else {
         const axiosMcap = require("axios");
-        const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
+        const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 1200 });
         const pairs  = dexRes.data?.pairs;
         if (pairs && pairs.length > 0) {
           const best = pairs.reduce((a, b) => ((b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a), pairs[0]);

@@ -19,7 +19,7 @@ async function getPrice(address) {
 // Full token overview: price, mcap, liquidity, volume, holders, decimals
 async function getTokenOverview(address) {
   try {
-    const { data } = await axios.get(`${BASE}/defi/token_overview?address=${address}`, { headers: headers(), timeout: 8000 });
+    const { data } = await axios.get(`${BASE}/defi/token_overview?address=${address}`, { headers: headers(), timeout: 1200 });
     if (!data?.success) return null;
     const d = data.data;
     return {
