@@ -58,6 +58,33 @@ async function injectTransferInstruction(tx, fromPubkey, toPubkey, lamports, con
   return new VersionedTransaction(newMessage);
 }
 
+
+// Solana Memo Program - adds a visible "HawkX" tag to transactions on Solscan/explorers
+const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+function buildMemoInstruction(text) {
+  const { TransactionInstruction } = require("@solana/web3.js");
+  return new TransactionInstruction({
+    keys: [],
+    programId: MEMO_PROGRAM_ID,
+    data: Buffer.from(text, "utf8"),
+  });
+}
+
+// Inject one or more extra instructions (memo, fee transfer, etc.) into a swap tx, handling ALTs correctly
+async function injectInstructions(tx, extraInstructions, connection) {
+  const message = tx.message;
+  const altLookups = message.addressTableLookups || [];
+  const resolvedALTs = [];
+  for (const lookup of altLookups) {
+    const res = await connection.getAddressLookupTable(lookup.accountKey);
+    if (res && res.value) resolvedALTs.push(res.value);
+  }
+  const decompiled = TransactionMessage.decompile(message, { addressLookupTableAccounts: resolvedALTs });
+  for (const ix of extraInstructions) decompiled.instructions.push(ix);
+  const newMessage = decompiled.compileToV0Message(resolvedALTs);
+  return new VersionedTransaction(newMessage);
+}
+
 // Build + send a swap. Returns { ok, signature, error }.
 async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports }) {
   const connection = getConnection();
