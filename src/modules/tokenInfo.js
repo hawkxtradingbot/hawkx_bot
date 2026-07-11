@@ -131,7 +131,7 @@ async function getTokenSafety(ca) {
     return { mintRevoked: true, freezeRevoked: true, lpLocked: true, topHolderPct: 8, holders: 0, isMock: true };
   }
 
-  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, rugScore: null, rugged: null, insiders: null, devPct: null, isMock: false };
+  const safety = { mintRevoked: null, freezeRevoked: null, lpLocked: null, topHolderPct: null, holders: null, rugScore: null, rugged: null, insiders: null, insiderNetworks: null, devPct: null, isMock: false };
 
   try {
     const rpcUrl = config.HELIUS_API_KEY
@@ -171,6 +171,7 @@ async function getTokenSafety(ca) {
     if (typeof d.score_normalised === "number") safety.rugScore = d.score_normalised;
     if (typeof d.rugged === "boolean") safety.rugged = d.rugged;
     if (typeof d.graphInsidersDetected === "number") safety.insiders = d.graphInsidersDetected;
+    if (Array.isArray(d.insiderNetworks)) safety.insiderNetworks = d.insiderNetworks.length;
     // Dev holdings: creatorBalance / total supply
     if (d.creatorBalance && d.token?.supply) {
       const supply = parseFloat(d.token.supply) / Math.pow(10, d.token.decimals || 0);

@@ -1017,36 +1017,36 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
   let infoLines = `${tName}\n📋 <code>${ca}</code>\n\n`;
   // Line 1: MC · price
   const statBits = [];
-  if (tInfo.mcap) statBits.push(`📊 MC ${formatNum(tInfo.mcap)}`);
+  if (tInfo.mcap) statBits.push(`📊 <b>MC</b> ${formatNum(tInfo.mcap)}`);
   if (tInfo.price) statBits.push(`💰 ${formatPrice(tInfo.price)}`);
   if (statBits.length) infoLines += statBits.join(" · ") + `\n`;
   // Line 2: liq · vol
   const statBits2 = [];
-  if (tInfo.liquidity) statBits2.push(`💧 Liq ${formatNum(tInfo.liquidity)}`);
-  if (tInfo.volume24h) statBits2.push(`📈 Vol ${formatNum(tInfo.volume24h)}`);
+  if (tInfo.liquidity) statBits2.push(`💧 <b>Liq</b> ${formatNum(tInfo.liquidity)}`);
+  if (tInfo.volume24h) statBits2.push(`📈 <b>Vol</b> ${formatNum(tInfo.volume24h)}`);
   if (statBits2.length) infoLines += statBits2.join(" · ") + `\n`;
   // Line 3: holders · age
   const line2 = [];
-  if (tInfo.holders) line2.push(`👥 ${tInfo.holders.toLocaleString()} holders`);
+  if (tInfo.holders) line2.push(`👥 ${tInfo.holders.toLocaleString()} <b>holders</b>`);
   const ageStr = formatAge(tInfo.pairCreatedAt);
   const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
-  if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕ew" : " old"}`);
+  if (ageStr) line2.push(`🕐 <b>${ageStr}${isNew ? " new" : " old"}</b>`);
   if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
-  if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} Dex Paid\n`;
+  if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} <b>Dex Paid</b>\n`;
   // Line 4: Top 10 holders / dev holdings / insiders
   const holderBits = [];
-  if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 Top 10 hold: ${tInfo.top10Pct.toFixed(2)}%`);
-  if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 Dev holds: ${safety.devPct.toFixed(2)}%`);
-  if (safety.insiders !== null && safety.insiders !== undefined && safety.insiders >= 3) holderBits.push(`🔍 Insiders: ${safety.insiders}`);
+  if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 <b>Top 10 hold:</b> ${tInfo.top10Pct.toFixed(2)}%`);
+  if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 <b>Dev holds:</b> ${safety.devPct.toFixed(2)}%`);
+  if (safety.insiderNetworks !== null && safety.insiderNetworks !== undefined && safety.insiderNetworks >= 1) holderBits.push(`🔍 <b>Insiders:</b> ${safety.insiderNetworks} network${safety.insiderNetworks>1?"s":""} (${safety.insiders} wallets)`);
   if (holderBits.length) infoLines += holderBits.join("  ") + `\n`;
   // Line 5: change chips
-  if (chips.length) infoLines += `Chng: ` + chips.join("  ") + `\n`;
+  if (chips.length) infoLines += `<b>Chng:</b> ` + chips.join("  ") + `\n`;
   // Line 6: buy/sell pressure (sell-dominant shown as negative)
   if (tInfo.buys24h || tInfo.sells24h) {
     const b = tInfo.buys24h || 0, s = tInfo.sells24h || 0, tot = b + s;
     const buyPct = tot > 0 ? Math.round((b / tot) * 100) : 0;
     const pressureLabel = buyPct >= 50 ? `🟢 ${buyPct}%` : `🔴 -${100-buyPct}%`;
-    infoLines += `📊 Buy Pressure: ${pressureLabel} (${formatNum(b)} / ${formatNum(s)})\n`;
+    infoLines += `📊 <b>Buy Pressure:</b> ${pressureLabel} (${formatNum(b)} / ${formatNum(s)})\n`;
   }
   if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
   if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
