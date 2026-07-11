@@ -1179,6 +1179,12 @@ function removeWalletTracker(userId, id) {
 
 
 
+function getAllTimeFeeSaved(userId) {
+  const trades = getDb().prepare("SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000").all(userId, "sell");
+  const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
+  return Math.max(0, raw);
+}
+
 function getWeeklyFeeSaved(userId) {
   const d = new Date();
   d.setDate(d.getDate() - 7);
@@ -1532,6 +1538,6 @@ module.exports = {
   getSysConfig, setSysConfig, addVolume,
   getGlobalBlacklist, addGlobalBlacklist, getUserBlacklist, getUserWhitelist,
   flagSuspicious, getTotalUsers, getRankDistribution, getRevenue,
-  getPriceAlerts, addPriceAlert, getDailyFeeSaved, getWeeklyFeeSaved, getMonthlyFeeSaved, getPeriodStats,
+  getPriceAlerts, addPriceAlert, getDailyFeeSaved, getAllTimeFeeSaved, getWeeklyFeeSaved, getMonthlyFeeSaved, getPeriodStats,
   getWalletTrackers, addWalletTracker, removeWalletTracker,
 };
