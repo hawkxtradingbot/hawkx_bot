@@ -114,7 +114,7 @@ async function generateTradeCard(opts) {
     referralCode = null,
   } = opts;
 
-  const W = 1000, H = 520;
+  const W = 640, H = 420;
   const isProfit = pnlSol >= 0;
   const sign = isProfit ? '+' : '';
   const pnlColor = isProfit ? '#14F195' : '#FF4444';
@@ -142,75 +142,83 @@ async function generateTradeCard(opts) {
 
   const rankColors = ['','#aaaaaa','#00ccff','#00ff88','#ff9900','#cc44ff','#ff4444','#FFD700'];
   const rankColor = rankColors[rankNum] || '#F5A623';
-  const formatMcap = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : `$${n}`;
+  const formatMcap = (n) => {
+    if (!n || n <= 0) return "N/A";
+    if (n >= 1e9) return "$" + (n/1e9).toFixed(2) + "B";
+    if (n >= 1e6) return "$" + (n/1e6).toFixed(1) + "M";
+    if (n >= 1e3) return "$" + (n/1e3).toFixed(0) + "K";
+    return "$" + n.toFixed(0);
+  };
 
-  // Generate chart
-  const chartSVG = generateChartSVG(W, H * 0.55, isProfit);
-
-  // Referral QR code (bottom-right corner) - only if a referral code was provided
+  // Referral QR code - only if a referral code was provided
   let qrDataUrl = null;
   if (referralCode) {
     qrDataUrl = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
   }
 
+  const refCodeShort = referralCode ? String(referralCode).slice(0,14) : "";
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#1c0e00"/>
-      <stop offset="45%" style="stop-color:#080c12"/>
+      <stop offset="50%" style="stop-color:#0A0A0A"/>
       <stop offset="100%" style="stop-color:#1c0e00"/>
     </linearGradient>
     <linearGradient id="ogGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#F5A623"/>
-      <stop offset="100%" style="stop-color:#E8720C"/>
+      <stop offset="0%" style="stop-color:#FF9500"/>
+      <stop offset="100%" style="stop-color:#FF6B00"/>
     </linearGradient>
     <linearGradient id="pnlGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:${pnlColor}"/>
       <stop offset="100%" style="stop-color:${isProfit ? '#00cc77' : '#cc2222'}"/>
     </linearGradient>
-    <linearGradient id="chartFade" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:rgba(0,0,0,0)"/>
-      <stop offset="100%" style="stop-color:rgba(8,12,18,0.95)"/>
-    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" style="stop-color:#FF6B00" stop-opacity="0.15"/>
+      <stop offset="100%" style="stop-color:#FF6B00" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <g transform="translate(0,50)">${chartSVG}</g>
-  <rect width="${W}" height="${H}" fill="url(#chartFade)"/>
-  <rect width="${W}" height="52" fill="url(#ogGrad)" opacity="0.12"/>
-  <rect y="${H-48}" width="${W}" height="48" fill="url(#ogGrad)" opacity="0.12"/>
-  <rect width="${W}" height="5" fill="url(#ogGrad)"/>
-  <rect y="${H-5}" width="${W}" height="5" fill="url(#ogGrad)"/>
-  <rect width="4" height="${H}" fill="url(#ogGrad)"/>
-  <rect x="${W-4}" width="4" height="${H}" fill="url(#ogGrad)"/>
-  <text x="40" y="47" font-family="Arial Black" font-size="28" fill="#F5A623" letter-spacing="6">H A W K X</text>
-  <text x="${W-40}" y="30" font-family="Arial" font-size="15" fill="rgba(255,255,255,0.8)" text-anchor="end">@${username}</text>
-  <text x="${W-40}" y="52" font-family="Arial Black" font-size="17" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
-  <line x1="40" y1="68" x2="${W-40}" y2="68" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
-  <text x="40" y="100" font-family="Arial" font-size="12" fill="#E8720C" letter-spacing="4">TRADE CLOSED  |  SOLD ${sellPct}%${holdTime ? "  |  HELD " + holdTime.toUpperCase() : ""}</text>
-  <text x="40" y="155" font-family="Arial Black" font-size="60" fill="white">${tokenName}</text>
-  ${isProfit ? '<text x="' + (W-40) + '" y="150" font-family="Arial Black" font-size="46" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
-  <text x="40" y="252" font-family="Arial Black" font-size="74" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
-  <text x="42" y="292" font-family="Arial Black" font-size="27" fill="${pnlColor}">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
-  <text x="225" y="292" font-family="Arial" font-size="22" fill="#F5A623">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
-  <text x="42" y="326" font-family="Arial Black" font-size="17" fill="rgba(255,255,255,0.75)">${memeText}</text>
-  <line x1="40" y1="342" x2="${W-40}" y2="342" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
-  <text x="40" y="370" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">ENTRY</text>
-  <text x="40" y="400" font-family="Arial Black" font-size="29" fill="white">${entryMcap > 0 ? formatMcap(entryMcap) : 'N/A'}</text>
-  <text x="175" y="370" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">EXIT</text>
-  <text x="175" y="400" font-family="Arial Black" font-size="29" fill="white">${exitMcap > 0 ? formatMcap(exitMcap) : 'N/A'}</text>
-  <text x="330" y="370" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">INVESTED</text>
-  <text x="330" y="400" font-family="Arial Black" font-size="26" fill="white">${hideAmounts ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' SOL'}</text>
-  <text x="600" y="370" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">RETURNED</text>
-  <text x="600" y="400" font-family="Arial Black" font-size="26" fill="${pnlColor}">${hideAmounts ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' SOL'}</text>
-  <line x1="40" y1="416" x2="${W-40}" y2="416" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
-  <rect x="40" y="424" width="${qrDataUrl ? W-200 : W-80}" height="40" rx="6" fill="rgba(245,166,35,0.07)"/>
-  <rect x="40" y="424" width="4" height="40" rx="2" fill="${rankColor}"/>
-  <text x="58" y="440" font-family="Arial" font-size="10" fill="#E8720C" letter-spacing="2">RANK BENEFIT</text>
-  <text x="58" y="457" font-family="Arial Black" font-size="14" fill="${rankColor}">${rankName.toUpperCase()}  |  ${feeRate}% FEE  |  SAVED:$${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)}</text>
-  ${qrDataUrl ? `<image x="${W-150}" y="422" width="44" height="44" href="${qrDataUrl}"/><text x="${W-128}" y="475" font-family="Arial" font-size="9" fill="#F5A623" text-anchor="middle">10% OFF</text>` : ''}
-  <line x1="40" y1="472" x2="${W-40}" y2="472" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
+  <rect width="${W}" height="${H}" fill="url(#glow)"/>
+  <rect width="${W}" height="4" fill="url(#ogGrad)"/>
+  <rect y="${H-4}" width="${W}" height="4" fill="url(#ogGrad)"/>
+  <rect width="3" height="${H}" fill="url(#ogGrad)"/>
+  <rect x="${W-3}" width="3" height="${H}" fill="url(#ogGrad)"/>
+
+  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
+  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
+  <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
+
+  <text x="24" y="60" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="2">SOLD ${sellPct}%${holdTime ? "  ·  HELD " + holdTime.toUpperCase() : ""}</text>
+  <text x="24" y="96" font-family="Arial Black" font-size="30" fill="#FFD27A">${tokenName.slice(0,14)}</text>
+  ${isProfit ? '<text x="' + (W-24) + '" y="92" font-family="Arial Black" font-size="22" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
+
+  <text x="24" y="146" font-family="Arial Black" font-size="40" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
+  <text x="26" y="172" font-family="Arial Black" font-size="17" fill="${pnlColor}">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
+  <text x="110" y="172" font-family="Arial" font-size="14" fill="#FF9500">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
+  <text x="24" y="194" font-family="Arial" font-size="11" fill="rgba(255,255,255,0.6)">${memeText}</text>
+  <line x1="24" y1="206" x2="${W-24}" y2="206" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
+
+  <text x="24" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">ENTRY</text>
+  <text x="24" y="238" font-family="Arial Black" font-size="16" fill="white">${formatMcap(entryMcap)}</text>
+  <text x="180" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">EXIT</text>
+  <text x="180" y="238" font-family="Arial Black" font-size="16" fill="white">${formatMcap(exitMcap)}</text>
+  <text x="336" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">INVESTED</text>
+  <text x="336" y="238" font-family="Arial Black" font-size="15" fill="white">${hideAmounts ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' \u25CE'}</text>
+  <text x="470" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">RETURNED</text>
+  <text x="470" y="238" font-family="Arial Black" font-size="15" fill="${pnlColor}">${hideAmounts ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' \u25CE'}</text>
+  <line x1="24" y1="250" x2="${W-24}" y2="250" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
+
+  <rect x="24" y="260" width="${qrDataUrl ? W-140 : W-48}" height="34" rx="6" fill="rgba(255,107,0,0.08)"/>
+  <rect x="24" y="260" width="3" height="34" rx="1.5" fill="${rankColor}"/>
+  <text x="36" y="274" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">RANK BENEFIT</text>
+  <text x="36" y="288" font-family="Arial Black" font-size="12" fill="${rankColor}">${rankName.toUpperCase()} · ${feeRate}% FEE · SAVED $${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)}</text>
+
+  ${qrDataUrl ? `<image x="${W-104}" y="256" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="304" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="314" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort}</text>` : ''}
+
+  <line x1="24" y1="326" x2="${W-24}" y2="326" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
+  <text x="24" y="346" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>
+  <text x="${W-24}" y="346" font-family="Arial" font-size="10" fill="#FF6B00" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 
   try {
