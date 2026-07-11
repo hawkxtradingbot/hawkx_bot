@@ -470,16 +470,19 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   try { if (sellProcMsg) await ctx.api.deleteMessage(ctx.chat.id, sellProcMsg.message_id); } catch {}
 
   const sign = pnlPct >= 0 ? "+" : "";
-  const solscanLink = (REAL_S && txHash && !String(txHash).startsWith("DEVNET")) ? `\n🔗 [Solscan](https://solscan.io/tx/${txHash})` : "";
+  const solscanLink = (REAL_S && txHash && !String(txHash).startsWith("DEVNET")) ? ` · [Solscan](https://solscan.io/tx/${txHash})` : "";
   if (!opts.silent) await ctx.reply(
-    `✅ *Sell Confirmed!*\n\n` +
-    `Token: *${position.token_name || position.token_ca.slice(0,8)}*\n` +
-    `Sold: *${pctToSell}%*\n` +
-    `Received: *${solReceived.toFixed(4)} SOL*\n` +
-    `P&L: *${sign}${pnlPct.toFixed(1)}%*\n` +
-    `Fee: *${feeSol.toFixed(6)} SOL*` + solscanLink,
+    `✅ Sold ${pctToSell}% ${position.token_name || position.token_ca.slice(0,8)} — ${solReceived.toFixed(4)} SOL (${sign}${pnlPct.toFixed(1)}%)` + solscanLink,
     { parse_mode: "Markdown", disable_web_page_preview: true }
   );
+  // Tell the deposit monitor this balance change was expected (not an external deposit)
+  if (REAL_S) {
+    try {
+      const { syncKnownBalance } = require("./depositMonitor");
+      const sellWalletForSync = db.getWallet(user.active_wallet_id || position.wallet_id);
+      if (sellWalletForSync) await syncKnownBalance(sellWalletForSync.public_key);
+    } catch {}
+  }
   // Auto PnL card on every sell
   let exitMcap = 0;
   try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 5000 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}

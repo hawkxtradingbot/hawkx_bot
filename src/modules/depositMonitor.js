@@ -2,6 +2,17 @@
 // unexpectedly (i.e. not from a bot-initiated buy/sell/withdraw).
 const db = require("../../database");
 
+// Call this right after a bot-initiated balance change (sell proceeds, referral claim, etc.)
+// so the next poll doesn't mistake it for an external deposit.
+async function syncKnownBalance(publicKey) {
+  try {
+    const currentBal = await db.getWalletBalance(publicKey);
+    db.setSysConfig(`last_bal_${publicKey}`, String(currentBal));
+  } catch (e) {
+    console.log("[DepositMonitor] syncKnownBalance failed:", e.message);
+  }
+}
+
 async function checkDeposits(bot) {
   try {
     const wallets = db.getDb().prepare("SELECT wallet_id, user_id, public_key, label FROM wallets").all();
@@ -52,4 +63,4 @@ function startDepositMonitor(bot) {
   }
 }
 
-module.exports = { startDepositMonitor, checkDeposits };
+module.exports = { startDepositMonitor, checkDeposits, syncKnownBalance };

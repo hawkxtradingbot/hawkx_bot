@@ -70,6 +70,11 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
           await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
           // Only mark paid AFTER the transfer confirms
           db.claimEarnings(userId, 0.01);
+          // Tell the deposit monitor this balance change was expected (referral payout, not an external deposit)
+          try {
+            const { syncKnownBalance } = require("../depositMonitor");
+            await syncKnownBalance(payoutAddr);
+          } catch {}
           await ctx.answerCallbackQuery("✅ Sent!");
           await ctx.reply(
             `✅ *Claimed ${pendingSol.toFixed(4)} SOL!*\n\nSent to: *${pwLabel}*\n\`${payoutAddr.slice(0,16)}...\`\n\n🔗 [Solscan](https://solscan.io/tx/${sig})`,
