@@ -984,7 +984,7 @@ async function showLaunchScreen(ctx, userId) {
 
 
 // Shared token scanner/buy screen — used by paste-CA and watchlist Buy
-async function showTokenScanner(ctx, user, ca, asReply = false) {
+async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = false) {
   const userId = user.user_id;
   const settings = db.getSettings(userId) || {};
   const b1 = settings.buy_amt_1 || 0.1;
@@ -993,8 +993,10 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   db.setSysConfig(`pending_ca_${userId}`, ca);
   db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
   db.setSysConfig(`buy_ctx_${userId}`, "");
-  const tInfo = await getTokenInfo(ca);
+  const tInfo = await getTokenInfo(ca, forceRefresh);
   const safety = await getTokenSafety(ca);
+  const { getDexPaidStatus } = require("../tokenInfo");
+  const dexPaid = await getDexPaidStatus(ca).catch(() => null);
   if (safety && tInfo.holders) safety.holders = tInfo.holders;
   const dexUrl = `https://dexscreener.com/solana/${ca}`;
   const tName = tInfo.name
@@ -1028,11 +1030,12 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
   if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕" : ""} old`);
   if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
+  if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} Dex Paid\n`;
   // Line 4: Top 10 holders / dev holdings / insiders
   const holderBits = [];
   if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 Top 10 hold: ${tInfo.top10Pct.toFixed(1)}%`);
   if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 Dev holds: ${safety.devPct.toFixed(1)}%`);
-  if (safety.insiders !== null && safety.insiders !== undefined && safety.insiders > 0) holderBits.push(`🔍 Insiders: ${safety.insiders}`);
+  if (safety.insiders !== null && safety.insiders !== undefined && safety.insiders >= 3) holderBits.push(`🔍 Insiders: ${safety.insiders}`);
   if (holderBits.length) infoLines += holderBits.join("  ") + `\n`;
   // Line 5: change chips
   if (chips.length) infoLines += `Chng: ` + chips.join("  ") + `\n`;
@@ -1054,7 +1057,7 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
     if (safety.rugScore !== null && safety.rugScore !== undefined) {
       const rs = safety.rugScore;
       const riskLabel = rs > 70 ? "🔴 High" : rs > 40 ? "🟡 Medium" : "🟢 Low";
-      infoLines += `🛡 Rug Risk: ${riskLabel} (${rs}/100)\n`;
+      infoLines += `🛡 RugCheck Score: ${riskLabel} (${rs}/100)\n`;
     }
     if (safety.rugged === true) infoLines += `🚨 <b>FLAGGED AS RUGGED</b>\n`;
     if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;

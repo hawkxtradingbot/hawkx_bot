@@ -61,7 +61,7 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       const ca2 = db.getSysConfig(`pending_ca_${userId}`) || "";
       if (!ca2) return true;
       const { showTokenScanner } = require("./helpers.routes");
-      await showTokenScanner(ctx, user, ca2, true);
+      await showTokenScanner(ctx, user, ca2, true, true);
       return true;
     }
     if (data === "trade_quickbuy") {

@@ -9,9 +9,19 @@ const config = require("../../config");
 const cache = new Map();
 const TTL   = 30000; // 30 second cache
 
-async function getTokenInfo(ca) {
+// Check if DexScreener "Enhanced Token Info" / paid orders are approved
+async function getDexPaidStatus(ca) {
+  try {
+    const { data } = await axios.get(`https://api.dexscreener.com/orders/v1/solana/${ca}`, { timeout: 5000 });
+    const orders = data?.orders || [];
+    const paidApproved = orders.some(o => o.status === "approved" && (o.type === "tokenProfile" || o.type === "communityTakeover"));
+    return paidApproved;
+  } catch { return null; }
+}
+
+async function getTokenInfo(ca, forceRefresh = false) {
   const now = Date.now();
-  if (cache.has(ca) && now - cache.get(ca).ts < TTL) {
+  if (!forceRefresh && cache.has(ca) && now - cache.get(ca).ts < TTL) {
     return cache.get(ca).data;
   }
 
@@ -198,16 +208,10 @@ function formatSafetyCard(safety) {
   if (safety.freezeRevoked === true) bits1.push("✅ Freeze Revoked");
   else if (safety.freezeRevoked === false) bits1.push("🔴 Freeze Active");
   if (mark(safety.lpLocked)) bits1.push(`${mark(safety.lpLocked)} LP locked`);
-  const bits2 = [];
-  if (safety.topHolderPct !== null && safety.topHolderPct !== undefined) {
-    const tm = safety.topHolderPct < 20 ? "✅" : safety.topHolderPct < 35 ? "⚠️" : "🔴";
-    bits2.push(`${tm} Top ${safety.topHolderPct}%`);
-  }
-  if (safety.holders) bits2.push(`✅ ${safety.holders.toLocaleString()} holders`);
-  // Build lines — skip empty
+  // Top holder % and holder count are shown in the main info section, not duplicated here
   const l1 = bits1.length ? bits1.join("  ") : null;
-  const l2 = bits2.length ? bits2.join("  ") : null;
+  const l2 = null;
   return { l1, l2 };
 }
 
-module.exports = { getTokenInfo, getTokenSafety, formatSafetyCard, formatAge, formatNum, formatPrice };
+module.exports = { getTokenInfo, getTokenSafety, getDexPaidStatus, formatSafetyCard, formatAge, formatNum, formatPrice };
