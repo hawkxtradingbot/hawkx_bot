@@ -131,7 +131,7 @@ function buildBeginnerSettingsMenu(user) {
     .row();
 
   // Trade speed — 3 per row
-  const spd = s.speed_mode || "standard";
+  const spd = s.speed_mode || "fast";
   kb.text(spd==="fast"   ? "✅ Fast 🐎"   : "Fast 🐎",   "bset_speed_fast")
     .text(spd==="turbo"  ? "✅ Turbo 🚀"  : "Turbo 🚀",  "bset_speed_turbo")
     .text(spd==="custom" ? "✅ Custom ✏️" : "Custom ✏️", "bset_speed_custom")
@@ -166,7 +166,7 @@ function buildProSettingsMenu(user) {
 
 function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false, slipExpanded = false) {
   const kb = new InlineKeyboard();
-  const spd = s?.speed_mode || "standard";
+  const spd = s?.speed_mode || "fast";
   const mev = s?.mev_protect ?? 1;
   const cur = s?.jito_tip || 0.001;
   const buySl = s?.slippage_pct || 10;

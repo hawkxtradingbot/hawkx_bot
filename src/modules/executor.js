@@ -190,7 +190,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       const keypair = decryptWallet(user.active_wallet_id);
       const solLamports = Math.floor(solAmount * 1e9);
       const slippageBps = Math.floor(slippage * 100); // 10% -> 1000 bps
-      const speed = settings.speed_mode || "standard";
+      const speed = settings.speed_mode || "fast";
       // MEV protection: only route through Jito when mev_protect is ON; tip comes from jito_tip (SOL)
       const mevOn = (settings.mev_protect ?? 1) ? true : false;
       const jitoTipLamports = mevOn ? Math.floor((settings.jito_tip || 0) * 1e9) : 0;
@@ -391,7 +391,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const tokenAmountRaw = Math.floor(tokensToSell * Math.pow(10, sellDecimals));
       if (tokenAmountRaw <= 0) { await ctx.reply("❌ Nothing to sell."); return null; }
       const slippageBpsS = Math.floor(((db.getSettings(user.user_id)||{}).slippage_pct || 10) * 100);
-      const speedS = settingsS.speed_mode || "standard";
+      const speedS = settingsS.speed_mode || "fast";
       const mevOnS = (settingsS.mev_protect ?? 1) ? true : false;
       const jitoTipS = mevOnS ? Math.floor((settingsS.jito_tip || 0) * 1e9) : 0;
       const preSellFeeRate = getEffectiveFeeRate(user);
