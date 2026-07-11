@@ -408,7 +408,12 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol, feeRate: preSellFeeRate });
       if (!rs.ok) {
         const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
-        await ctx.reply("❌ *Sell failed:* " + em + "\n\n✅ Your tokens are safe — nothing was sold. Please try again.", { parse_mode: "Markdown" });
+        const emLower = em.toLowerCase();
+        const isFeeIssue = emLower.includes("insufficient") || emLower.includes("rent");
+        const simpleMsg = isFeeIssue
+          ? "❌ Sell failed — not enough SOL to cover fees. Try again with more SOL."
+          : "❌ Sell failed. Please try again.";
+        await ctx.reply(simpleMsg, { parse_mode: "Markdown" });
         return null;
       }
       realFeeCollected = rs.feeCollected === true;
