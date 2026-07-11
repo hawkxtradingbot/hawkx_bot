@@ -508,8 +508,21 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
     // Fee saved vs 1% base rate
     const feeSaved = parseFloat(((1.00 - rank.fee) * solReceived).toFixed(4));
     const _cardSolPxE = await db.getSolPriceUsdShared().catch(() => 150);
+    // Hold time: from position open to now
+    let holdTimeStr = null;
+    try {
+      const openedMs = new Date((position.opened_at || position.created_at || "").replace(" ", "T") + "Z").getTime();
+      if (openedMs) {
+        const diffMs = Date.now() - openedMs;
+        const mins = Math.floor(diffMs / 60000), hrs = Math.floor(mins/60), days = Math.floor(hrs/24);
+        holdTimeStr = days >= 1 ? `${days}d ${hrs%24}h` : hrs >= 1 ? `${hrs}h ${mins%60}m` : `${mins}m`;
+      }
+    } catch {}
+    const freshRefUser = db.getUser(user.user_id);
     const result = await generateTradeCard({
       username: user.username || "Trader",
+      referralCode: freshRefUser?.custom_code || freshRefUser?.referral_code || null,
+      holdTime: holdTimeStr,
       rankName: rank.name,
       rankNum: user.rank || 1,
       tokenName: position.token_name || position.token_ca.slice(0,8),

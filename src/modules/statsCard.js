@@ -1,5 +1,17 @@
 const sharp = require('sharp');
 const path = require('path');
+const QRCode = require('qrcode');
+
+// Generate a small QR code (referral link) as a base64 PNG data URI, for embedding in card SVGs
+async function generateReferralQR(referralUrl) {
+  try {
+    const dataUrl = await QRCode.toDataURL(referralUrl, { width: 120, margin: 1, color: { dark: "#0A0A0A", light: "#FFFFFF" } });
+    return dataUrl;
+  } catch (e) {
+    console.log("[QR] generation failed:", e.message);
+    return null;
+  }
+}
 
 const CARDS_DIR = path.join(__dirname, '../assets/cards');
 
@@ -98,6 +110,8 @@ async function generateTradeCard(opts) {
     weeklyFeeSaved = 0,
     monthlyFeeSaved = 0,
     hideAmounts = false,
+    holdTime = null,
+    referralCode = null,
   } = opts;
 
   const W = 1000, H = 520;
@@ -133,6 +147,12 @@ async function generateTradeCard(opts) {
   // Generate chart
   const chartSVG = generateChartSVG(W, H * 0.55, isProfit);
 
+  // Referral QR code (bottom-right corner) - only if a referral code was provided
+  let qrDataUrl = null;
+  if (referralCode) {
+    qrDataUrl = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
+  }
+
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -166,7 +186,7 @@ async function generateTradeCard(opts) {
   <text x="${W-40}" y="30" font-family="Arial" font-size="15" fill="rgba(255,255,255,0.8)" text-anchor="end">@${username}</text>
   <text x="${W-40}" y="52" font-family="Arial Black" font-size="17" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
   <line x1="40" y1="68" x2="${W-40}" y2="68" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
-  <text x="40" y="100" font-family="Arial" font-size="12" fill="#E8720C" letter-spacing="4">TRADE CLOSED  |  SOLD ${sellPct}%</text>
+  <text x="40" y="100" font-family="Arial" font-size="12" fill="#E8720C" letter-spacing="4">TRADE CLOSED  |  SOLD ${sellPct}%${holdTime ? "  |  HELD " + holdTime.toUpperCase() : ""}</text>
   <text x="40" y="155" font-family="Arial Black" font-size="60" fill="white">${tokenName}</text>
   ${isProfit ? '<text x="' + (W-40) + '" y="150" font-family="Arial Black" font-size="46" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
   <text x="40" y="252" font-family="Arial Black" font-size="74" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
@@ -189,7 +209,10 @@ async function generateTradeCard(opts) {
   <text x="58" y="457" font-family="Arial Black" font-size="15" fill="${rankColor}">${rankName.toUpperCase()} RANK  |  ${feeRate}% FEE  |  TRADE:$${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)} DAY:$${hideAmounts ? "***" : dailyFeeSaved < 0.01 ? dailyFeeSaved.toFixed(4) : dailyFeeSaved.toFixed(2)} WK:$${hideAmounts ? "***" : weeklyFeeSaved < 0.01 ? weeklyFeeSaved.toFixed(4) : weeklyFeeSaved.toFixed(2)}</text>
   <line x1="40" y1="472" x2="${W-40}" y2="472" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
+  ${qrDataUrl
+    ? `<image x="${W-100}" y="${H-100}" width="72" height="72" href="${qrDataUrl}"/><text x="${W-100}" y="${H-108}" font-family="Arial" font-size="10" fill="#F5A623" opacity="0.8">Join HawkX - 10% off</text>`
+    : `<text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>`
+  }
 </svg>`;
 
   try {
@@ -212,9 +235,14 @@ async function generateStatsCard(opts) {
     winRate = 0, volume = 0, weekPnl = 0, monthPnl = 0,
     nextRankSol = 0, rankProgress = 0,
     bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, avgTrade = 0,
+    referralCode = null,
   } = opts;
   const W = 1000, H = 520;
   const isProfit = pnlSol >= 0;
+  let qrDataUrl = null;
+  if (referralCode) {
+    qrDataUrl = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
+  }
   const pnlColor = isProfit ? '#14F195' : '#FF4444';
   const periodLabel = period === 'today' ? "TODAY'S PNL" : period === 'week' ? 'WEEKLY PNL' : 'MONTHLY PNL';
   const rankColors = ['','#aaaaaa','#00ccff','#00ff88','#ff9900','#cc44ff','#ff4444','#FFD700'];
@@ -289,7 +317,10 @@ async function generateStatsCard(opts) {
   <text x="40" y="456" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.4)">${rankProgress.toFixed(0)}% · ${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} / ${nextRankSol || "MAX"} SOL</text>
   <line x1="40" y1="470" x2="${W-40}" y2="470" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
+  ${qrDataUrl
+    ? `<image x="${W-100}" y="${H-100}" width="72" height="72" href="${qrDataUrl}"/><text x="${W-100}" y="${H-108}" font-family="Arial" font-size="10" fill="#F5A623" opacity="0.8">Join HawkX - 10% off</text>`
+    : `<text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>`
+  }
 </svg>`;
 
   try {
