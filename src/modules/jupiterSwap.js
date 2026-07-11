@@ -180,7 +180,7 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
         if (s.err) return { ok: false, error: "transaction failed on-chain", signature };
         if (s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized") { confirmed = true; break; }
       }
-      await new Promise(r => setTimeout(r, 1000)); // poll every 1s
+      await new Promise(r => setTimeout(r, 150)); // poll every 150ms (was 1s - detects confirmation as soon as it happens instead of up to 1s late)
     }
     if (!confirmed) {
       // Do a final check via searchTransactionHistory before giving up
