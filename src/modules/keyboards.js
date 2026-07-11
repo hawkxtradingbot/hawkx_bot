@@ -39,7 +39,7 @@ function getModeLabel(user) {
 function buildRankInfoMessage(user, feeSavedUsd) {
   const vol     = Math.max(0, user?.cumulative_volume_sol || 0);
   const curRank = user?.rank || 1;
-  const rankIcons = { 1:"🥉", 2:"🥈", 3:"🥇", 4:"🏆", 5:"💎", 6:"🦅", 7:"👑" };
+  const rankIcons = { 1:"🥇", 2:"🥈", 3:"🥉", 4:"🏆", 5:"💎", 6:"🦅", 7:"👑" };
   let msg = "🦅 *Rank & Fee System*\n";
   msg += "_Trade more → rank up → pay less fee_\n\n";
   msg += "━━━━━━━━━━━━━━━━━━━\n";
