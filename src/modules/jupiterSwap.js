@@ -38,8 +38,28 @@ async function getQuote(inputMint, outputMint, amountLamports, slippageBps) {
   return data;
 }
 
+
+// Decompile a VersionedTransaction's message, add a SystemProgram.transfer instruction, recompile.
+// Must actually FETCH the address lookup table accounts from chain - the message only carries
+// their addresses + index lists, not the resolved account data. Without this, decompile() fails
+// or produces a broken message for any Jupiter swap that uses ALTs (which is nearly all of them).
+async function injectTransferInstruction(tx, fromPubkey, toPubkey, lamports, connection) {
+  const message = tx.message;
+  const altLookups = message.addressTableLookups || [];
+  const resolvedALTs = [];
+  for (const lookup of altLookups) {
+    const res = await connection.getAddressLookupTable(lookup.accountKey);
+    if (res && res.value) resolvedALTs.push(res.value);
+  }
+  const decompiled = TransactionMessage.decompile(message, { addressLookupTableAccounts: resolvedALTs });
+  const transferIx = SystemProgram.transfer({ fromPubkey, toPubkey, lamports });
+  decompiled.instructions.push(transferIx);
+  const newMessage = decompiled.compileToV0Message(resolvedALTs);
+  return new VersionedTransaction(newMessage);
+}
+
 // Build + send a swap. Returns { ok, signature, error }.
-async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol }) {
+async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports }) {
   const connection = getConnection();
   const priorityFee = priorityFeeForSpeed(speed, customFeeSol);
 
@@ -58,9 +78,19 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
     return { ok: false, error: "No swap transaction from Jupiter" };
   }
 
-  // Deserialize, sign
+  // Deserialize
   const txBuf = Buffer.from(swapData.swapTransaction, "base64");
-  const tx = VersionedTransaction.deserialize(txBuf);
+  let tx = VersionedTransaction.deserialize(txBuf);
+
+  // Optionally fold a fee transfer (user -> treasury) into this same transaction
+  if (feeLamports && feeLamports > 0 && process.env.TREASURY_WALLET) {
+    try {
+      tx = await injectTransferInstruction(tx, keypair.publicKey, new PublicKey(process.env.TREASURY_WALLET), feeLamports, connection);
+    } catch (e) {
+      console.log("[Fee Inject] failed, proceeding WITHOUT fee transfer:", e.message);
+    }
+  }
+
   tx.sign([keypair]);
 
   // Send: via Jito bundle (tip in tx, fastest) or normal RPC
