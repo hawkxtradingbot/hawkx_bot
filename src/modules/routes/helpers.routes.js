@@ -993,10 +993,12 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
   db.setSysConfig(`pending_ca_${userId}`, ca);
   db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
   db.setSysConfig(`buy_ctx_${userId}`, "");
-  const tInfo = await getTokenInfo(ca, forceRefresh);
-  const safety = await getTokenSafety(ca);
   const { getDexPaidStatus } = require("../tokenInfo");
-  const dexPaid = await getDexPaidStatus(ca).catch(() => null);
+  const [tInfo, safety, dexPaid] = await Promise.all([
+    getTokenInfo(ca, forceRefresh),
+    getTokenSafety(ca),
+    getDexPaidStatus(ca).catch(() => null),
+  ]);
   if (safety && tInfo.holders) safety.holders = tInfo.holders;
   const dexUrl = `https://dexscreener.com/solana/${ca}`;
   const tName = tInfo.name
