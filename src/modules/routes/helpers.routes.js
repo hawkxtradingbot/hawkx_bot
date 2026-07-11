@@ -1011,7 +1011,7 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
   if (tInfo.change24h !== undefined && tInfo.change24h !== null) _chP.push("24h " + _fmtC(tInfo.change24h));
   const ch24 = _chP.length ? `  ${(tInfo.change24h||0) >= 0 ? "📈" : "📉"} ${_chP.join(" · ")}` : "";
   // Per-timeframe colored change chips
-  const chip = (label, v) => (v === undefined || v === null) ? null : `${v >= 0 ? "🟢" : "🔴"} ${label} ${v >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`;
+  const chip = (label, v) => (v === undefined || v === null) ? null : `${label} ${v >= 0 ? "+" : ""}${Number(v).toFixed(2)}%`;
   const chips = [chip("5m", tInfo.change5m), chip("1h", tInfo.change1h), chip("24h", tInfo.change24h)].filter(Boolean);
 
   let infoLines = `${tName}\n📋 <code>${ca}</code>\n\n`;
@@ -1030,13 +1030,13 @@ async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = f
   if (tInfo.holders) line2.push(`👥 ${tInfo.holders.toLocaleString()} holders`);
   const ageStr = formatAge(tInfo.pairCreatedAt);
   const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
-  if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕" : ""} old`);
+  if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕ew" : " old"}`);
   if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
   if (dexPaid !== null) infoLines += `${dexPaid ? "✅" : "❌"} Dex Paid\n`;
   // Line 4: Top 10 holders / dev holdings / insiders
   const holderBits = [];
-  if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 Top 10 hold: ${tInfo.top10Pct.toFixed(1)}%`);
-  if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 Dev holds: ${safety.devPct.toFixed(1)}%`);
+  if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 Top 10 hold: ${tInfo.top10Pct.toFixed(2)}%`);
+  if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 Dev holds: ${safety.devPct.toFixed(2)}%`);
   if (safety.insiders !== null && safety.insiders !== undefined && safety.insiders >= 3) holderBits.push(`🔍 Insiders: ${safety.insiders}`);
   if (holderBits.length) infoLines += holderBits.join("  ") + `\n`;
   // Line 5: change chips
