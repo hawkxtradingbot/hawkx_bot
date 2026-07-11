@@ -203,16 +203,14 @@ async function generateTradeCard(opts) {
   <text x="600" y="370" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">RETURNED</text>
   <text x="600" y="400" font-family="Arial Black" font-size="26" fill="${pnlColor}">${hideAmounts ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' SOL'}</text>
   <line x1="40" y1="416" x2="${W-40}" y2="416" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
-  <rect x="40" y="424" width="${W-80}" height="40" rx="6" fill="rgba(245,166,35,0.07)"/>
+  <rect x="40" y="424" width="${qrDataUrl ? W-200 : W-80}" height="40" rx="6" fill="rgba(245,166,35,0.07)"/>
   <rect x="40" y="424" width="4" height="40" rx="2" fill="${rankColor}"/>
   <text x="58" y="440" font-family="Arial" font-size="10" fill="#E8720C" letter-spacing="2">RANK BENEFIT</text>
-  <text x="58" y="457" font-family="Arial Black" font-size="15" fill="${rankColor}">${rankName.toUpperCase()} RANK  |  ${feeRate}% FEE  |  TRADE:$${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)} DAY:$${hideAmounts ? "***" : dailyFeeSaved < 0.01 ? dailyFeeSaved.toFixed(4) : dailyFeeSaved.toFixed(2)} WK:$${hideAmounts ? "***" : weeklyFeeSaved < 0.01 ? weeklyFeeSaved.toFixed(4) : weeklyFeeSaved.toFixed(2)}</text>
+  <text x="58" y="457" font-family="Arial Black" font-size="14" fill="${rankColor}">${rankName.toUpperCase()}  |  ${feeRate}% FEE  |  SAVED:$${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)}</text>
+  ${qrDataUrl ? `<image x="${W-150}" y="422" width="44" height="44" href="${qrDataUrl}"/><text x="${W-128}" y="475" font-family="Arial" font-size="9" fill="#F5A623" text-anchor="middle">10% OFF</text>` : ''}
   <line x1="40" y1="472" x2="${W-40}" y2="472" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  ${qrDataUrl
-    ? `<image x="${W-100}" y="${H-100}" width="72" height="72" href="${qrDataUrl}"/><text x="${W-100}" y="${H-108}" font-family="Arial" font-size="10" fill="#F5A623" opacity="0.8">Join HawkX - 10% off</text>`
-    : `<text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>`
-  }
+  <text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 
   try {
