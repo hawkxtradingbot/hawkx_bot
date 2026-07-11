@@ -607,7 +607,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   ]);
   kb.inline_keyboard.push([
     { text: "← Back", callback_data: "limit_orders_refresh" },
-    { text: "📂 Positions", callback_data: "menu_portfolio" },
+    { text: "📂 Portfolio", callback_data: "menu_portfolio" },
     { text: "🔄 Refresh", callback_data: `lo_token_ca_${ca}` }, // full CA fits within Telegram's 64-byte limit, no truncation/mapping needed here
   ]);
   const curMsgId = forceMsgId || ctx.callbackQuery?.message?.message_id;
@@ -1011,36 +1011,52 @@ async function showTokenScanner(ctx, user, ca, asReply = false) {
   const chips = [chip("5m", tInfo.change5m), chip("1h", tInfo.change1h), chip("24h", tInfo.change24h)].filter(Boolean);
 
   let infoLines = `${tName}\n📋 <code>${ca}</code>\n\n`;
-  // Line 1: MC · price · liq · vol
+  // Line 1: MC · price
   const statBits = [];
   if (tInfo.mcap) statBits.push(`📊 MC ${formatNum(tInfo.mcap)}`);
   if (tInfo.price) statBits.push(`💰 ${formatPrice(tInfo.price)}`);
-  if (tInfo.liquidity) statBits.push(`💧 Liq ${formatNum(tInfo.liquidity)}`);
-  if (tInfo.volume24h) statBits.push(`📈 Vol ${formatNum(tInfo.volume24h)}`);
   if (statBits.length) infoLines += statBits.join(" · ") + `\n`;
-  // Line 2: holders · age
+  // Line 2: liq · vol
+  const statBits2 = [];
+  if (tInfo.liquidity) statBits2.push(`💧 Liq ${formatNum(tInfo.liquidity)}`);
+  if (tInfo.volume24h) statBits2.push(`📈 Vol ${formatNum(tInfo.volume24h)}`);
+  if (statBits2.length) infoLines += statBits2.join(" · ") + `\n`;
+  // Line 3: holders · age
   const line2 = [];
   if (tInfo.holders) line2.push(`👥 ${tInfo.holders.toLocaleString()} holders`);
   const ageStr = formatAge(tInfo.pairCreatedAt);
   const isNew = ageStr && (Date.now() - tInfo.pairCreatedAt) < 24*3600000;
   if (ageStr) line2.push(`🕐 ${ageStr}${isNew ? " 🆕" : ""} old`);
   if (line2.length) infoLines += line2.join("  ·  ") + `\n`;
-  // Line 3: change chips
-  if (chips.length) infoLines += chips.join("  ") + `\n`;
-  // Line 4: buy/sell pressure
+  // Line 4: Top 10 holders / dev holdings / insiders
+  const holderBits = [];
+  if (tInfo.top10Pct !== null && tInfo.top10Pct !== undefined) holderBits.push(`🏆 Top 10 hold: ${tInfo.top10Pct.toFixed(1)}%`);
+  if (safety.devPct !== null && safety.devPct !== undefined) holderBits.push(`👤 Dev holds: ${safety.devPct.toFixed(1)}%`);
+  if (safety.insiders !== null && safety.insiders !== undefined && safety.insiders > 0) holderBits.push(`🔍 Insiders: ${safety.insiders}`);
+  if (holderBits.length) infoLines += holderBits.join("  ") + `\n`;
+  // Line 5: change chips
+  if (chips.length) infoLines += `Chng: ` + chips.join("  ") + `\n`;
+  // Line 6: buy/sell pressure (sell-dominant shown as negative)
   if (tInfo.buys24h || tInfo.sells24h) {
     const b = tInfo.buys24h || 0, s = tInfo.sells24h || 0, tot = b + s;
-    const pct = tot > 0 ? Math.round((b / tot) * 100) : 0;
-    infoLines += `🟢 Buys ${b.toLocaleString()}  🔴 Sells ${s.toLocaleString()}  (${pct}% buy)\n`;
+    const buyPct = tot > 0 ? Math.round((b / tot) * 100) : 0;
+    const pressureLabel = buyPct >= 50 ? `🟢 ${buyPct}%` : `🔴 -${100-buyPct}%`;
+    infoLines += `📊 Buy Pressure: ${pressureLabel} (${formatNum(b)} / ${formatNum(s)})\n`;
   }
   if (isNew) infoLines += `🆕 <i>New token — higher risk</i>\n`;
   if (tInfo.liquidity && tInfo.liquidity < 10000) infoLines += `⚠️ <i>Low liquidity — may be hard to exit</i>\n`;
   // Safety block
   const sc = formatSafetyCard(safety);
-  if (sc.l1 || sc.l2) {
+  if (sc.l1 || sc.l2 || safety.rugScore !== null) {
     infoLines += `\n🛡 <b>SAFETY</b>\n`;
     if (sc.l1) infoLines += `${sc.l1}\n`;
     if (sc.l2) infoLines += `${sc.l2}\n`;
+    if (safety.rugScore !== null && safety.rugScore !== undefined) {
+      const rs = safety.rugScore;
+      const riskLabel = rs > 70 ? "🔴 High" : rs > 40 ? "🟡 Medium" : "🟢 Low";
+      infoLines += `🛡 Rug Risk: ${riskLabel} (${rs}/100)\n`;
+    }
+    if (safety.rugged === true) infoLines += `🚨 <b>FLAGGED AS RUGGED</b>\n`;
     if (safety.isMock) infoLines += `<i>(live data at mainnet)</i>\n`;
   }
   // Wallet

@@ -87,7 +87,7 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
   if (todayStats) kb.text(buildQuickStats(todayStats), 'menu_stats').row();
 
   kb.text('BUY 🟢', 'trade_quickbuy').text('🔴 SELL', 'trade_positions').row();
-  kb.text('📂 Positions', 'menu_portfolio').text('💼 Wallets', 'menu_wallets').row();
+  kb.text('📂 Portfolio', 'menu_portfolio').text('💼 Wallets', 'menu_wallets').row();
 
   if (isProMode) {
     kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
@@ -703,9 +703,9 @@ function buildRankUpBanner(user, rankName, fee) {
 }
 
 const GUIDES = {
-  main_beginner: "🌱 *Beginner Mode*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n⚙️ Settings — customise bot\n💰 Referrals — earn rewards\n❓ Help — support & guide\n━━━━━━━━━━━━━━━━━━━",
+  main_beginner: "🌱 *Beginner Mode*\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Portfolio — view open trades\n💼 Wallets — manage your wallets\n⚙️ Settings — customise bot\n💰 Referrals — earn rewards\n❓ Help — support & guide\n━━━━━━━━━━━━━━━━━━━",
 
-  main_pro: "🦅 HawkX — Always Watching. Always First.\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Positions — view open trades\n💼 Wallets — manage your wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n📍 Limit Orders — set price targets\n🔁 DCA — auto-buy in chunks over time\n⚙️ Settings — customise bot\n🚀 Launch Token — launch your token\n🔔 Watchlist — track tokens & set price alerts\n💰 Referrals — earn rewards\n❓ Help — support\n━━━━━━━━━━━━━━━━━━━",
+  main_pro: "🦅 HawkX — Always Watching. Always First.\n\n━━━━━━━━━━━━━━━━━━━\n🟢 BUY/🔴 SELL — trade instantly\n📂 Portfolio — view open trades\n💼 Wallets — manage your wallets\n🎯 Sniper — auto snipe launches\n👥 Copy Trade — copy wallets/channels\n📍 Limit Orders — set price targets\n🔁 DCA — auto-buy in chunks over time\n⚙️ Settings — customise bot\n🚀 Launch Token — launch your token\n🔔 Watchlist — track tokens & set price alerts\n💰 Referrals — earn rewards\n❓ Help — support\n━━━━━━━━━━━━━━━━━━━",
 
   positions:     "📂 Filter by All / Manual / Channel / Copy Wallet. Tap token name to manage.",
   wallets:       "💼 Tap wallet to switch. Deposit · Withdraw · Import · Export all here.",
