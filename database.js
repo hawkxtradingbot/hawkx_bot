@@ -510,7 +510,11 @@ function getCopyWalletTrades(userId, walletAddress, limit = 15) {
 }
 
 function getTradeHistoryFiltered(userId, days = 1) {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  // Match the actual stored timestamp format ("YYYY-MM-DD HH:MM:SS", space separator) -
+  // .toISOString() produces "T...Z" which string-sorts incorrectly against it (same bug as
+  // getTodayStats), silently excluding recent trades from weekly/monthly stats.
+  const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const since = sinceDate.toISOString().slice(0, 19).replace('T', ' ');
   return getDb().prepare("SELECT * FROM trades WHERE user_id = ? AND timestamp >= ? ORDER BY timestamp DESC")
     .all(userId, since);
 }
@@ -554,8 +558,11 @@ function computeWinLoss(trades) {
 
 function getTodayStats(userId, walletId) {
   const today  = new Date().toISOString().slice(0, 10);
+  // Trade timestamps are stored as "YYYY-MM-DD HH:MM:SS" (space separator), NOT ISO "T...Z" format -
+  // comparing against a "T00:00:00.000Z" boundary string-sorts incorrectly (space < 'T'), silently
+  // excluding every trade from today. Match the actual stored format instead.
   let query = "SELECT * FROM trades WHERE user_id = ? AND timestamp >= ? AND status = 'confirmed'";
-  const params = [userId, today + "T00:00:00.000Z"];
+  const params = [userId, today + " 00:00:00"];
   if (walletId) { query += " AND wallet_id = ?"; params.push(walletId); }
   const trades = getDb().prepare(query).all(...params);
 
@@ -1188,7 +1195,7 @@ function getAllTimeFeeSaved(userId) {
 function getWeeklyFeeSaved(userId) {
   const d = new Date();
   d.setDate(d.getDate() - 7);
-  const since = d.toISOString();
+  const since = d.toISOString().slice(0,19).replace('T',' ');
   const trades = getDb().prepare("SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?").all(userId, "sell", since);
   const raw = trades.reduce((acc, t) => acc + Math.max(0, (t.sol_amount * 0.01) - t.fee_sol), 0);
   return Math.max(0, Math.min(raw, 9999));
@@ -1197,7 +1204,7 @@ function getWeeklyFeeSaved(userId) {
 function getMonthlyFeeSaved(userId) {
   const d = new Date();
   d.setDate(d.getDate() - 30);
-  const since = d.toISOString();
+  const since = d.toISOString().slice(0,19).replace('T',' ');
   const trades = getDb().prepare(
     'SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?'
   ).all(userId, 'sell', since);
@@ -1208,7 +1215,7 @@ function getMonthlyFeeSaved(userId) {
 function getPeriodStats(userId, days) {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  const since = d.toISOString();
+  const since = d.toISOString().slice(0,19).replace('T',' ');
   const trades = getDb().prepare(
     "SELECT * FROM trades WHERE user_id = ? AND action = 'sell' AND sol_amount < 1000 AND timestamp >= ? AND status = 'confirmed'"
   ).all(userId, since);
@@ -1249,7 +1256,7 @@ function getPeriodStats(userId, days) {
 function getDailyFeeSaved(userId) {
   const today = new Date();
   today.setHours(0,0,0,0);
-  const since = today.toISOString();
+  const since = today.toISOString().slice(0,19).replace('T',' ');
   const trades = getDb().prepare(
     'SELECT sol_amount, fee_sol FROM trades WHERE user_id = ? AND action = ? AND sol_amount < 1000 AND timestamp >= ?'
   ).all(userId, 'sell', since);
