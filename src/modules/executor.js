@@ -242,20 +242,28 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     tokenName = opts.tokenName;
   } else {
     try {
-      const axiosMcap = require("axios");
-      const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
-      const pairs  = dexRes.data?.pairs;
-      if (pairs && pairs.length > 0) {
-        // Prefer the most-liquid pair (pairs[0] is usually it, but pick highest liquidity to be safe)
-        const best = pairs.reduce((a, b) => ((b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a), pairs[0]);
-        entryMcap = Number(best.marketCap || best.fdv || 0);
-        const sym = best.baseToken?.symbol;
-        if (sym) tokenName = sym;
-        const pxUsd = parseFloat(best.priceUsd || 0);
-        if (REAL && pxUsd > 0) realUsdPrice = pxUsd;
-        // Fallback: if mcap missing but we have price + supply, estimate it
-        if (!entryMcap && pxUsd > 0 && best.baseToken?.totalSupply) {
-          entryMcap = pxUsd * Number(best.baseToken.totalSupply);
+      // Birdeye primary (consistent with the token info screen), DexScreener as fallback
+      const { getTokenOverview } = require("./birdeye");
+      const ov = await getTokenOverview(ca).catch(() => null);
+      if (ov && (ov.mcap || ov.price)) {
+        entryMcap = Number(ov.mcap || 0);
+        if (ov.symbol) tokenName = ov.symbol;
+        if (REAL && ov.price > 0) realUsdPrice = ov.price;
+        if (!entryMcap && ov.price > 0 && ov.totalSupply) entryMcap = ov.price * Number(ov.totalSupply);
+      } else {
+        const axiosMcap = require("axios");
+        const dexRes = await axiosMcap.get(`https://api.dexscreener.com/latest/dex/tokens/${ca}`, { timeout: 5000 });
+        const pairs  = dexRes.data?.pairs;
+        if (pairs && pairs.length > 0) {
+          const best = pairs.reduce((a, b) => ((b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a), pairs[0]);
+          entryMcap = Number(best.marketCap || best.fdv || 0);
+          const sym = best.baseToken?.symbol;
+          if (sym) tokenName = sym;
+          const pxUsd = parseFloat(best.priceUsd || 0);
+          if (REAL && pxUsd > 0) realUsdPrice = pxUsd;
+          if (!entryMcap && pxUsd > 0 && best.baseToken?.totalSupply) {
+            entryMcap = pxUsd * Number(best.baseToken.totalSupply);
+          }
         }
       }
     } catch {}
@@ -500,7 +508,17 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   }
   // Auto PnL card on every sell
   let exitMcap = 0;
-  try { const axiosMcap2 = require("axios"); const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 5000 }); const pairs2 = dexRes2.data?.pairs; if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0; } catch {}
+  try {
+    const { getTokenOverview } = require("./birdeye");
+    const ov2 = await getTokenOverview(position.token_ca).catch(() => null);
+    if (ov2 && ov2.mcap) exitMcap = ov2.mcap;
+    else {
+      const axiosMcap2 = require("axios");
+      const dexRes2 = await axiosMcap2.get("https://api.dexscreener.com/latest/dex/tokens/"+position.token_ca, { timeout: 5000 });
+      const pairs2 = dexRes2.data?.pairs;
+      if (pairs2 && pairs2.length > 0) exitMcap = pairs2[0].fdv || pairs2[0].marketCap || 0;
+    }
+  } catch {}
   try {
     console.log("[PnL Card] Generating for user:", user.user_id);
     const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
