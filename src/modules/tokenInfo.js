@@ -7,7 +7,7 @@ const axios = require("axios");
 const config = require("../../config");
 
 const cache = new Map();
-const TTL   = 30000; // 30 second cache
+const TTL   = 100; // 100ms cache - near real-time, just avoids duplicate simultaneous API calls within the same screen render
 
 // Check if DexScreener "Enhanced Token Info" / paid orders are approved
 async function getDexPaidStatus(ca) {
