@@ -182,7 +182,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 
   // ── REAL EXECUTION (mainnet, MOCK_TRADES=false) ──────────────
   const REAL = process.env.MOCK_TRADES === "false";
-  let realTxHash = null, realTokenAmount = null, realPrice = null;
+  let realTxHash = null, realTokenAmount = null, realPrice = null, realFeeCollected = false;
   if (REAL) {
     try {
       const { realBuy } = require("./jupiterSwap");
@@ -194,7 +194,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       // MEV protection: only route through Jito when mev_protect is ON; tip comes from jito_tip (SOL)
       const mevOn = (settings.mev_protect ?? 1) ? true : false;
       const jitoTipLamports = mevOn ? Math.floor((settings.jito_tip || 0) * 1e9) : 0;
-      const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol: settings.priority_fee_manual_sol });
+      const preFeeRate = getEffectiveFeeRate(user);
+      const preFeeLamports = Math.floor(solAmount * preFeeRate * 1e9);
+      const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol: settings.priority_fee_manual_sol, feeLamports: preFeeLamports });
       if (!r.ok) {
         const em = String(r.error||"swap failed").replace(/[_*`[\]]/g,"");
         if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy failed: " + em); } catch {} }
@@ -202,6 +204,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
         return null;
       }
       realTxHash = r.signature;
+      realFeeCollected = r.feeCollected === true;
       // outAmount is in token base units; convert using the token's REAL decimals
       const buyDecimals = (typeof r.decimals === "number") ? r.decimals : 9;
       realTokenAmount = Number(r.outAmount) / Math.pow(10, buyDecimals);
@@ -219,7 +222,9 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   const tokenAmount = REAL ? realTokenAmount : (solAmount / _priceSolPerToken) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
   const txHash      = REAL ? realTxHash : `DEVNET_BUY_${Date.now()}_${Math.random().toString(36).slice(2,8).toUpperCase()}`;
   const feeRate     = getEffectiveFeeRate(user);
-  const feeSol      = solAmount * feeRate;
+  // On real trades, feeSol reflects what we ACTUALLY collected (0 if the fee-transfer injection failed),
+  // so referral crediting and revenue records never claim money that never landed in treasury.
+  const feeSol      = REAL ? (realFeeCollected ? solAmount * feeRate : 0) : solAmount * feeRate;
   let tokenName = ca.startsWith("DEVNET_") ? "DevTest" : ca.slice(0,8);
   let entryMcap = 0;
   // If a custom token name was passed (e.g. from Launch), use it
@@ -370,7 +375,7 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
     { parse_mode: "Markdown" }
   ).catch(() => null);
 
-  let currentPrice, pnlPct, solReceived, txHash, realSellDone = false;
+  let currentPrice, pnlPct, solReceived, txHash, realSellDone = false, realFeeCollected = false, sellFeeLamports = 0;
 
   if (REAL_S) {
     try {
@@ -389,13 +394,16 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       const speedS = settingsS.speed_mode || "standard";
       const mevOnS = (settingsS.mev_protect ?? 1) ? true : false;
       const jitoTipS = mevOnS ? Math.floor((settingsS.jito_tip || 0) * 1e9) : 0;
-      const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol });
+      const preSellFeeRate = getEffectiveFeeRate(user);
+      const rs = await realSell({ keypair, tokenMint: position.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol, feeRate: preSellFeeRate });
       if (!rs.ok) {
         const em = String(rs.error||"sell failed").replace(/[_*`[\]]/g,"");
         await ctx.reply("❌ *Sell failed:* " + em + "\n\n✅ Your tokens are safe — nothing was sold. Please try again.", { parse_mode: "Markdown" });
         return null;
       }
-      solReceived = Number(rs.outAmount) / 1e9;
+      realFeeCollected = rs.feeCollected === true;
+      sellFeeLamports = rs.feeLamports || 0;
+      solReceived = (Number(rs.outAmount) - (realFeeCollected ? sellFeeLamports : 0)) / 1e9;
       // P&L in USD terms to match buy_price (which is stored as USD-per-token).
       // Fetch live USD price of the token; fall back to SOL-rate conversion if unavailable.
       let curUsdPrice = 0;
@@ -422,7 +430,9 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   }
 
   const feeRate       = getEffectiveFeeRate(user);
-  const feeSol        = solReceived * feeRate;
+  // On real trades, feeSol reflects what was ACTUALLY collected (sellFeeLamports/1e9 if the
+  // fee-transfer succeeded, 0 if it failed) - never claim a fee we didn't really receive.
+  const feeSol        = REAL_S ? (realFeeCollected ? sellFeeLamports / 1e9 : 0) : solReceived * feeRate;
 
   // Update mock wallet balance (devnet only) — credit proceeds minus fee
   if (!REAL_S) try {

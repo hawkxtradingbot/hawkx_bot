@@ -212,12 +212,15 @@ async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, ji
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.
-async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports, customFeeSol, feeLamports }) {
+async function realSell({ keypair, tokenMint, tokenAmountRaw, slippageBps, speed, jitoTipLamports, customFeeSol, feeRate }) {
   const quote = await getQuote(tokenMint, SOL_MINT, String(tokenAmountRaw), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
+  // Compute the fee from the quote's expected SOL output (outAmount is in lamports already)
+  const expectedOutLamports = Number(quote.outAmount) || 0;
+  const feeLamports = (feeRate && feeRate > 0) ? Math.floor(expectedOutLamports * feeRate) : 0;
   const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports });
   const decimals = await getTokenDecimals(tokenMint);
-  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
+  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals, feeLamports };
 }
 
 // Send a signed, serialized transaction as a Jito bundle (tip must already be in the tx or Jupiter's fee)
