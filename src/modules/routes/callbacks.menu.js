@@ -114,6 +114,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
     if (data === "menu_stats") {
       await ctx.answerCallbackQuery();
       const freshUser = db.getUser(userId);
+      const _statsSolPx = await db.getSolPriceUsdShared().catch(() => 150);
       const today = db.getTodayStats(userId, freshUser.active_wallet_id);
       const allTime = db.getUserStats(userId);
       const weekly = db.getWeeklyPnl(userId);
@@ -138,7 +139,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       msg += `🏅 *${rank.name}* (${freshUser.rank}/7) — Fee: *${rank.fee.toFixed(2)}%*\n`;
       msg += `━━━━━━━━━━━━━━━━━━━\n\n`;
       msg += `📅 *Today*\n`;
-      msg += `P&L: *${ts}${(today.pnl || 0).toFixed(4)} SOL* · *$${Math.abs((today.pnl||0)*150).toFixed(2)}*\n`;
+      msg += `P&L: *${ts}${(today.pnl || 0).toFixed(4)} SOL* · *$${Math.abs((today.pnl||0)*_statsSolPx).toFixed(2)}*\n`;
       msg += `Trades: *${today.trades || 0}* · Win Rate: *${today.winRate || 0}%*\n`;
       msg += `Fee Saved Today: *$${dailyFee.toFixed(4)}*\n\n`;
       msg += `📆 *This Week:* *${ws}${weekly.toFixed(4)} SOL* · Saved: *$${weeklyFee.toFixed(4)}*\n`;

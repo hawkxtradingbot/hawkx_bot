@@ -517,17 +517,30 @@ function getTradeHistoryFiltered(userId, days = 1) {
 
 // Compute realized win/loss by matching sells to buys per token
 function computeWinLoss(trades) {
+  // Track SOL cost and TOKEN AMOUNT bought/sold separately per token, so a partial sell's
+  // realized P&L is computed against the cost basis of ONLY the portion actually sold -
+  // not the full buy amount (which previously made partial sells look like fake losses).
   const byToken = {};
   trades.forEach(t => {
-    if (!byToken[t.token_ca]) byToken[t.token_ca] = { bought: 0, sold: 0, hasSell: false };
-    const net = (t.sol_amount || 0) - (t.fee_sol || 0);
-    if (t.action === "buy")  byToken[t.token_ca].bought += (t.sol_amount || 0) + (t.fee_sol || 0);
-    if (t.action === "sell") { byToken[t.token_ca].sold += net; byToken[t.token_ca].hasSell = true; }
+    if (!byToken[t.token_ca]) byToken[t.token_ca] = { boughtSol: 0, boughtTokens: 0, soldSol: 0, soldTokens: 0, hasSell: false };
+    const tk = byToken[t.token_ca];
+    if (t.action === "buy") {
+      tk.boughtSol += (t.sol_amount || 0) + (t.fee_sol || 0);
+      tk.boughtTokens += (t.token_amount || 0);
+    }
+    if (t.action === "sell") {
+      tk.soldSol += (t.sol_amount || 0) - (t.fee_sol || 0);
+      tk.soldTokens += (t.token_amount || 0);
+      tk.hasSell = true;
+    }
   });
   let wins = 0, losses = 0, realizedPnl = 0;
   Object.values(byToken).forEach(tk => {
-    if (!tk.hasSell) return; // only count tokens that have been sold (realized)
-    const tokenPnl = tk.sold - tk.bought;
+    if (!tk.hasSell) return; // only count tokens with at least one realized sell
+    // Cost basis of the sold portion, proportional to how much of the total bought tokens were sold
+    const soldFraction = tk.boughtTokens > 0 ? Math.min(1, tk.soldTokens / tk.boughtTokens) : 1;
+    const costBasisOfSold = tk.boughtSol * soldFraction;
+    const tokenPnl = tk.soldSol - costBasisOfSold;
     realizedPnl += tokenPnl;
     if (tokenPnl >= 0) wins++; else losses++;
   });
@@ -560,17 +573,20 @@ function getTodayStats(userId, walletId) {
 function getUserStats(userId) {
   const trades      = getDb().prepare("SELECT * FROM trades WHERE user_id = ? AND status = 'confirmed'").all(userId);
   const wl = computeWinLoss(trades);
-  // best/worst per-token realized PnL
+  // best/worst per-token realized PnL - same proportional cost-basis logic as computeWinLoss,
+  // so a partial sell's PnL is measured against only the sold portion's fair cost share.
   const byToken = {};
   trades.forEach(t => {
-    if (!byToken[t.token_ca]) byToken[t.token_ca] = { bought: 0, sold: 0, hasSell: false };
-    if (t.action === "buy")  byToken[t.token_ca].bought += (t.sol_amount||0) + (t.fee_sol||0);
-    if (t.action === "sell") { byToken[t.token_ca].sold += (t.sol_amount||0) - (t.fee_sol||0); byToken[t.token_ca].hasSell = true; }
+    if (!byToken[t.token_ca]) byToken[t.token_ca] = { boughtSol: 0, boughtTokens: 0, soldSol: 0, soldTokens: 0, hasSell: false };
+    const tk = byToken[t.token_ca];
+    if (t.action === "buy") { tk.boughtSol += (t.sol_amount||0) + (t.fee_sol||0); tk.boughtTokens += (t.token_amount||0); }
+    if (t.action === "sell") { tk.soldSol += (t.sol_amount||0) - (t.fee_sol||0); tk.soldTokens += (t.token_amount||0); tk.hasSell = true; }
   });
   let bestPnl = 0, worstPnl = 0;
   Object.values(byToken).forEach(tk => {
     if (!tk.hasSell) return;
-    const p = tk.sold - tk.bought;
+    const soldFraction = tk.boughtTokens > 0 ? Math.min(1, tk.soldTokens / tk.boughtTokens) : 1;
+    const p = tk.soldSol - (tk.boughtSol * soldFraction);
     if (p > bestPnl)  bestPnl  = p;
     if (p < worstPnl) worstPnl = p;
   });
