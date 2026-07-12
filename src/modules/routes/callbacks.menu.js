@@ -99,6 +99,50 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       return safeEdit(ctx, `🦅 *HawkX* — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
     }
 
+    // ── CHAIN SWITCHER ────────────────────────────────────────
+    if (data === "chain_switch_menu") {
+      await ctx.answerCallbackQuery();
+      const chains = db.getEnabledChains();
+      const chainIcons = { SOL: '🟣', RBH: '🟢' };
+      const activeChain = db.getActiveChain(userId);
+      const kb = { inline_keyboard: chains.map(c => [{
+        text: `${chainIcons[c.chain] || '🔗'} ${c.label}${c.chain === activeChain ? ' ✅ (active)' : ''}`,
+        callback_data: `chain_switch_do_${c.chain}`,
+      }]).concat([[{ text: '← Back', callback_data: 'menu_main' }]]) };
+      return safeEdit(ctx, "🔗 *Switch Chain*\n\nSelect a chain — your active chain determines which wallet, positions, and trades you see.", kb);
+    }
+
+    if (data.startsWith("chain_switch_do_")) {
+      const chain = data.replace("chain_switch_do_", "");
+      const chainConfig = db.getChainConfig(chain);
+      if (!chainConfig || !chainConfig.enabled) {
+        await ctx.answerCallbackQuery("This chain isn't available yet.");
+        return true;
+      }
+      let wallet = db.getWalletForChain(userId, chain);
+      let createdNew = false;
+      if (!wallet) {
+        if (chain === "SOL") {
+          const { addWallet } = require("../walletVault");
+          await addWallet(ctx, user, "generate");
+          wallet = db.getWalletForChain(userId, chain);
+        } else {
+          // EVM wallet generation not yet built - placeholder until chains/evm/ module exists
+          await ctx.answerCallbackQuery("This chain's wallet system is still being built. Check back soon!");
+          return true;
+        }
+        createdNew = true;
+      }
+      db.setActiveChain(userId, chain);
+      const chainIcons = { SOL: '🟣', RBH: '🟢' };
+      await ctx.answerCallbackQuery(`${chainIcons[chain] || ''} Switched to ${chainConfig.label}`);
+      const freshUser = db.getUser(userId);
+      const msg = `${chainIcons[chain] || ''} *Switched to ${chainConfig.label}*${createdNew ? '\n\n✅ A new wallet was created for this chain.' : ''}`;
+      const todayS = db.getTodayStats(userId);
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildMainMenu(freshUser, todayS, ks) });
+      return true;
+    }
+
     // ── RANK INFO ─────────────────────────────────────────────
     if (data === "menu_rank_info") {
       await ctx.answerCallbackQuery();

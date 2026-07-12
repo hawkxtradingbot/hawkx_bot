@@ -109,6 +109,10 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
     if (process.env.MOCK_TRADES !== "false") kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
     kb.text('⚡ Pro Mode →', 'mode_set_pro').row();
   }
+  const chainIcons = { SOL: '🟣', RBH: '🟢' };
+  const chainNames = { SOL: 'Solana', RBH: 'Robinhood Chain' };
+  const activeChain = user?.active_chain || 'SOL';
+  kb.text(`${chainIcons[activeChain] || '🔗'} Chain: ${chainNames[activeChain] || activeChain} ▾`, 'chain_switch_menu').row();
   return kb;
 }
 

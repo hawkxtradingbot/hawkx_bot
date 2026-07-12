@@ -428,13 +428,13 @@ function updateSettings(userId, fields) {
 }
 
 // ── WALLETS ───────────────────────────────────────────────────
-function addWallet(userId, publicKey, encKey, salt, iv, tag, label) {
+function addWallet(userId, publicKey, encKey, salt, iv, tag, label, chain) {
   const result = getDb().prepare(
     `INSERT INTO wallets
      (user_id, public_key, encrypted_private_key, encryption_salt,
-      encryption_iv, encryption_tag, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(userId, publicKey, encKey, salt, iv, tag, label || "Wallet");
+      encryption_iv, encryption_tag, label, chain)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(userId, publicKey, encKey, salt, iv, tag, label || "Wallet", chain || "SOL");
   return result.lastInsertRowid;
 }
 
