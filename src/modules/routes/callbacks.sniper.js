@@ -15,6 +15,11 @@ async function handleSniperCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     if (data === "sniper_auto_menu") {
+      const ADMIN_ID = 6901299730;
+      if (String(userId) !== String(ADMIN_ID)) {
+        await ctx.answerCallbackQuery();
+        return safeEdit(ctx, "🧪 *Auto Sniper — Coming Soon*\n\nThis feature is currently in testing and not yet available. Check back soon!", { inline_keyboard: [[{ text: "← Back", callback_data: "menu_sniper" }]] });
+      }
       await ctx.answerCallbackQuery();
       db.setSysConfig(`sniper_screen_${userId}`, "auto");
       const configs = db.getSniperConfigs(userId);

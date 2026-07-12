@@ -60,6 +60,17 @@ async function refreshLaunchTradeScreen(ctx, userId, ca) {
 async function handleLaunchCallbacks(ctx, data, userId, user, bot, ks) {
     // ── WATCHLIST ─────────────────────────────────────────────
     if (data === "menu_launch") {
+      const ADMIN_ID = 6901299730;
+      if (String(userId) !== String(ADMIN_ID)) {
+        await ctx.answerCallbackQuery();
+        try {
+          await ctx.editMessageText(
+            "🧪 *Launch Token — Coming Soon*\n\nThis feature is currently in testing and not yet available. Check back soon!",
+            { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] } }
+          );
+        } catch {}
+        return true;
+      }
       await ctx.answerCallbackQuery();
       await showLaunchScreen(ctx, userId);
       return true;
