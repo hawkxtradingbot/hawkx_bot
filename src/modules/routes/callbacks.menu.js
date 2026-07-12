@@ -99,17 +99,21 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       return safeEdit(ctx, `🦅 *HawkX* — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
     }
 
-    // ── CHAIN SWITCHER ────────────────────────────────────────
+    // ── CHAIN SWITCHER (expands inline, same screen, no navigation) ──
     if (data === "chain_switch_menu") {
       await ctx.answerCallbackQuery();
       const chains = db.getEnabledChains();
       const chainIcons = { SOL: '🟣', RBH: '🟢' };
       const activeChain = db.getActiveChain(userId);
-      const kb = { inline_keyboard: chains.map(c => [{
-        text: `${chainIcons[c.chain] || '🔗'} ${c.label}${c.chain === activeChain ? ' ✅ (active)' : ''}`,
+      const chainRows = chains.map(c => [{
+        text: `${c.chain === activeChain ? '✅ ' : ''}${chainIcons[c.chain] || '🔗'} ${c.label}`,
         callback_data: `chain_switch_do_${c.chain}`,
-      }]).concat([[{ text: '← Back', callback_data: 'menu_main' }]]) };
-      return safeEdit(ctx, "🔗 *Switch Chain*\n\nSelect a chain — your active chain determines which wallet, positions, and trades you see.", kb);
+      }]);
+      const _todayStats = db.getTodayStats(userId);
+      const _ks = require("../killSwitch").isActive();
+      const kb = { inline_keyboard: [...buildMainMenu(user, _todayStats, _ks).inline_keyboard.slice(0, -1), ...chainRows] };
+      try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
+      return true;
     }
 
     if (data.startsWith("chain_switch_do_")) {
