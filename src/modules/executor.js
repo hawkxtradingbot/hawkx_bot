@@ -38,57 +38,24 @@ async function executeRealtimeSnipe(ctx, user, tokenCa, meta = {}) {
 
   const rt = getRealtimeSniperConfig(user.user_id);
   const solAmount = rt.sniper_rt_amount || 0.1;
-  const slippage = rt.sniper_rt_slippage || 50;
-  const price = getMockPrice(tokenCa);
-  const tokenAmount = (solAmount / price) * (1 - slippage / 100) * (0.9 + Math.random() * 0.1);
-  const txHash = `DEVNET_RT_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  const tokenName = meta.tokenName || tokenCa.slice(0, 8);
-  const feeRate = typeof rt.sniper_rt_fee === "number" ? rt.sniper_rt_fee : 0.003;
-  const feeSol = solAmount * feeRate;
-
-  db.recordTrade({
-    userId: user.user_id,
-    walletId: user.active_wallet_id,
-    tokenCa,
-    tokenName,
-    platform: "devnet_mock",
-    action: "buy",
-    solAmount,
-    tokenAmount,
-    priceSol: price,
-    feeSol,
-    feeRate,
-    txHash,
-    status: "confirmed",
+  // Reuse the proven real-buy path (mockBuy -> realBuy) instead of simulating - this was
+  // previously 100% fake even on mainnet (fake tx hash "DEVNET_RT_...", no real swap ever executed).
+  const result = await mockBuy(ctx, user, tokenCa, solAmount, "realtime_sniper", meta.sourceRef || "", {
+    silent: true, skipSafety: true, tokenName: meta.tokenName,
   });
-
-  db.openPosition({
-    userId: user.user_id,
-    walletId: user.active_wallet_id,
-    tokenCa,
-    tokenName,
-    buyPrice: price,
-    solInvested: solAmount,
-    tokenAmount,
-    platform: "devnet_mock",
-    source: "realtime_sniper",
-    sourceRef: meta.sourceRef || "",
-    entryMcap: meta.entryMcap || 0,
-  });
-
-  db.addVolume(user.user_id, solAmount);
+  if (!result) return null;
 
   try {
     const { notify } = require("./notifications");
     notify(user.user_id, "TRADE_CONFIRMED", {
       action: "buy",
-      token: tokenName,
+      token: meta.tokenName || tokenCa.slice(0, 8),
       sol: solAmount.toFixed(4),
-      txHash,
+      txHash: result.txHash,
     });
   } catch {}
 
-  return { txHash, solAmount, tokenAmount };
+  return result;
 }
 
 function simulatePriceMovement(ca) {
