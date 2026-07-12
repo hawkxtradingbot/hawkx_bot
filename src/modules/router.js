@@ -31,7 +31,7 @@ const { handleWatchlistCallbacks } = require("./routes/callbacks.watchlist");
 const { handleReferralCallbacks } = require("./routes/callbacks.referrals");
 const { handleDevToolCallbacks } = require("./routes/callbacks.devtools");
 const { handleAdminCallbacks } = require("./routes/callbacks.admin");
-const { handleStart } = require("./onboarding");
+const { handleStart, handleTermsResponse } = require("./onboarding");
 const { showSettings, handleSettingCallback, handleTextInput, doExportKey } = require("./settings/index");
 const { getPortfolio, getTokenPosition } = require("./portfolio");
 const { mockBuy, mockSell, handleAutoBuy, executeRealtimeSnipe } = require("./executor");
@@ -51,6 +51,12 @@ function setupRouter(bot) {
   bot.on("callback_query:data", async (ctx) => {
     const data = ctx.callbackQuery.data;
     const userId = ctx.from.id;
+
+    if (data === "terms_agree" || data === "terms_decline") {
+      await handleTermsResponse(ctx);
+      return;
+    }
+
     let user = db.getUser(userId);
 
     if (!user) {
