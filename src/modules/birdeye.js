@@ -39,7 +39,12 @@ async function getTokenOverview(address) {
       sells24h: d.sell24h,
       totalSupply: d.totalSupply || d.supply || 0,
     };
-  } catch { return null; }
+  } catch (e) {
+    const { alertAdmin } = require("./adminAlert");
+    const detail = e.response?.data?.message || e.message || "unknown error";
+    alertAdmin("Birdeye", "getTokenOverview failed: " + detail).catch(() => {});
+    return null;
+  }
 }
 
 // Top holders % (concentration). Needs total supply to compute percentages.

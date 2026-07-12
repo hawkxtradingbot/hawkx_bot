@@ -157,7 +157,7 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
       // Fallback to normal RPC if Jito fails
       try {
         signature = await connection.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 3, preflightCommitment: "confirmed" });
-      } catch (e) { return { ok: false, error: "Jito + RPC both failed: " + e.message }; }
+      } catch (e) { require("./adminAlert").alertAdmin("Jupiter/RPC", "Both Jito and RPC send failed: " + e.message).catch(()=>{}); return { ok: false, error: "Jito + RPC both failed: " + e.message }; }
     } else {
       signature = jres.signature;
     }
@@ -165,6 +165,7 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
     try {
       signature = await connection.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 3, preflightCommitment: "confirmed" });
     } catch (e) {
+      require("./adminAlert").alertAdmin("Jupiter/RPC", "Transaction send failed: " + e.message).catch(()=>{});
       return { ok: false, error: "send failed: " + e.message };
     }
   }

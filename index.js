@@ -170,6 +170,8 @@ bot.start({
 // ── BACKGROUND JOBS ──────────────────────────────────────────
 startRankCron(notifyCallback);
 startPriceNotifier(bot);
+const { setAlertBotApi } = require("./src/modules/adminAlert");
+setAlertBotApi(bot.api);
 startDepositMonitor(bot);
 startPayoutCron(bot);
 startHealthMonitor();
@@ -201,11 +203,13 @@ process.on("SIGINT", () => {
 
 process.on("uncaughtException", (e) => {
   console.error("[Uncaught Exception]", e.message);
+  try { require("./src/modules/adminAlert").alertAdmin("Uncaught Exception", e.message).catch(()=>{}); } catch {}
   // Don't exit — keep bot running
 });
 
 process.on("unhandledRejection", (reason) => {
   console.error("[Unhandled Rejection]", reason);
+  try { require("./src/modules/adminAlert").alertAdmin("Unhandled Rejection", String(reason?.message || reason).slice(0,200)).catch(()=>{}); } catch {}
 });
 
 const express = require("express");
