@@ -118,7 +118,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       .text("🔄 Refresh",  `pos_filter_${filter}_0_0`)
       .row();
     kb.text("← Back", "menu_main").row();
-    const msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
+    const msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
     try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
     catch (e) {
       if (!String(e.description || e.message || "").includes("not modified")) {
@@ -142,7 +142,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   }
 
   // ── Build message ────────────────────────────────────────────
-  let msg = `📂 <b>Positions</b> — ${FILTER_LABELS[filter] || "All"}\n`;
+  let msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n`;
   msg += `🤖 auto-sell · 📉 DCA · 📍 limit\n`;
   msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
@@ -190,11 +190,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     const eMc = pos.entry_mcap && pos.entry_mcap > 0 ? formatNum(pos.entry_mcap) : "—";
     const cMcVal = pos.entry_mcap > 0 ? pos.entry_mcap * (1 + pnlPct/100) : 0;
     const cMc = cMcVal > 0 ? formatNum(cMcVal) : "—";
-    const usd = (sol) => "$" + (sol * (globalThis.__solPx || 200)).toFixed(2);
+    const usd = (sol) => "$" + (sol * (globalThis.__hawkxSolPx || 150)).toFixed(2);
 
     const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
     const mcN = cMc !== "—" ? ` · <b>MC</b> ${cMc}` : "";
-    msg += `${isSel ? "▶ " : ""}${icon} <b>${name}</b> ${srcTag}${autoTag}${autoIcons}\n`;
+    msg += `${isSel ? "▶ " : ""}${icon} <a href="https://dexscreener.com/solana/${pos.token_ca}"><b>${name}</b></a> ${srcTag}${autoTag}${autoIcons}\n`;
     msg += `📋 <code>${pos.token_ca}</code>\n`;
     msg += `📊 <b>Entry</b>${mcE} · <b>PR</b> ${fmtP(entryPrice)}\n`;
     msg += `💰 <b>Bought</b> ${bSol.toFixed(3)} SOL (${usd(bSol)}) · ${bCount} buys\n`;
