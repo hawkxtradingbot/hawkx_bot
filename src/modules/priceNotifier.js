@@ -56,6 +56,26 @@ async function runPriceNotifier(bot) {
         try { await bot.api.sendMessage(p.user_id, msg, { parse_mode: "Markdown" }); } catch {}
       } catch {}
     }
+
+    // Watchlist price alerts - previously created but NEVER checked/fired (no monitor existed at all)
+    try {
+      const allAlerts = db.getDb().prepare("SELECT * FROM price_alerts WHERE fired = 0").all();
+      for (const a of allAlerts) {
+        try {
+          const cur = REAL ? await getRealPrice(a.token_ca) : getMockPrice(a.token_ca);
+          if (!cur) continue;
+          const hit = a.direction === "below" ? cur <= a.target_price : cur >= a.target_price;
+          if (!hit) continue;
+          db.getDb().prepare("UPDATE price_alerts SET fired = 1 WHERE id = ?").run(a.id);
+          const name = a.token_name || a.token_ca.slice(0, 8);
+          const dirWord = a.direction === "below" ? "dropped to" : "reached";
+          const alertMsg = `🔔 *${name}* ${dirWord} your target!\n\nTarget: ${a.target_price}\nNow: ${cur}`;
+          try { await bot.api.sendMessage(a.user_id, alertMsg, { parse_mode: "Markdown" }); } catch {}
+        } catch {}
+      }
+    } catch (e) {
+      console.log("[PriceNotifier] watchlist alert error:", e.message.slice(0, 60));
+    }
   } catch (e) {
     console.log("[PriceNotifier] error:", e.message.slice(0, 60));
   }
