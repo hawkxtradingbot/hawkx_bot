@@ -1051,6 +1051,20 @@ async function handleTextInput(ctx, user, pendingKey) {
               "⚠️ *Save it — cannot be recovered.*",
               { parse_mode: "Markdown" }
             );
+            // Only auto-navigate to main menu if this PIN was set as part of onboarding
+            // (flagged right before the Set PIN button was shown) - not when a user sets their
+            // first PIN later from Settings on their own, where they're already in the bot.
+            const wasOnboarding = db.getSysConfig(`onboarding_pin_flow_${userId}`) === "1";
+            if (wasOnboarding) {
+              db.setSysConfig(`onboarding_pin_flow_${userId}`, "");
+              try {
+                const { buildMainMenu } = require("./keyboards");
+                const freshU = db.getUser(userId);
+                const todayS = db.getTodayStats(userId);
+                const ks2 = require("./killSwitch").isActive();
+                await ctx.reply("🦅 *Main Menu*", { parse_mode: "Markdown", reply_markup: buildMainMenu(freshU, todayS, ks2) });
+              } catch {}
+            }
             break;
           }
             case "sap_verify_remove": {

@@ -88,6 +88,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
           "`" + w.public_key + "`\n" +
           "_(tap to copy)_\n\n" +
           "🔐 Non-custodial — your keys, your coins.";
+        db.setSysConfig(`onboarding_pin_flow_${userId}`, "1");
         return safeEdit(ctx, fundMsg, { inline_keyboard: [
           [{ text: "🔐 Set Security PIN", callback_data: "set_sap" }],
           [{ text: "✅ Start Trading", callback_data: "menu_main" }],
