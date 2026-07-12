@@ -29,7 +29,17 @@ async function checkPosition(pos, notifyFn) {
   if (!user) return;
 
   const settings     = db.getSettings(pos.user_id) || {};
-  const currentPrice = simulatePriceMovement(pos.token_ca);
+  const REAL_SL = process.env.MOCK_TRADES === "false";
+  let currentPrice;
+  if (REAL_SL) {
+    try {
+      const { getTokenOverview } = require("./birdeye");
+      const ov = await getTokenOverview(pos.token_ca);
+      currentPrice = (ov && ov.price > 0) ? ov.price : simulatePriceMovement(pos.token_ca);
+    } catch { currentPrice = simulatePriceMovement(pos.token_ca); }
+  } else {
+    currentPrice = simulatePriceMovement(pos.token_ca);
+  }
   if (!currentPrice || !pos.buy_price) return;
 
   const pnlPct = ((currentPrice - pos.buy_price) / pos.buy_price) * 100;
@@ -286,7 +296,17 @@ async function checkLimitOrders(notifyFn) {
       // Don't trigger orders created less than 5 seconds ago
       const createdAt = new Date(order.created_at).getTime();
       if (Date.now() - createdAt < 5000) continue;
-      const currentPrice = getMockPrice(order.token_ca);
+      const REAL_LO = process.env.MOCK_TRADES === "false";
+      let currentPrice;
+      if (REAL_LO) {
+        try {
+          const { getTokenOverview } = require("./birdeye");
+          const ov = await getTokenOverview(order.token_ca);
+          currentPrice = (ov && ov.price > 0) ? ov.price : getMockPrice(order.token_ca);
+        } catch { currentPrice = getMockPrice(order.token_ca); }
+      } else {
+        currentPrice = getMockPrice(order.token_ca);
+      }
       if (!currentPrice) continue;
 
       // Get current MCap (devnet: mock, mainnet: DexScreener)
