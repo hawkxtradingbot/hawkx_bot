@@ -176,6 +176,8 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const pnlSol = period === "today" ? (today.pnl || 0) : period === "week" ? weekly : monthly;
       const days = period === "today" ? 1 : period === "week" ? 7 : 30;
       const periodStats = db.getPeriodStats(userId, days);
+      const periodFeeSaved = period === "today" ? db.getDailyFeeSaved(userId) : period === "week" ? db.getWeeklyFeeSaved(userId) : db.getMonthlyFeeSaved(userId);
+      const _statsCardSolPx = await db.getSolPriceUsdShared().catch(() => 150);
       const { generateStatsCard } = require("../statsCard");
       const result = await generateStatsCard({
         username: freshUser.username || "Trader",
@@ -183,7 +185,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         rankNum: freshUser.rank || 1,
         period,
         pnlSol,
-        pnlUsd: Math.abs(pnlSol * 150),
+        pnlUsd: Math.abs(pnlSol * _statsCardSolPx),
         trades: periodStats.trades || 0,
         winRate: periodStats.winRate || 0,
         volume: freshUser.cumulative_volume_sol || 0,
@@ -196,6 +198,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         totalFees: periodStats.totalFees || 0,
         streak: periodStats.streak || 0,
         avgTrade: periodStats.avgTrade || 0,
+        feeSaved: periodFeeSaved || 0,
       });
       if (result.type === "photo") {
         const { InputFile } = require("grammy");

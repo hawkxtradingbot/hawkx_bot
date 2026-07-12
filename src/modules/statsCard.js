@@ -243,7 +243,7 @@ async function generateStatsCard(opts) {
     period = 'today', pnlSol = 0, pnlUsd = 0, trades = 0,
     winRate = 0, volume = 0, weekPnl = 0, monthPnl = 0,
     nextRankSol = 0, rankProgress = 0,
-    bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, avgTrade = 0,
+    bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, avgTrade = 0, feeSaved = 0,
     referralCode = null,
   } = opts;
   const W = 640, H = 420;
@@ -253,7 +253,7 @@ async function generateStatsCard(opts) {
   if (referralCode) {
     qrDataUrl = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
   }
-  const fmtK = (n) => { const v = Math.abs(n); if (v >= 1e6) return (n/1e6).toFixed(2)+"M"; if (v >= 1e3) return (n/1e3).toFixed(2)+"K"; return n.toFixed(2); };
+  const fmtK = (n) => { const v = Math.abs(n); if (v >= 1e6) return (n/1e6).toFixed(2)+"M"; if (v >= 1e3) return (n/1e3).toFixed(2)+"K"; if (v > 0 && v < 0.01) return n.toFixed(6); return n.toFixed(4); };
   const pnlColor = isProfit ? '#14F195' : '#FF4444';
   const periodLabel = period === 'today' ? "TODAY'S PNL" : period === 'week' ? 'WEEKLY PNL' : 'MONTHLY PNL';
   const rankColors = ['','#aaaaaa','#00ccff','#00ff88','#ff9900','#cc44ff','#ff4444','#FFD700'];
@@ -322,8 +322,8 @@ async function generateStatsCard(opts) {
 
   <text x="24" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">AVG TRADE</text>
   <text x="24" y="248" font-family="Arial Black" font-size="16" fill="white">${avgTrade >= 0 ? '+' : ''}${fmtK(avgTrade)} SOL</text>
-  <text x="180" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">FEES PAID</text>
-  <text x="180" y="248" font-family="Arial Black" font-size="16" fill="#F5A623">${fmtK(totalFees)} SOL</text>
+  <text x="180" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">FEES PAID / SAVED</text>
+  <text x="180" y="248" font-family="Arial Black" font-size="13" fill="#F5A623">${fmtK(totalFees)} / $${feeSaved.toFixed(2)}</text>
   <text x="340" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WEEK</text>
   <text x="340" y="248" font-family="Arial Black" font-size="16" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${fmtK(weekPnl)}</text>
   <text x="470" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">MONTH</text>
