@@ -5,7 +5,7 @@ const { buildMainMenu } = require("./keyboards");
 const { applyJoinerDiscount } = require("./referrals");
 const { addWallet } = require("./walletVault");
 
-async function handleStart(ctx, bot) {
+async function handleStart(ctx, bot, forceNew) {
   const tgUser = ctx.from;
   const userId = tgUser.id;
   const lang   = tgUser.language_code?.slice(0, 2) || "en";
@@ -24,7 +24,7 @@ async function handleStart(ctx, bot) {
   }
 
   let user    = db.getUser(userId);
-  const isNew = !user;
+  const isNew = forceNew !== undefined ? forceNew : !user;
 
   // Real Terms/Privacy acceptance gate - must tap "I Agree" before an account or wallet is created.
   // (Previously this silently marked terms as "accepted" without ever showing/asking the user - removed.)
@@ -50,7 +50,10 @@ async function handleStart(ctx, bot) {
     }
   }
 
-  if (isNew) {
+  // Only create the account/wallet if it TRULY doesn't exist yet - forceNew only controls
+  // which WELCOME MESSAGE is shown below, it should never re-trigger account/wallet creation
+  // for a user that handleTermsResponse already created moments ago.
+  if (isNew && !user) {
     db.createUser({
       userId,
       username:   tgUser.username || tgUser.first_name || "Trader",
@@ -167,7 +170,7 @@ async function handleTermsResponse(ctx) {
     }
 
     try { await ctx.deleteMessage(); } catch {}
-    await handleStart(ctx);
+    await handleStart(ctx, null, true);
     return true;
   }
 
