@@ -152,11 +152,22 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   for (const pos of paginated) {
     let currentPrice;
     if (REAL_PORT) {
+      currentPrice = null;
       try {
         const { getTokenOverview } = require("./birdeye");
         const ov = await getTokenOverview(pos.token_ca);
-        currentPrice = (ov && ov.price > 0) ? ov.price : (pos.buy_price || simulatePriceMovement(pos.token_ca));
-      } catch { currentPrice = pos.buy_price || simulatePriceMovement(pos.token_ca); }
+        if (ov && ov.price > 0) currentPrice = ov.price;
+      } catch {}
+      // Birdeye failed/rate-limited - try DexScreener before falling back to entry price
+      if (!currentPrice) {
+        try {
+          const axios = require("axios");
+          const dr = await axios.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 4000 });
+          const pair = dr.data?.pairs?.[0];
+          if (pair?.priceUsd) currentPrice = parseFloat(pair.priceUsd);
+        } catch {}
+      }
+      if (!currentPrice) currentPrice = pos.buy_price || simulatePriceMovement(pos.token_ca);
     } else {
       currentPrice = simulatePriceMovement(pos.token_ca);
     }
