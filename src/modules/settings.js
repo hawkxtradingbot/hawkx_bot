@@ -198,6 +198,7 @@ async function refreshSettings(ctx, user) {
   }
 
   if (action === "set_price_notif") {
+    console.log("REACHED_PRICE_NOTIF_BLOCK");
     console.log("[PRICE_NOTIF DEBUG] current settings.price_notif:", settings.price_notif, "| user_id:", user.user_id);
     const v = (settings.price_notif ?? 1) ? 0 : 1;
     console.log("[PRICE_NOTIF DEBUG] computed v:", v);
