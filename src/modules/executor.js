@@ -522,6 +522,9 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   try {
     console.log("[PnL Card] Generating for user:", user.user_id);
     const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
+    const hideInvested = db.getSysConfig(`pnlcard_hide_invested_${user.user_id}`) === "1";
+    const hideSolAmount = db.getSysConfig(`pnlcard_hide_sol_${user.user_id}`) === "1";
+    const hideHoldTime = db.getSysConfig(`pnlcard_hide_hold_${user.user_id}`) === "1";
     const { generateTradeCard } = require("./statsCard");
     const { RANKS } = require("./keyboards");
     const rank = RANKS[user.rank] || RANKS[1];
@@ -563,6 +566,9 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       feeRate: rank.fee,
       sellPct: pctToSell,
       hideAmounts,
+      hideInvested,
+      hideSolAmount,
+      hideHoldTime,
     });
     // Save card data for hide/show toggle
     db.setSysConfig(`last_card_data_${user.user_id}`, JSON.stringify({

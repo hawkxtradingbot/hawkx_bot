@@ -109,7 +109,10 @@ async function generateTradeCard(opts) {
     dailyFeeSaved = 0,
     weeklyFeeSaved = 0,
     monthlyFeeSaved = 0,
-    hideAmounts = false,
+    hideAmounts = false, // legacy master switch (per-card quick toggle) - hides everything when true
+    hideInvested = false,
+    hideSolAmount = false,
+    hideHoldTime = false,
     holdTime = null,
     referralCode = null,
   } = opts;
@@ -189,11 +192,11 @@ async function generateTradeCard(opts) {
   <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
   <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
 
-  <text x="24" y="60" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="2">SOLD ${sellPct}%${holdTime ? "  ·  HELD " + holdTime.toUpperCase() : ""}</text>
+  <text x="24" y="60" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="2">SOLD ${sellPct}%${(holdTime && !hideAmounts && !hideHoldTime) ? "  ·  HELD " + holdTime.toUpperCase() : ""}</text>
   <text x="24" y="96" font-family="Arial Black" font-size="30" fill="#FFD27A">$${tokenName.slice(0,14)}</text>
   ${isProfit ? '<text x="' + (W-24) + '" y="92" font-family="Arial Black" font-size="22" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
 
-  <text x="24" y="150" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${hideAmounts ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
+  <text x="24" y="150" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${(hideAmounts || hideSolAmount) ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
   <text x="${W-24}" y="146" font-family="Arial Black" font-size="20" fill="${pnlColor}" text-anchor="end">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
   <text x="${W-24}" y="168" font-family="Arial" font-size="16" fill="#FF9500" text-anchor="end">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
   <text x="24" y="196" font-family="Arial" font-size="13" fill="rgba(255,255,255,0.65)">${memeText}</text>
@@ -204,9 +207,9 @@ async function generateTradeCard(opts) {
   <text x="180" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">EXIT</text>
   <text x="180" y="238" font-family="Arial Black" font-size="16" fill="white">${formatMcap(exitMcap)}</text>
   <text x="336" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">INVESTED</text>
-  <text x="336" y="238" font-family="Arial Black" font-size="15" fill="white">${hideAmounts ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' \u25CE'}</text>
+  <text x="336" y="238" font-family="Arial Black" font-size="15" fill="white">${(hideAmounts || hideInvested) ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' \u25CE'}</text>
   <text x="470" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">RETURNED</text>
-  <text x="470" y="238" font-family="Arial Black" font-size="15" fill="${pnlColor}">${hideAmounts ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' \u25CE'}</text>
+  <text x="470" y="238" font-family="Arial Black" font-size="15" fill="${pnlColor}">${(hideAmounts || hideInvested) ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' \u25CE'}</text>
   <line x1="24" y1="250" x2="${W-24}" y2="250" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
 
   <rect x="24" y="260" width="${qrDataUrl ? W-140 : W-48}" height="34" rx="6" fill="rgba(255,107,0,0.08)"/>
