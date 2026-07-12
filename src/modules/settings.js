@@ -60,7 +60,6 @@ async function refreshSettings(ctx, user) {
     // ── Main callback handler ─────────────────────────────────────
       async function handleSettingCallback(ctx, user, action, bot, onSourceBack) {
     console.log("[SETTINGS CB]:", action?.slice(0,25));
-    console.log("[SETTINGS CB RAW]", JSON.stringify(action), "| type:", typeof action, "| length:", action ? action.length : 0, "| exact match test:", action === "set_price_notif");
     // Handle select FIRST
     if (action && action.indexOf("ast_select_") === 0) {
       const id = parseInt(action.replace("ast_select_", ""));
@@ -199,14 +198,8 @@ async function refreshSettings(ctx, user) {
   }
 
   if (action === "set_price_notif") {
-    console.log("REACHED_PRICE_NOTIF_BLOCK");
-    console.log("[PRICE_NOTIF DEBUG] current settings.price_notif:", settings.price_notif, "| user_id:", user.user_id);
     const v = (settings.price_notif ?? 1) ? 0 : 1;
-    console.log("[PRICE_NOTIF DEBUG] computed v:", v);
-    const updResult = db.updateSettings(user.user_id, { price_notif: v });
-    console.log("[PRICE_NOTIF DEBUG] update result:", JSON.stringify(updResult));
-    const verify = db.getSettings(user.user_id);
-    console.log("[PRICE_NOTIF DEBUG] verified after write:", verify.price_notif);
+    db.updateSettings(user.user_id, { price_notif: v });
     await ctx.answerCallbackQuery(`Price Alerts: ${v ? "✅ ON" : "◻️ OFF"}`);
     await refreshSettings(ctx, user);
     return;
