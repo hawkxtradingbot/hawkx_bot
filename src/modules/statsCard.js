@@ -246,12 +246,14 @@ async function generateStatsCard(opts) {
     bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, avgTrade = 0,
     referralCode = null,
   } = opts;
-  const W = 1000, H = 520;
+  const W = 640, H = 420;
   const isProfit = pnlSol >= 0;
+  const refCodeShort2 = referralCode ? String(referralCode).slice(0,14) : "";
   let qrDataUrl = null;
   if (referralCode) {
     qrDataUrl = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
   }
+  const fmtK = (n) => { const v = Math.abs(n); if (v >= 1e6) return (n/1e6).toFixed(2)+"M"; if (v >= 1e3) return (n/1e3).toFixed(2)+"K"; return n.toFixed(2); };
   const pnlColor = isProfit ? '#14F195' : '#FF4444';
   const periodLabel = period === 'today' ? "TODAY'S PNL" : period === 'week' ? 'WEEKLY PNL' : 'MONTHLY PNL';
   const rankColors = ['','#aaaaaa','#00ccff','#00ff88','#ff9900','#cc44ff','#ff4444','#FFD700'];
@@ -272,65 +274,75 @@ async function generateStatsCard(opts) {
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:${period === 'today' ? '#00071a' : period === 'week' ? '#001a07' : '#1a1000'}"/>
-      <stop offset="45%" style="stop-color:#080c12"/>
-      <stop offset="100%" style="stop-color:${period === 'today' ? '#00071a' : period === 'week' ? '#001a07' : '#1a1000'}"/>
+      <stop offset="0%" style="stop-color:#1c0e00"/>
+      <stop offset="50%" style="stop-color:#0A0A0A"/>
+      <stop offset="100%" style="stop-color:#1c0e00"/>
     </linearGradient>
     <linearGradient id="ogGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#F5A623"/>
-      <stop offset="100%" style="stop-color:#E8720C"/>
+      <stop offset="0%" style="stop-color:#FF9500"/>
+      <stop offset="100%" style="stop-color:#FF6B00"/>
     </linearGradient>
     <linearGradient id="pnlGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:${pnlColor}"/>
       <stop offset="100%" style="stop-color:${isProfit ? '#00cc77' : '#cc2222'}"/>
     </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" style="stop-color:${periodAccent}" stop-opacity="0.15"/>
+      <stop offset="100%" style="stop-color:${periodAccent}" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <rect width="${W}" height="52" fill="url(#ogGrad)" opacity="0.12"/>
-  <rect y="${H-48}" width="${W}" height="48" fill="url(#ogGrad)" opacity="0.12"/>
-  <rect width="${W}" height="5" fill="${periodAccent}"/>
-  <rect y="${H-5}" width="${W}" height="5" fill="${periodAccent}"/>
-  <rect width="4" height="${H}" fill="${periodAccent}"/>
-  <rect x="${W-4}" width="4" height="${H}" fill="${periodAccent}"/>
-  <text x="40" y="47" font-family="Arial Black" font-size="28" fill="#F5A623" letter-spacing="6">H A W K X</text>
-  <text x="${W-40}" y="30" font-family="Arial" font-size="15" fill="rgba(255,255,255,0.8)" text-anchor="end">@${username}</text>
-  <text x="${W-40}" y="52" font-family="Arial Black" font-size="17" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
-  <line x1="40" y1="68" x2="${W-40}" y2="68" stroke="${periodAccent}" stroke-width="1" opacity="0.5"/>
-  <text x="40" y="100" font-family="Arial" font-size="12" fill="${periodAccent}" letter-spacing="4">${periodLabel}</text>
-  <text x="40" y="200" font-family="Arial Black" font-size="74" fill="url(#pnlGrad)">${periodPnl >= 0 ? '&#9650;' : '&#9660;'} ${periodSign}${Math.abs(periodPnl) < 0.001 ? Math.abs(periodPnl).toFixed(6) : Math.abs(periodPnl).toFixed(3)} SOL</text>
-  <text x="42" y="235" font-family="Arial" font-size="24" fill="#F5A623">${periodSign}$${(Math.abs(periodPnl)*_cardSolPx).toFixed(2)}</text>
-  <line x1="40" y1="255" x2="${W-40}" y2="255" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
-  <text x="40" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">WIN RATE</text>
-  <text x="40" y="315" font-family="Arial Black" font-size="36" fill="white">${winRate}%</text>
-  <text x="200" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">TRADES</text>
-  <text x="200" y="315" font-family="Arial Black" font-size="36" fill="white">${trades}</text>
-  <text x="360" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">STREAK</text>
-  <text x="360" y="315" font-family="Arial Black" font-size="36" fill="${streak >= 0 ? '#14F195' : '#FF4444'}">${streak >= 0 ? '+' : ''}${streak}</text>
-  <text x="560" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">BEST TRADE</text>
-  <text x="560" y="315" font-family="Arial Black" font-size="30" fill="#14F195">+${bestTrade.toFixed(3)} SOL</text>
-  <text x="800" y="282" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">WORST TRADE</text>
-  <text x="800" y="315" font-family="Arial Black" font-size="30" fill="#FF4444">${worstTrade.toFixed(3)} SOL</text>
-  <line x1="40" y1="332" x2="${W-40}" y2="332" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-  <text x="40" y="355" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">AVG TRADE</text>
-  <text x="40" y="383" font-family="Arial Black" font-size="26" fill="white">${avgTrade >= 0 ? '+' : ''}${avgTrade.toFixed(3)} SOL</text>
-  <text x="250" y="355" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">FEES PAID</text>
-  <text x="250" y="383" font-family="Arial Black" font-size="26" fill="#F5A623">${totalFees.toFixed(4)} SOL</text>
-  <text x="480" y="355" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">THIS WEEK</text>
-  <text x="480" y="383" font-family="Arial Black" font-size="26" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${weekPnl.toFixed(3)} SOL</text>
-  <text x="730" y="355" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="2">THIS MONTH</text>
-  <text x="730" y="383" font-family="Arial Black" font-size="26" fill="${monthPnl >= 0 ? '#14F195' : '#FF4444'}">${mSign}${monthPnl.toFixed(3)} SOL</text>
-  <line x1="40" y1="400" x2="${W-40}" y2="400" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
-  <text x="40" y="420" font-family="Arial" font-size="12" fill="${periodAccent}" letter-spacing="2">RANK PROGRESS → ${nextRankNames[rankNum] || 'MAX'}</text>
-  <rect x="40" y="430" width="${W-80}" height="10" rx="5" fill="rgba(255,255,255,0.1)"/>
-  <rect x="40" y="430" width="${Math.max(4,(W-80)*(rankProgress/100))}" height="10" rx="5" fill="${periodAccent}"/>
-  <text x="40" y="456" font-family="Arial" font-size="12" fill="rgba(255,255,255,0.4)">${rankProgress.toFixed(0)}% · ${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} / ${nextRankSol || "MAX"} SOL</text>
-  <line x1="40" y1="470" x2="${W-40}" y2="470" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="500" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  ${qrDataUrl
-    ? `<image x="${W-100}" y="${H-100}" width="72" height="72" href="${qrDataUrl}"/><text x="${W-100}" y="${H-108}" font-family="Arial" font-size="10" fill="#F5A623" opacity="0.8">Join HawkX - 10% off</text>`
-    : `<text x="${W-40}" y="500" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>`
-  }
+  <rect width="${W}" height="${H}" fill="url(#glow)"/>
+  <rect width="${W}" height="4" fill="${periodAccent}"/>
+  <rect y="${H-4}" width="${W}" height="4" fill="${periodAccent}"/>
+  <rect width="3" height="${H}" fill="${periodAccent}"/>
+  <rect x="${W-3}" width="3" height="${H}" fill="${periodAccent}"/>
+
+  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
+  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
+  <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="${periodAccent}" stroke-width="1" opacity="0.4"/>
+
+  <text x="24" y="62" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="3">${periodLabel}</text>
+  <text x="24" y="118" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${periodPnl >= 0 ? '&#9650;' : '&#9660;'} ${periodSign}${Math.abs(periodPnl) < 0.001 ? Math.abs(periodPnl).toFixed(6) : Math.abs(periodPnl).toFixed(3)} SOL</text>
+  <text x="26" y="140" font-family="Arial" font-size="16" fill="#FF9500">${periodSign}$${(Math.abs(periodPnl)*_cardSolPx).toFixed(2)}</text>
+  <line x1="24" y1="154" x2="${W-24}" y2="154" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
+
+  <text x="24" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WIN RATE</text>
+  <text x="24" y="196" font-family="Arial Black" font-size="22" fill="white">${winRate}%</text>
+  <text x="140" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">TRADES</text>
+  <text x="140" y="196" font-family="Arial Black" font-size="22" fill="white">${trades}</text>
+  <text x="250" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">STREAK</text>
+  <text x="250" y="196" font-family="Arial Black" font-size="22" fill="${streak >= 0 ? '#14F195' : '#FF4444'}">${streak >= 0 ? '+' : ''}${streak}</text>
+  <text x="360" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">BEST</text>
+  <text x="360" y="196" font-family="Arial Black" font-size="17" fill="#14F195">+${fmtK(bestTrade)}</text>
+  <text x="490" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WORST</text>
+  <text x="490" y="196" font-family="Arial Black" font-size="17" fill="#FF4444">${fmtK(worstTrade)}</text>
+  <line x1="24" y1="208" x2="${W-24}" y2="208" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <text x="24" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">AVG TRADE</text>
+  <text x="24" y="248" font-family="Arial Black" font-size="16" fill="white">${avgTrade >= 0 ? '+' : ''}${fmtK(avgTrade)} SOL</text>
+  <text x="180" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">FEES PAID</text>
+  <text x="180" y="248" font-family="Arial Black" font-size="16" fill="#F5A623">${fmtK(totalFees)} SOL</text>
+  <text x="340" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WEEK</text>
+  <text x="340" y="248" font-family="Arial Black" font-size="16" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${fmtK(weekPnl)}</text>
+  <text x="470" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">MONTH</text>
+  <text x="470" y="248" font-family="Arial Black" font-size="16" fill="${monthPnl >= 0 ? '#14F195' : '#FF4444'}">${mSign}${fmtK(monthPnl)}</text>
+  <line x1="24" y1="262" x2="${W-24}" y2="262" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
+
+  <text x="24" y="280" font-family="Arial" font-size="10" fill="${periodAccent}" letter-spacing="1.5">RANK PROGRESS → ${nextRankNames[rankNum] || 'MAX'}</text>
+  <rect x="24" y="288" width="${W-48}" height="9" rx="4.5" fill="rgba(255,255,255,0.1)"/>
+  <rect x="24" y="288" width="${Math.max(4,(W-48)*(rankProgress/100))}" height="9" rx="4.5" fill="${periodAccent}"/>
+  <text x="24" y="312" font-family="Arial" font-size="11" fill="rgba(255,255,255,0.5)">${rankProgress.toFixed(0)}% · ${fmtK(volume)} / ${nextRankSol || "MAX"} SOL</text>
+
+  <rect x="24" y="324" width="${qrDataUrl ? W-140 : W-48}" height="1" fill="rgba(255,255,255,0)"/>
+  ${qrDataUrl ? `<image x="${W-104}" y="322" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="370" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="380" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort2}</text>` : ''}
+
+  <line x1="24" y1="392" x2="${W-24}" y2="392" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
+  <text x="24" y="410" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>
+  <text x="${W-24}" y="410" font-family="Arial" font-size="10" fill="#FF6B00" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
+
 
   try {
     const buf = await sharp(Buffer.from(svg), { density: 288 }).png({ quality: 100, compressionLevel: 6 }).toBuffer();
