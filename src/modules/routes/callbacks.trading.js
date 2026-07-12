@@ -178,9 +178,9 @@ async function handlePnlCardSettingsScreen(ctx, data, userId, db) {
   const hideHold = db.getSysConfig(`pnlcard_hide_hold_${userId}`) === "1";
   const msg = `📊 *PnL Card Settings*\n\nChoose what shows on your trade cards. Growth %, entry/exit, and token name always show.`;
   const kb = { inline_keyboard: [
-    [{ text: (hideInvested ? "☑️" : "◻️") + " Hide Invested Amount", callback_data: "pnlcard_toggle_invested" }],
-    [{ text: (hideSol ? "☑️" : "◻️") + " Hide SOL Amount (%  only)", callback_data: "pnlcard_toggle_sol" }],
-    [{ text: (hideHold ? "☑️" : "◻️") + " Hide Hold Time", callback_data: "pnlcard_toggle_hold" }],
+    [{ text: "Hide Invested Amount: " + (hideInvested ? "ON ✅" : "OFF ⬜"), callback_data: "pnlcard_toggle_invested" }],
+    [{ text: "Hide SOL Amount: " + (hideSol ? "ON ✅" : "OFF ⬜"), callback_data: "pnlcard_toggle_sol" }],
+    [{ text: "Hide Hold Time: " + (hideHold ? "ON ✅" : "OFF ⬜"), callback_data: "pnlcard_toggle_hold" }],
     [{ text: "← Back", callback_data: "menu_main" }],
   ]};
   try { await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kb }); }
