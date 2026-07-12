@@ -147,6 +147,18 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
     return;
   }
 
+  if (action === "set_price_notif") {
+    const v = (settings.price_notif ?? 1) ? 0 : 1;
+    db.updateSettings(user.user_id, { price_notif: v });
+    await ctx.answerCallbackQuery(`Price Alerts: ${v ? "✅ ON" : "⬜ OFF"}`);
+    const fresh = db.getUser(user.user_id);
+    const freshS = db.getSettings(user.user_id);
+    const uws = { ...fresh, settings: freshS };
+    const kb = fresh.mode === "pro" ? buildProSettingsMenu(freshS) : buildBeginnerSettingsMenu(uws);
+    try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
+    return;
+  }
+
   if (action === "pset_confirm") {
     const v = settings.confirm_trades ? 0 : 1;
     db.updateSettings(user.user_id, { confirm_trades: v });
