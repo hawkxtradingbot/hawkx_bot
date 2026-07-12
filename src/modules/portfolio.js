@@ -148,8 +148,18 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   let totalInvested = 0, totalCurrent = 0;
 
+  const REAL_PORT = process.env.MOCK_TRADES === "false";
   for (const pos of paginated) {
-    const currentPrice = simulatePriceMovement(pos.token_ca);
+    let currentPrice;
+    if (REAL_PORT) {
+      try {
+        const { getTokenOverview } = require("./birdeye");
+        const ov = await getTokenOverview(pos.token_ca);
+        currentPrice = (ov && ov.price > 0) ? ov.price : (pos.buy_price || simulatePriceMovement(pos.token_ca));
+      } catch { currentPrice = pos.buy_price || simulatePriceMovement(pos.token_ca); }
+    } else {
+      currentPrice = simulatePriceMovement(pos.token_ca);
+    }
     const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
     const currentValue = pos.sol_invested * (1 + pnlPct / 100);
     totalInvested += pos.sol_invested;
