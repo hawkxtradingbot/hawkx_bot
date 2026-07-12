@@ -9,36 +9,18 @@ async function executeCopyWalletBuy(bot, copyWallet, tokenCa, tokenName) {
   const user = db.getUser(copyWallet.user_id);
   if (!user || !copyWallet.active) return;
 
-  const { getMockPrice, getEffectiveFeeRate } = require("./executor");
-  const price       = getMockPrice(tokenCa);
-  const solAmount   = copyWallet.sol_amount || 0.1;
-  const tokenAmount = (solAmount / price) * 0.9;
-  const feeRate     = getEffectiveFeeRate(user);
-  const feeSol      = solAmount * feeRate;
-  const txHash      = `DEVNET_COPY_${Date.now()}`;
-
-  const tradeId = db.recordTrade({
-    userId: user.user_id, walletId: user.active_wallet_id,
-    tokenCa, tokenName: tokenName || tokenCa.slice(0,8),
-    platform: "devnet_mock", action: "buy",
-    solAmount, tokenAmount, priceSol: price,
-    feeSol, feeRate, txHash, status: "confirmed",
-  });
-
-  db.openPosition({
-    userId: user.user_id, walletId: user.active_wallet_id,
-    tokenCa, tokenName: tokenName || tokenCa.slice(0,8),
-    buyPrice: price, solInvested: solAmount, tokenAmount,
-    platform: "devnet_mock",
-    source:    "copy_wallet",
-    sourceRef: copyWallet.label || copyWallet.wallet_address.slice(0,8),
-  });
-
-  db.addVolume(user.user_id, solAmount);
-  const { creditReferralEarnings } = require("./referrals");
-  creditReferralEarnings(user.user_id, tradeId, feeSol);
+  const solAmount = copyWallet.sol_amount || 0.1;
+  const { mockBuy } = require("./executor");
+  // Reuse the proven real-buy path (same as manual buys/DCA) instead of simulating -
+  // this was previously 100% fake even on mainnet (fake tx hash, no real swap ever executed).
+  const fakeCtx = { chat: { id: user.user_id }, api: bot.api, reply: async () => {} };
+  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_wallet", copyWallet.label || copyWallet.wallet_address.slice(0,8), { silent: true, skipSafety: true });
 
   const safeLabel = String(copyWallet.label || "").replace(/[_*`[\]]/g, "");
+  if (!result) {
+    try { await bot.api.sendMessage(user.user_id, `⚠️ *Copy Wallet Buy Failed*\n\nCopied: *${safeLabel}*\nToken: \`${tokenCa.slice(0,12)}...\``, { parse_mode: "Markdown" }); } catch {}
+    return;
+  }
   try {
     await bot.api.sendMessage(user.user_id,
       `👛 *Copy Wallet Buy*\n\nCopied: *${safeLabel}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${copyWallet.auto_sell_enabled ? "Auto sell active." : "Sell from Positions or add limit orders."}_`,
@@ -47,12 +29,13 @@ async function executeCopyWalletBuy(bot, copyWallet, tokenCa, tokenName) {
   } catch {}
 }
 
+
 async function executeCopyChannelBuy(bot, channel, tokenCa) {
   const user = db.getUser(channel.user_id);
   if (!user || channel.status !== "active") return;
 
-  const { checkSafety }              = require("./safetyChecker");
-  const { getMockPrice, getEffectiveFeeRate } = require("./executor");
+  const { checkSafety } = require("./safetyChecker");
+  const { mockBuy } = require("./executor");
 
   const safety = await checkSafety(tokenCa, user.mode || "beginner");
   if (safety.status === "BLOCK") {
@@ -67,31 +50,17 @@ async function executeCopyChannelBuy(bot, channel, tokenCa) {
     return;
   }
 
-  const price       = getMockPrice(tokenCa);
-  const solAmount   = channel.buy_amount || 0.1;
-  const tokenAmount = (solAmount / price) * (1 - (channel.slippage || 50) / 100);
-  const feeRate     = getEffectiveFeeRate(user);
-  const feeSol      = solAmount * feeRate;
-  const txHash      = `DEVNET_CCH_${Date.now()}`;
+  const solAmount = channel.buy_amount || 0.1;
+  // Reuse the proven real-buy path instead of simulating - this was previously 100% fake
+  // even on mainnet (fake tx hash, no real swap ever executed).
+  const fakeCtx = { chat: { id: user.user_id }, api: bot.api, reply: async () => {} };
+  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_channel", channel.channel_id, { silent: true, skipSafety: true });
 
-  const tradeId = db.recordTrade({
-    userId: user.user_id, walletId: user.active_wallet_id,
-    tokenCa, tokenName: tokenCa.slice(0,8),
-    platform: "devnet_mock", action: "buy",
-    solAmount, tokenAmount, priceSol: price,
-    feeSol, feeRate, txHash, status: "confirmed",
-  });
-
-  db.openPosition({
-    userId: user.user_id, walletId: user.active_wallet_id,
-    tokenCa, tokenName: tokenCa.slice(0,8),
-    buyPrice: price, solInvested: solAmount, tokenAmount,
-    platform: "devnet_mock",
-    source:    "copy_channel",
-    sourceRef: channel.channel_id,
-  });
-
-  db.addVolume(user.user_id, solAmount);
+  const safeName = String(channel.channel_name || channel.channel_id || "").replace(/[_*`[\]]/g, "");
+  if (!result) {
+    try { await bot.api.sendMessage(user.user_id, `⚠️ *Copy Channel Buy Failed*\n\nChannel: *${safeName}*\nToken: \`${tokenCa.slice(0,12)}...\``, { parse_mode: "Markdown" }); } catch {}
+    return;
+  }
 
   try {
     db.getDb()
@@ -99,14 +68,10 @@ async function executeCopyChannelBuy(bot, channel, tokenCa) {
       .run(channel.id);
   } catch {}
 
-  const { creditReferralEarnings } = require("./referrals");
-  creditReferralEarnings(user.user_id, tradeId, feeSol);
-
   const note = channel.auto_sell_enabled
     ? `Auto sell: SL ${channel.stop_loss_pct||0}% / TP ${channel.take_profit_pct||0}%`
     : "Auto sell OFF — sell manually or add limit orders from Positions.";
 
-  const safeName = String(channel.channel_name || channel.channel_id || "").replace(/[_*`[\]]/g, "");
   try {
     await bot.api.sendMessage(user.user_id,
       `📡 *Copy Channel Buy*\n\nChannel: *${safeName}*\nToken: \`${tokenCa.slice(0,12)}...\`\nAmount: *${solAmount} SOL*\n\n_${note}_`,
