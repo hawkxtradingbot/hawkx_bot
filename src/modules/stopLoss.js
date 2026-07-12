@@ -480,7 +480,17 @@ async function checkDcaOrders(notifyFn) {
       const user = db.getUser(o.user_id);
       if (!user) continue;
       const { mockBuy, getMockPrice } = require("./executor");
-      const price = getMockPrice(o.token_ca) || 0;
+      const REAL_DCA = process.env.MOCK_TRADES === "false";
+      let price;
+      if (REAL_DCA) {
+        try {
+          const { getTokenOverview } = require("./birdeye");
+          const ov = await getTokenOverview(o.token_ca);
+          price = (ov && ov.price > 0) ? ov.price : (getMockPrice(o.token_ca) || 0);
+        } catch { price = getMockPrice(o.token_ca) || 0; }
+      } else {
+        price = getMockPrice(o.token_ca) || 0;
+      }
       // Buy into the DCA's wallet: temporarily switch active wallet
       const prevActive = user.active_wallet_id;
       try {
