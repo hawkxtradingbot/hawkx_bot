@@ -195,6 +195,7 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
         const vol = freshUser.cumulative_volume_sol || 0;
         const nextRankSol = rank.nextSol || 0;
         const rankProgress = nextRankSol > 0 ? Math.min(99, (vol / nextRankSol) * 100) : 100;
+        const allTimeStats = db.getUserStats(freshUser.user_id);
         const result = await generateRankCard({
           username: freshUser.username || "Trader",
           rankName: rank.name,
@@ -203,6 +204,9 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
           nextRankSol,
           rankProgress,
           fee: rank.fee,
+          totalTrades: allTimeStats?.totalTrades || 0,
+          winRate: allTimeStats?.winRate || 0,
+          referralCode: freshUser.custom_code || freshUser.referral_code || db.ensureReferralCode(freshUser.user_id),
         });
         console.log("[RankCard] Result:", result?.type, result?.buffer?.length);
         if (result && result.type === "photo") {

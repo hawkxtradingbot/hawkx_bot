@@ -358,64 +358,79 @@ async function generateRankCard(opts) {
     username = 'Trader', rankName = 'Scout', rankNum = 1,
     volume = 0, nextRankSol = 0, rankProgress = 0,
     fee = 1.00, totalTrades = 0, winRate = 0,
+    referralCode = null,
   } = opts;
-  const W = 1000, H = 520;
+  const W = 640, H = 420;
   const rankColors = ['','#aaaaaa','#00ccff','#00ff88','#ff9900','#cc44ff','#ff4444','#FFD700'];
   const rankColor = rankColors[rankNum] || '#F5A623';
   const nextRankNames = ['','Flipper','Trader','Sniper','Whale','Shark','Hawk Elite','MAX'];
   const nextRank = nextRankNames[rankNum] || 'MAX';
   const savingsPct = ((1.00 - fee) * 100).toFixed(0);
+  const fmtVol = (n) => n >= 1e6 ? (n/1e6).toFixed(2)+"M" : n >= 1e3 ? (n/1e3).toFixed(2)+"K" : n.toFixed(2);
+  const refCodeShort3 = referralCode ? String(referralCode).slice(0,14) : "";
+  let qrDataUrl3 = null;
+  if (referralCode) qrDataUrl3 = await generateReferralQR(`https://t.me/HawkX_Trade_Bot?start=${referralCode}`);
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0a0d14"/>
-      <stop offset="100%" style="stop-color:#0a0d14"/>
+      <stop offset="0%" style="stop-color:#1c0e00"/>
+      <stop offset="50%" style="stop-color:#0A0A0A"/>
+      <stop offset="100%" style="stop-color:#1c0e00"/>
     </linearGradient>
     <linearGradient id="ogGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#F5A623"/>
-      <stop offset="100%" style="stop-color:#E8720C"/>
+      <stop offset="0%" style="stop-color:#FF9500"/>
+      <stop offset="100%" style="stop-color:#FF6B00"/>
     </linearGradient>
     <linearGradient id="rankGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:${rankColor}"/>
       <stop offset="100%" style="stop-color:${rankColor}88"/>
     </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" style="stop-color:${rankColor}" stop-opacity="0.15"/>
+      <stop offset="100%" style="stop-color:${rankColor}" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <circle cx="820" cy="180" r="180" fill="${rankColor}" opacity="0.04"/>
-  <line x1="500" y1="0" x2="${W}" y2="300" stroke="${rankColor}" stroke-width="1" opacity="0.05"/>
-  <line x1="600" y1="0" x2="${W}" y2="200" stroke="${rankColor}" stroke-width="1" opacity="0.05"/>
-  <rect width="${W}" height="5" fill="url(#rankGrad)"/>
-  <rect y="${H-5}" width="${W}" height="5" fill="url(#rankGrad)"/>
-  <rect width="4" height="${H}" fill="url(#rankGrad)"/>
-  <rect x="${W-4}" width="4" height="${H}" fill="url(#rankGrad)"/>
-  <rect width="${W}" height="52" fill="url(#ogGrad)" opacity="0.1"/>
-  <text x="40" y="47" font-family="Arial Black" font-size="28" fill="#F5A623" letter-spacing="6">H A W K X</text>
-  <text x="${W-40}" y="30" font-family="Arial" font-size="15" fill="rgba(255,255,255,0.8)" text-anchor="end">@${username}</text>
-  <text x="${W-40}" y="52" font-family="Arial Black" font-size="17" fill="${rankColor}" text-anchor="end">RANK CARD</text>
-  <line x1="40" y1="68" x2="${W-40}" y2="68" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
-  <text x="40" y="110" font-family="Arial" font-size="14" fill="#E8720C" letter-spacing="4">YOUR RANK</text>
-  <text x="40" y="210" font-family="Arial Black" font-size="100" fill="${rankColor}">${rankName.toUpperCase()}</text>
-  <text x="40" y="250" font-family="Arial" font-size="20" fill="rgba(255,255,255,0.5)">Rank ${rankNum} of 7</text>
-  <line x1="40" y1="268" x2="${W-40}" y2="268" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
-  <text x="40" y="296" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">TRADING FEE</text>
-  <text x="40" y="334" font-family="Arial Black" font-size="38" fill="${rankColor}">${fee.toFixed(2)}%</text>
-  <text x="220" y="296" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">FEE SAVED</text>
-  <text x="220" y="334" font-family="Arial Black" font-size="38" fill="#14F195">${savingsPct}%</text>
-  <text x="400" y="296" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">VOLUME</text>
-  <text x="400" y="334" font-family="Arial Black" font-size="32" fill="white">${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} SOL</text>
-  <text x="620" y="296" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">TRADES</text>
-  <text x="620" y="334" font-family="Arial Black" font-size="38" fill="white">${totalTrades}</text>
-  <text x="800" y="296" font-family="Arial" font-size="11" fill="#E8720C" letter-spacing="3">WIN RATE</text>
-  <text x="800" y="334" font-family="Arial Black" font-size="38" fill="white">${winRate}%</text>
-  <line x1="40" y1="355" x2="${W-40}" y2="355" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
-  <text x="40" y="375" font-family="Arial" font-size="13" fill="#E8720C" letter-spacing="2">PROGRESS TO ${nextRank.toUpperCase()}</text>
-  <rect x="40" y="385" width="${W-80}" height="16" rx="8" fill="none" stroke="${rankColor}" stroke-width="2" stroke-dasharray="8,5" opacity="0.5"/>
-  <rect x="40" y="385" width="${Math.max(8,(W-80)*(rankProgress/100))}" height="16" rx="8" fill="url(#rankGrad)" opacity="0.9"/>
-  <text x="40" y="418" font-family="Arial" font-size="13" fill="${rankColor}">${rankProgress.toFixed(0)}% · ${volume >= 1000 ? (volume/1000).toFixed(1)+"K" : volume.toFixed(2)} / ${nextRankSol || "MAX"} SOL needed</text>
-  <line x1="40" y1="438" x2="${W-40}" y2="438" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
-  <text x="40" y="468" font-family="Arial" font-style="italic" font-size="13" fill="rgba(255,255,255,0.3)">Always Watching. Always First.</text>
-  <text x="${W-40}" y="468" font-family="Arial" font-size="13" fill="#F5A623" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
+  <rect width="${W}" height="${H}" fill="url(#glow)"/>
+  <rect width="${W}" height="4" fill="url(#rankGrad)"/>
+  <rect y="${H-4}" width="${W}" height="4" fill="url(#rankGrad)"/>
+  <rect width="3" height="${H}" fill="url(#rankGrad)"/>
+  <rect x="${W-3}" width="3" height="${H}" fill="url(#rankGrad)"/>
+
+  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
+  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">RANK CARD</text>
+  <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
+
+  <text x="24" y="62" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="3">YOUR RANK</text>
+  <text x="24" y="120" font-family="Arial Black" font-size="52" fill="${rankColor}">${rankName.toUpperCase()}</text>
+  <text x="24" y="142" font-family="Arial" font-size="13" fill="rgba(255,255,255,0.5)">Rank ${rankNum} of 7</text>
+  <line x1="24" y1="154" x2="${W-24}" y2="154" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
+
+  <text x="24" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">FEE</text>
+  <text x="24" y="196" font-family="Arial Black" font-size="20" fill="${rankColor}">${fee.toFixed(2)}%</text>
+  <text x="140" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">SAVED</text>
+  <text x="140" y="196" font-family="Arial Black" font-size="20" fill="#14F195">${savingsPct}%</text>
+  <text x="250" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">VOLUME</text>
+  <text x="250" y="196" font-family="Arial Black" font-size="16" fill="white">${fmtVol(volume)} SOL</text>
+  <text x="400" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">TRADES</text>
+  <text x="400" y="196" font-family="Arial Black" font-size="20" fill="white">${totalTrades}</text>
+  <text x="510" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">WIN RATE</text>
+  <text x="510" y="196" font-family="Arial Black" font-size="20" fill="white">${winRate}%</text>
+  <line x1="24" y1="208" x2="${W-24}" y2="208" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
+
+  <text x="24" y="228" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="1.5">PROGRESS TO ${nextRank.toUpperCase()}</text>
+  <rect x="24" y="236" width="${W-48}" height="12" rx="6" fill="none" stroke="${rankColor}" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>
+  <rect x="24" y="236" width="${Math.max(6,(W-48)*(rankProgress/100))}" height="12" rx="6" fill="url(#rankGrad)" opacity="0.9"/>
+  <text x="24" y="266" font-family="Arial" font-size="12" fill="${rankColor}">${rankProgress.toFixed(0)}% · ${fmtVol(volume)} / ${nextRankSol || "MAX"} SOL needed</text>
+  <line x1="24" y1="280" x2="${W-24}" y2="280" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
+
+  ${qrDataUrl3 ? `<image x="${W-104}" y="288" width="40" height="40" href="${qrDataUrl3}"/><text x="${W-84}" y="336" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="346" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort3}</text>` : ''}
+
+  <line x1="24" y1="392" x2="${W-24}" y2="392" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
+  <text x="24" y="410" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>
+  <text x="${W-24}" y="410" font-family="Arial" font-size="10" fill="#FF6B00" opacity="0.5" text-anchor="end">t.me/HawkX_Trade_Bot</text>
 </svg>`;
 
   try {

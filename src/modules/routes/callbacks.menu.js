@@ -199,6 +199,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         streak: periodStats.streak || 0,
         avgTrade: periodStats.avgTrade || 0,
         feeSaved: periodFeeSaved || 0,
+        referralCode: freshUser.custom_code || freshUser.referral_code || db.ensureReferralCode(userId),
       });
       if (result.type === "photo") {
         const { InputFile } = require("grammy");
