@@ -198,8 +198,13 @@ async function refreshSettings(ctx, user) {
   }
 
   if (action === "set_price_notif") {
+    console.log("[PRICE_NOTIF DEBUG] current settings.price_notif:", settings.price_notif, "| user_id:", user.user_id);
     const v = (settings.price_notif ?? 1) ? 0 : 1;
-    db.updateSettings(user.user_id, { price_notif: v });
+    console.log("[PRICE_NOTIF DEBUG] computed v:", v);
+    const updResult = db.updateSettings(user.user_id, { price_notif: v });
+    console.log("[PRICE_NOTIF DEBUG] update result:", JSON.stringify(updResult));
+    const verify = db.getSettings(user.user_id);
+    console.log("[PRICE_NOTIF DEBUG] verified after write:", verify.price_notif);
     await ctx.answerCallbackQuery(`Price Alerts: ${v ? "✅ ON" : "◻️ OFF"}`);
     await refreshSettings(ctx, user);
     return;
