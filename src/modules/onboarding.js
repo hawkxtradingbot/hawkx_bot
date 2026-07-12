@@ -25,7 +25,30 @@ async function handleStart(ctx, bot) {
 
   let user    = db.getUser(userId);
   const isNew = !user;
-  if (isNew) { try { db.setSysConfig(`terms_accepted_${ctx.from.id}`, new Date().toISOString() + "|v1"); } catch {} }
+
+  // Real Terms/Privacy acceptance gate - must tap "I Agree" before an account or wallet is created.
+  // (Previously this silently marked terms as "accepted" without ever showing/asking the user - removed.)
+  if (isNew) {
+    const alreadyAccepted = db.getSysConfig(`terms_accepted_${userId}`);
+    if (!alreadyAccepted) {
+      if (referrerId) db.setSysConfig(`pending_referrer_${userId}`, String(referrerId));
+      const termsMsg =
+        "🦅 *Welcome to HawkX*\n" +
+        "━━━━━━━━━━━━━━━━━━\n\n" +
+        "Before you start, please review:\n\n" +
+        "📜 *Terms of Service* — non-custodial service, you control your wallet, trading involves real financial risk, HawkX cannot recover lost keys/PINs.\n\n" +
+        "🔒 *Privacy Policy* — we store your Telegram ID, encrypted wallet data, and trade history to operate the Bot; your wallet's private key is encrypted (AES-256-GCM) and never shared.\n\n" +
+        "By tapping *I Agree*, you confirm you are 18+, accept the full Terms of Service and Privacy Policy, and understand that trading crypto carries real risk of loss.";
+      const kb = { inline_keyboard: [
+        [{ text: "📜 Read Full Terms", url: "https://github.com/hawkxtradingbot/hawkx_bot/blob/main/HawkX_Terms_of_Service.md" }],
+        [{ text: "🔒 Read Privacy Policy", url: "https://github.com/hawkxtradingbot/hawkx_bot/blob/main/HawkX_Privacy_Policy.md" }],
+        [{ text: "✅ I Agree - Start Trading", callback_data: "terms_agree" }],
+        [{ text: "❌ Decline", callback_data: "terms_decline" }],
+      ]};
+      await ctx.reply(termsMsg, { parse_mode: "Markdown", reply_markup: kb });
+      return;
+    }
+  }
 
   if (isNew) {
     db.createUser({
@@ -106,4 +129,49 @@ async function handleStart(ctx, bot) {
   }
 }
 
-module.exports = { handleStart };
+
+async function handleTermsResponse(ctx) {
+  const userId = ctx.from.id;
+  const data = ctx.callbackQuery.data;
+
+  if (data === "terms_decline") {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("You must accept the Terms of Service and Privacy Policy to use HawkX. Send /start anytime to review again.");
+    return true;
+  }
+
+  if (data === "terms_agree") {
+    await ctx.answerCallbackQuery("✅ Accepted!");
+    db.setSysConfig(`terms_accepted_${userId}`, new Date().toISOString() + "|v1");
+
+    const referrerId = db.getSysConfig(`pending_referrer_${userId}`);
+    db.setSysConfig(`pending_referrer_${userId}`, "");
+
+    let user = db.getUser(userId);
+    if (!user) {
+      const tgUser = ctx.from;
+      const lang = tgUser.language_code?.slice(0, 2) || "en";
+      db.createUser({
+        userId,
+        username: tgUser.username || tgUser.first_name || "Trader",
+        language: lang,
+        referrerId: referrerId ? parseInt(referrerId) : null,
+      });
+      user = db.getUser(userId);
+      db.ensureReferralCode(userId);
+      try { await addWallet(ctx, user, "generate"); } catch {}
+      if (referrerId) {
+        db.buildReferralChain(userId, parseInt(referrerId));
+        applyJoinerDiscount(userId);
+      }
+    }
+
+    try { await ctx.deleteMessage(); } catch {}
+    await handleStart(ctx);
+    return true;
+  }
+
+  return false;
+}
+
+module.exports = { handleStart, handleTermsResponse };

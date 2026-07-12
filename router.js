@@ -2,7 +2,7 @@
 const killSwitch = require("./killSwitch");
 const db = require("../../database");
 const { t } = require("./i18n");
-const { handleStart } = require("./onboarding");
+const { handleStart, handleTermsResponse } = require("./onboarding");
 const {
   showSettings,
   handleSettingCallback,
@@ -203,6 +203,12 @@ async function setupRouter(bot) {
   bot.on("callback_query:data", async (ctx) => {
     const data = ctx.callbackQuery.data;
     const userId = ctx.from.id;
+
+    if (data === "terms_agree" || data === "terms_decline") {
+      await handleTermsResponse(ctx);
+      return;
+    }
+
     const user = db.getUser(userId);
 
     // Kill-switch check for trade actions
