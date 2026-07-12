@@ -28,6 +28,7 @@ function runMigrations(d) {
     "ALTER TABLE settings ADD COLUMN auto_sell INTEGER DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN mev_protect INTEGER DEFAULT 1",
     "ALTER TABLE settings ADD COLUMN speed_mode TEXT DEFAULT 'fast'",
+    "ALTER TABLE settings ADD COLUMN price_notif INTEGER DEFAULT 1",
     "ALTER TABLE settings ADD COLUMN sell_slippage_pct REAL DEFAULT 10",
     "ALTER TABLE settings ADD COLUMN confirm_trades INTEGER DEFAULT 0",
     "ALTER TABLE settings ADD COLUMN weekly_summary INTEGER DEFAULT 1",

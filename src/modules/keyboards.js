@@ -149,7 +149,7 @@ function buildBeginnerSettingsMenu(user) {
     .text("👁 Show/Hide", "bset_show_hide")
     .row();
   kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set PIN", "set_sap").text("🌐 Language", "set_language").row();
-  kb.text("📊 PnL Card Settings", "pnlcard_settings_screen").row();
+  kb.text("📊 PnL Card Settings", "pnlcard_settings_screen").text((s.price_notif ?? 1) ? "🔔 Alerts: ON" : "🔔 Alerts: OFF", "set_price_notif").row();
   kb.text("⚡ Pro Mode →", "mode_set_pro").row();
   kb.text("← Back",    "menu_main").row();
   return kb;
@@ -166,7 +166,7 @@ function buildProSettingsMenu(user) {
   kb.text("🔔 Alerts & Notifications", "pset_alerts").row();
   kb.text("🔐 PIN", "set_sap").text("⏱ Session", "set_session").row();
   kb.text("🌐 Language", "set_language").text(`📊 PnL: ${s.weekly_summary?"✅":"◻️"}`, "set_weekly").row();
-  kb.text("📊 PnL Card Settings", "pnlcard_settings_screen").row();
+  kb.text("📊 PnL Card Settings", "pnlcard_settings_screen").text((s.price_notif ?? 1) ? "🔔 Alerts: ON" : "🔔 Alerts: OFF", "set_price_notif").row();
   kb.text("🌱 Beginner Mode", "mode_set_beginner").row();
   kb.text("← Back", "menu_main").row();
   return kb;

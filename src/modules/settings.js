@@ -197,6 +197,14 @@ async function refreshSettings(ctx, user) {
     return;
   }
 
+  if (action === "set_price_notif") {
+    const v = (settings.price_notif ?? 1) ? 0 : 1;
+    db.updateSettings(user.user_id, { price_notif: v });
+    await ctx.answerCallbackQuery(`Price Alerts: ${v ? "✅ ON" : "◻️ OFF"}`);
+    await refreshSettings(ctx, user);
+    return;
+  }
+
   if (action === "pset_confirm") {
     const v = settings.confirm_trades ? 0 : 1;
     db.updateSettings(user.user_id, { confirm_trades: v });

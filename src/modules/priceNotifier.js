@@ -39,6 +39,10 @@ async function runPriceNotifier(bot) {
         }
         if (crossed === null) continue;
 
+        // Respect the user's price-notification on/off setting (default ON) - same settings table as other toggles
+        const uSettings = db.getSettings(p.user_id) || {};
+        if ((uSettings.price_notif ?? 1) === 0) continue;
+
         // Only alert once per threshold per position (store last alerted threshold)
         const key = `notif_${p.user_id}_${p.token_ca}_${p.wallet_id}`;
         const last = db.getSysConfig(key) || "";
