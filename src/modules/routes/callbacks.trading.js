@@ -168,7 +168,6 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
     return false;
 }
 
-module.exports = { handleTradingCallbacks, handlePnlCardSettingsScreen, handlePnlCardGranularToggle };
 
 // PnL Card granular privacy settings screen
 async function handlePnlCardSettingsScreen(ctx, data, userId, db) {
@@ -245,7 +244,7 @@ async function handlePnlCardToggle(ctx, data, userId) {
   return true;
 }
 
-module.exports = { handleTradingCallbacks, handlePnlCardToggle, handlePositionAutoSell };
+module.exports = { handleTradingCallbacks, handlePnlCardToggle, handlePositionAutoSell, handlePnlCardSettingsScreen, handlePnlCardGranularToggle };
 
 // ── Position Auto Sell ────────────────────────────────────────
 async function handlePositionAutoSell(ctx, data, userId, user) {
