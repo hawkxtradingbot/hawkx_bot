@@ -170,6 +170,8 @@ bot.start({
 // ── BACKGROUND JOBS ──────────────────────────────────────────
 startRankCron(notifyCallback);
 startPriceNotifier(bot);
+db.seedChainConfig();
+console.log("[Chains] ✅ Chain config seeded (SOL, RBH)");
 const { setAlertBotApi } = require("./src/modules/adminAlert");
 setAlertBotApi(bot.api);
 startDepositMonitor(bot);

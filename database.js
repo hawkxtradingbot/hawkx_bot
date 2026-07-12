@@ -111,6 +111,18 @@ function runMigrations(d) {
         sent_by INTEGER,
         created_at TEXT DEFAULT (datetime('now')))`,
       "ALTER TABLE users ADD COLUMN promoter_rate REAL DEFAULT 0",
+      // ── Multi-chain support (EVM/Robinhood Chain) - chains are kept fully independent ──
+      "ALTER TABLE users ADD COLUMN active_chain TEXT DEFAULT 'SOL'",
+      "ALTER TABLE wallets ADD COLUMN chain TEXT DEFAULT 'SOL'",
+      "ALTER TABLE positions ADD COLUMN chain TEXT DEFAULT 'SOL'",
+      "ALTER TABLE trades ADD COLUMN chain TEXT DEFAULT 'SOL'",
+      `CREATE TABLE IF NOT EXISTS chain_config (
+        chain TEXT PRIMARY KEY,
+        enabled INTEGER DEFAULT 1,
+        label TEXT DEFAULT '',
+        native_symbol TEXT DEFAULT '',
+        chain_id INTEGER DEFAULT 0,
+        rpc_url TEXT DEFAULT '')`,
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (
@@ -370,6 +382,41 @@ function incrementTradeRateLimit(userId) {
 // ── SETTINGS ──────────────────────────────────────────────────
 function getSettings(userId) {
   return getDb().prepare("SELECT * FROM settings WHERE user_id = ?").get(userId);
+}
+
+// ── MULTI-CHAIN (EVM/Robinhood Chain) ──────────────────────────
+function seedChainConfig() {
+  const existing = getDb().prepare("SELECT COUNT(*) as cnt FROM chain_config").get().cnt;
+  if (existing > 0) return;
+  getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
+    .run("SOL", 1, "Solana", "SOL", 0, "");
+  getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
+    .run("RBH", 0, "Robinhood Chain", "ETH", 4663, "https://rpc.mainnet.chain.robinhood.com");
+}
+
+function getEnabledChains() {
+  return getDb().prepare("SELECT * FROM chain_config WHERE enabled = 1").all();
+}
+
+function getChainConfig(chain) {
+  return getDb().prepare("SELECT * FROM chain_config WHERE chain = ?").get(chain);
+}
+
+function setChainEnabled(chain, enabled) {
+  getDb().prepare("UPDATE chain_config SET enabled = ? WHERE chain = ?").run(enabled ? 1 : 0, chain);
+}
+
+function getActiveChain(userId) {
+  const u = getUser(userId);
+  return u?.active_chain || "SOL";
+}
+
+function setActiveChain(userId, chain) {
+  getDb().prepare("UPDATE users SET active_chain = ? WHERE user_id = ?").run(chain, userId);
+}
+
+function getWalletForChain(userId, chain) {
+  return getDb().prepare("SELECT * FROM wallets WHERE user_id = ? AND chain = ? ORDER BY wallet_id ASC LIMIT 1").get(userId, chain);
 }
 
 function updateSettings(userId, fields) {
@@ -1537,6 +1584,7 @@ async function getSolPriceUsdShared() {
 }
 
 module.exports = {
+  seedChainConfig, getEnabledChains, getChainConfig, setChainEnabled, getActiveChain, setActiveChain, getWalletForChain,
   getSolPriceUsdShared,
   getTrendingTokens, getAllOpenPositionsForNotify, getTokenName,
   getTokenTraderAnalytics, applyCriteria, saveSnapshot, getSnapshot, getSnapshots,
