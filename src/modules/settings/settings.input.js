@@ -383,6 +383,21 @@ async function handleTextInput(ctx, user, pendingKey) {
               try { await ctx.api.deleteMessage(ctx.chat.id, okMsg.message_id); } catch {}
               try { await ctx.api.sendMessage(userId, "🔐 PIN saved. Required before withdrawing or exporting your key."); } catch {}
             }, 15000);
+            // If this PIN was set as part of onboarding (flagged right before the Set PIN button
+            // was shown on the Fund Your Wallet screen), show the main menu so the user isn't
+            // left with no next screen. Not shown when a user sets their first PIN later from
+            // Settings on their own, where they're already in the bot.
+            const wasOnboardingPin = db.getSysConfig(`onboarding_pin_flow_${userId}`) === "1";
+            if (wasOnboardingPin) {
+              db.setSysConfig(`onboarding_pin_flow_${userId}`, "");
+              try {
+                const { buildMainMenu } = require("../keyboards");
+                const freshU = db.getUser(userId);
+                const todayS = db.getTodayStats(userId);
+                const ks2 = require("../killSwitch").isActive();
+                await ctx.reply("🦅 *Main Menu*", { parse_mode: "Markdown", reply_markup: buildMainMenu(freshU, todayS, ks2) });
+              } catch {}
+            }
             break;
           }
             case "sap_verify_remove": {
