@@ -335,7 +335,7 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   const paid = db.getPaidEarnings(userId);
   const dirCount = db.getDirectReferralCount(userId);
   const isPromoter = freshUser.promoter_status === 1;
-  const botName = "hawkx_devnet_fazle_bot";
+  const botName = ctx.me?.username || "HawkX_Trade_Bot";
   const myCode = freshUser.custom_code || freshUser.referral_code || db.ensureReferralCode(userId);
   const refLink = `https://t.me/${botName}?start=${myCode}`;
   const wallets = db.getWallets(userId) || [];

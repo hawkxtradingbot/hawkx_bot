@@ -1158,7 +1158,7 @@ async function handleCopyTradeCallbacks(ctx, data, userId, user, bot, ks) {
           `📢 *Public channel:*\n` +
           `Just forward any message — no setup needed.\n\n` +
           `🔒 *Private channel:*\n` +
-          `First add \`@hawkx_devnet_fazle_bot\` as admin, then forward a message.\n\n` +
+          `First add \`@${ctx.me?.username || "HawkX_Trade_Bot"}\` as admin, then forward a message.\n\n` +
           `Forward a message now:`,
         { parse_mode: "Markdown" },
       );

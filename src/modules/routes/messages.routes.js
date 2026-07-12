@@ -1542,7 +1542,7 @@ const t = text.trim().toLowerCase();
         await ctx.reply(`❌ ${result.reason}\n\nTap ✏️ Customize My Code to try again.`);
         return;
       }
-      await ctx.reply(`✅ <b>Your code is now</b> <code>${result.code}</code>\n\nShare this link:\n<code>https://t.me/hawkx_devnet_fazle_bot?start=${result.code}</code>`, { parse_mode: "HTML", disable_web_page_preview: true });
+      const _botUn = ctx.me?.username || "HawkX_Trade_Bot"; await ctx.reply(`✅ <b>Your code is now</b> <code>${result.code}</code>\n\nShare this link:\n<code>https://t.me/${_botUn}?start=${result.code}</code>`, { parse_mode: "HTML", disable_web_page_preview: true });
       return;
     }
 
