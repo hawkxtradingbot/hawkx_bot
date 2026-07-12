@@ -61,8 +61,12 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const rank = freshUser.rank || 1;
       const rankNames = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
       const fees = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
+      const _chainIcons = { SOL: '🟣', RBH: '🟢' };
+      const _activeChain = db.getActiveChain(userId);
+      const _chainCfg = db.getChainConfig(_activeChain);
       const menuMsg = 
-        `🦅 *HawkX* — ${mode} Mode\n\n` +
+        `🦅 *HawkX* — ${mode} Mode\n` +
+        `${_chainIcons[_activeChain] || '🔗'} Chain: *${_chainCfg?.label || _activeChain}*\n\n` +
         `🏅 Rank: *${rankNames[rank]||"Scout"}* (${rank}/7)\n` +
         `💸 Fee: *${fees[rank]||1.00}%*\n\n` +
         `${getGuide(freshUser.mode === "pro" ? "main_pro" : "main_beginner")}`;
@@ -99,53 +103,49 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       return safeEdit(ctx, `🦅 *HawkX* — ${label}\n\n${getGuide(guide)}`, buildMainMenu(freshUser, db.getTodayStats(userId, freshUser.active_wallet_id), ks));
     }
 
-    // ── CHAIN SWITCHER (expands inline, same screen, no navigation) ──
-    if (data === "chain_switch_menu") {
-      await ctx.answerCallbackQuery();
+    // ── CHAIN SWITCHER (single tap cycles to next enabled chain, updates same message in place) ──
+    if (data === "chain_switch_do") {
       const chains = db.getEnabledChains();
-      const chainIcons = { SOL: '🟣', RBH: '🟢' };
       const activeChain = db.getActiveChain(userId);
-      const chainRows = chains.map(c => [{
-        text: `${c.chain === activeChain ? '✅ ' : ''}${chainIcons[c.chain] || '🔗'} ${c.label}`,
-        callback_data: `chain_switch_do_${c.chain}`,
-      }]);
-      const _todayStats = db.getTodayStats(userId);
-      const _ks = require("../killSwitch").isActive();
-      const kb = { inline_keyboard: [...buildMainMenu(user, _todayStats, _ks).inline_keyboard.slice(0, -1), ...chainRows] };
-      try { await ctx.editMessageReplyMarkup({ reply_markup: kb }); } catch {}
-      return true;
-    }
-
-    if (data.startsWith("chain_switch_do_")) {
-      const chain = data.replace("chain_switch_do_", "");
-      const chainConfig = db.getChainConfig(chain);
-      if (!chainConfig || !chainConfig.enabled) {
-        await ctx.answerCallbackQuery("This chain isn't available yet.");
+      const idx = chains.findIndex(c => c.chain === activeChain);
+      const nextChain = chains[(idx + 1) % chains.length];
+      if (!nextChain || chains.length < 2) {
+        await ctx.answerCallbackQuery("Only one chain available right now.");
         return true;
       }
-      let wallet = db.getWalletForChain(userId, chain);
+      let wallet = db.getWalletForChain(userId, nextChain.chain);
       let createdNew = false;
       if (!wallet) {
-        if (chain === "SOL") {
+        if (nextChain.chain === "SOL") {
           const { addWallet } = require("../walletVault");
           await addWallet(ctx, user, "generate");
-          wallet = db.getWalletForChain(userId, chain);
+          createdNew = true;
         } else {
-          // EVM wallet generation not yet built - placeholder until chains/evm/ module exists
           await ctx.answerCallbackQuery("This chain's wallet system is still being built. Check back soon!");
           return true;
         }
-        createdNew = true;
       }
-      db.setActiveChain(userId, chain);
+      db.setActiveChain(userId, nextChain.chain);
       const chainIcons = { SOL: '🟣', RBH: '🟢' };
-      await ctx.answerCallbackQuery(`${chainIcons[chain] || ''} Switched to ${chainConfig.label}`);
+      await ctx.answerCallbackQuery(`${chainIcons[nextChain.chain] || ''} Switched to ${nextChain.label}${createdNew ? ' - wallet created' : ''}`);
+
       const freshUser = db.getUser(userId);
-      const msg = `${chainIcons[chain] || ''} *Switched to ${chainConfig.label}*${createdNew ? '\n\n✅ A new wallet was created for this chain.' : ''}`;
-      const todayS = db.getTodayStats(userId);
-      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: buildMainMenu(freshUser, todayS, ks) });
+      const todayS = db.getTodayStats(userId, freshUser.active_wallet_id);
+      const rank = freshUser.rank || 1;
+      const rankNames2 = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
+      const fees2 = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
+      const modeLabel = getModeLabel(freshUser);
+      const menuMsg2 =
+        `🦅 *HawkX* — ${modeLabel} Mode\n` +
+        `${chainIcons[nextChain.chain] || '🔗'} Chain: *${nextChain.label}*\n\n` +
+        `🏅 Rank: *${rankNames2[rank]||"Scout"}* (${rank}/7)\n` +
+        `💸 Fee: *${fees2[rank]||1.00}%*\n\n` +
+        `${getGuide(freshUser.mode === "pro" ? "main_pro" : "main_beginner")}`;
+      try { await ctx.editMessageText(menuMsg2, { parse_mode: "Markdown", reply_markup: buildMainMenu(freshUser, todayS, ks) }); }
+      catch { await safeEdit(ctx, menuMsg2, buildMainMenu(freshUser, todayS, ks)); }
       return true;
     }
+
 
     // ── RANK INFO ─────────────────────────────────────────────
     if (data === "menu_rank_info") {

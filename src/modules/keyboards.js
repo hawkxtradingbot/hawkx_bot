@@ -112,7 +112,7 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
   const chainIcons = { SOL: '🟣', RBH: '🟢' };
   const chainNames = { SOL: 'Solana', RBH: 'Robinhood Chain' };
   const activeChain = user?.active_chain || 'SOL';
-  kb.text(`${chainIcons[activeChain] || '🔗'} Chain: ${chainNames[activeChain] || activeChain} ▾`, 'chain_switch_menu').row();
+  kb.text(`${chainIcons[activeChain] || '🔗'} Chain: ${chainNames[activeChain] || activeChain} ▾`, 'chain_switch_do').row();
   return kb;
 }
 
