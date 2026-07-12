@@ -323,7 +323,7 @@ async function generateStatsCard(opts) {
   <text x="24" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">AVG TRADE</text>
   <text x="24" y="248" font-family="Arial Black" font-size="16" fill="white">${avgTrade >= 0 ? '+' : ''}${fmtK(avgTrade)} SOL</text>
   <text x="180" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">FEES PAID / SAVED</text>
-  <text x="180" y="248" font-family="Arial Black" font-size="13" fill="#F5A623">${fmtK(totalFees)} / $${feeSaved.toFixed(2)}</text>
+  <text x="180" y="248" font-family="Arial Black" font-size="13" fill="#F5A623">${fmtK(totalFees)} / $${(feeSaved*_cardSolPx).toFixed(2)}</text>
   <text x="340" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WEEK</text>
   <text x="340" y="248" font-family="Arial Black" font-size="16" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${fmtK(weekPnl)}</text>
   <text x="470" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">MONTH</text>

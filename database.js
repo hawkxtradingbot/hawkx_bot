@@ -1220,12 +1220,36 @@ function getPeriodStats(userId, days) {
   const trades = getDb().prepare(
     "SELECT * FROM trades WHERE user_id = ? AND action = 'sell' AND sol_amount < 1000 AND timestamp >= ? AND status = 'confirmed'"
   ).all(userId, since);
-  
+
+  // Fetch ALL historical buys (not just this period) for accurate cost-basis, same approach as
+  // computeWinLoss - a sell's real profit/loss depends on what was originally paid for those
+  // tokens, not just whether the sell itself returned a positive SOL amount (which is true for
+  // almost every sell regardless of profitability - the OLD bug this replaces).
+  const allBuys = getDb().prepare(
+    "SELECT token_ca, sol_amount, fee_sol, token_amount FROM trades WHERE user_id = ? AND action = 'buy' AND status = 'confirmed'"
+  ).all(userId);
+  const boughtByToken = {};
+  allBuys.forEach(b => {
+    if (!boughtByToken[b.token_ca]) boughtByToken[b.token_ca] = { sol: 0, tokens: 0 };
+    boughtByToken[b.token_ca].sol += (b.sol_amount || 0) + (b.fee_sol || 0);
+    boughtByToken[b.token_ca].tokens += (b.token_amount || 0);
+  });
+
   let pnl = 0, wins = 0, bestTrade = 0, worstTrade = 0, totalFees = 0, streak = 0, currentStreak = 0;
   let lastWin = null;
-  
+
   trades.forEach(t => {
-    const net = t.sol_amount - t.fee_sol;
+    const bought = boughtByToken[t.token_ca];
+    const soldTokens = t.token_amount || 0;
+    const soldSol = (t.sol_amount || 0) - (t.fee_sol || 0);
+    let net;
+    if (bought && bought.tokens > 0) {
+      const soldFraction = Math.min(1, soldTokens / bought.tokens);
+      const costBasisOfSold = bought.sol * soldFraction;
+      net = soldSol - costBasisOfSold;
+    } else {
+      net = soldSol; // no matching buy found (shouldn't normally happen) - fall back to raw proceeds
+    }
     pnl += net;
     totalFees += t.fee_sol;
     if (net > bestTrade) bestTrade = net;
