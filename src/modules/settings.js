@@ -60,6 +60,7 @@ async function refreshSettings(ctx, user) {
     // ── Main callback handler ─────────────────────────────────────
       async function handleSettingCallback(ctx, user, action, bot, onSourceBack) {
     console.log("[SETTINGS CB]:", action?.slice(0,25));
+    console.log("[SETTINGS CB RAW]", JSON.stringify(action), "| type:", typeof action, "| length:", action ? action.length : 0, "| exact match test:", action === "set_price_notif");
     // Handle select FIRST
     if (action && action.indexOf("ast_select_") === 0) {
       const id = parseInt(action.replace("ast_select_", ""));
