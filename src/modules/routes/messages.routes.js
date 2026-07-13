@@ -317,9 +317,10 @@ function setupMessages(bot) {
             const { Connection, PublicKey } = require("@solana/web3.js");
             const config2 = require("../../../config");
             const conn = new Connection(config2.HELIUS_RPC_URL, "confirmed");
-            const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-            const resp = await conn.getParsedTokenAccountsByOwner(new PublicKey(activeWallet.public_key), { programId: TOKEN_PROGRAM_ID });
-            const held = resp.value.find(acc => acc.account.data.parsed.info.mint === ca && acc.account.data.parsed.info.tokenAmount.uiAmount > 0);
+            // Query by SPECIFIC mint, not the broad programId scan - the broad scan has proven
+            // unreliable (misses real, confirmed holdings that the mint-filtered query correctly finds)
+            const resp = await conn.getParsedTokenAccountsByOwner(new PublicKey(activeWallet.public_key), { mint: new PublicKey(ca) });
+            const held = resp.value.find(acc => acc.account.data.parsed.info.tokenAmount.uiAmount > 0);
             if (held) {
               const heldAmount = held.account.data.parsed.info.tokenAmount.uiAmount;
               db.setSysConfig(`adopt_pending_${userId}`, JSON.stringify({ ca, amount: heldAmount }));
