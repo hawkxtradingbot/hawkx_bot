@@ -1582,7 +1582,29 @@ const t = text.trim().toLowerCase();
     }
 
     if (!pending) {
-      // Check if valid Solana CA
+      // Chain-aware CA detection: if the pasted address is a DIFFERENT chain's format than
+      // the user's active chain, show a clear switch prompt instead of silently failing.
+      const { isEvmAddress } = require("../walletVault");
+      const _activeChainCA = db.getActiveChain(userId);
+      const _pastedIsEvm = isEvmAddress(text);
+      const _pastedIsSol = isSolanaAddress(text);
+      if (_pastedIsEvm && _activeChainCA === "SOL") {
+        const hoodCfg = db.getChainConfig("HOOD");
+        await ctx.reply(
+          `🔗 *This token is on ${hoodCfg?.label || "Robinhood Chain"}*\n\nYou're currently on *Solana*. Switch chains to view and buy this token.`,
+          { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: `Switch to ${hoodCfg?.label || "Robinhood Chain"}`, callback_data: "chain_switch_do" }]] } }
+        );
+        return;
+      }
+      if (_pastedIsSol && _activeChainCA !== "SOL") {
+        await ctx.reply(
+          "🔗 *This token is on Solana*\n\nYou're currently on a different chain. Switch chains to view and buy this token.",
+          { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "Switch to Solana", callback_data: "chain_switch_do" }]] } }
+        );
+        return;
+      }
+
+      // Check if valid Solana CA (only reached when chain matches or address is Solana-format on Solana chain)
       if (isSolanaAddress(text)) {
           const autoBought = await handleAutoBuy(ctx, user, text);
           if (autoBought) return;

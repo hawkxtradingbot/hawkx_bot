@@ -145,6 +145,10 @@ function decryptWallet(walletId) {
 }
 
 // ── Validate Solana Address ──────────────────────────────────
+function isEvmAddress(address) {
+  return typeof address === "string" && /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
 function isSolanaAddress(address) {
   if (!address || typeof address !== "string") return false;
   if (address.length < 32 || address.length > 44) return false;
@@ -158,4 +162,4 @@ function isSolanaAddress(address) {
   }
 }
 
-module.exports = { addWallet, deleteWallet, decryptWallet, isSolanaAddress, encryptKey, decryptKey };
+module.exports = { addWallet, deleteWallet, decryptWallet, isSolanaAddress, isEvmAddress, encryptKey, decryptKey };
