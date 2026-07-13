@@ -358,6 +358,12 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
     return null;
   }
 
+  // ── EVM chain branch - this position belongs to an EVM chain, not Solana ──
+  if (position.chain && position.chain !== "SOL") {
+    const { evmSell } = require("./chains/evm/evmTrade");
+    return evmSell(ctx, user, position, pctToSell, opts);
+  }
+
   const sellFraction  = pctToSell / 100;
   const REAL_S = process.env.MOCK_TRADES === "false";
 
