@@ -221,7 +221,8 @@ function setupMessages(bot) {
       } catch {}
       const activeChain = db.getActiveChain(userId);
       if (activeChain === "SOL") {
-        await addWallet(ctx, user, text);
+        const { addWallet: addSolWallet } = require("../walletVault");
+        await addSolWallet(ctx, user, text);
       } else {
         try {
           const { importEvmWallet } = require("../chains/evm/wallet");
