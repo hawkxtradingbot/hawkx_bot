@@ -61,7 +61,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const rank = freshUser.rank || 1;
       const rankNames = ["","Scout","Tracker","Hunter","Predator","Apex","Hawk","Hawk Elite"];
       const fees = [0,1.00,0.85,0.80,0.75,0.70,0.60,0.50];
-      const _chainIcons = { SOL: '🟣', RBH: '🟢' };
+      const _chainIcons = { SOL: '🟣', HOOD: '🟢' };
       const _activeChain = db.getActiveChain(userId);
       const _chainCfg = db.getChainConfig(_activeChain);
       const menuMsg = 
@@ -133,7 +133,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         }
       }
       db.setActiveChain(userId, nextChain.chain);
-      const chainIcons = { SOL: '🟣', RBH: '🟢' };
+      const chainIcons = { SOL: '🟣', HOOD: '🟢' };
       await ctx.answerCallbackQuery(`${chainIcons[nextChain.chain] || ''} Switched to ${nextChain.label}${createdNew ? ' - wallet created' : ''}`);
 
       const freshUser = db.getUser(userId);

@@ -113,6 +113,11 @@ function runMigrations(d) {
       "ALTER TABLE users ADD COLUMN promoter_rate REAL DEFAULT 0",
       // ── Multi-chain support (EVM/Robinhood Chain) - chains are kept fully independent ──
       "ALTER TABLE users ADD COLUMN active_chain TEXT DEFAULT 'SOL'",
+      "UPDATE chain_config SET chain = 'HOOD' WHERE chain = 'RBH'",
+      "UPDATE wallets SET chain = 'HOOD' WHERE chain = 'RBH'",
+      "UPDATE positions SET chain = 'HOOD' WHERE chain = 'RBH'",
+      "UPDATE trades SET chain = 'HOOD' WHERE chain = 'RBH'",
+      "UPDATE users SET active_chain = 'HOOD' WHERE active_chain = 'RBH'",
       "ALTER TABLE wallets ADD COLUMN chain TEXT DEFAULT 'SOL'",
       "ALTER TABLE positions ADD COLUMN chain TEXT DEFAULT 'SOL'",
       "ALTER TABLE trades ADD COLUMN chain TEXT DEFAULT 'SOL'",
@@ -391,7 +396,7 @@ function seedChainConfig() {
   getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
     .run("SOL", 1, "Solana", "SOL", 0, "");
   getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
-    .run("RBH", 0, "Robinhood Chain", "ETH", 4663, "https://rpc.mainnet.chain.robinhood.com");
+    .run("HOOD", 0, "Robinhood Chain", "ETH", 4663, "https://rpc.mainnet.chain.robinhood.com");
 }
 
 function getEnabledChains() {
