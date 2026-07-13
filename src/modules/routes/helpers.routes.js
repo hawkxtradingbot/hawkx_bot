@@ -984,6 +984,55 @@ async function showLaunchScreen(ctx, userId) {
 
 
 // Shared token scanner/buy screen — used by paste-CA and watchlist Buy
+async function showEvmTokenScreen(ctx, user, tokenAddress, asReply = false) {
+  const userId = user.user_id;
+  const activeChain = db.getActiveChain(userId);
+  const chainCfg = db.getChainConfig(activeChain);
+  db.setSysConfig(`pending_ca_${userId}`, tokenAddress);
+  db.setSysConfig(`pending_ca_time_${userId}`, String(Date.now()));
+
+  const settings = db.getSettings(userId) || {};
+  const b1 = settings.buy_amt_1 || 0.1;
+  const b2 = settings.buy_amt_2 || 0.5;
+  const b3 = settings.buy_amt_3 || 1.0;
+
+  const { getTokenInfo } = require("../chains/evm/uniswap");
+  let tInfo;
+  try {
+    tInfo = await getTokenInfo(activeChain, tokenAddress);
+  } catch (e) {
+    const failMsg = `❌ Couldn't load token info.\n\nMake sure this token has a liquidity pool on ${chainCfg?.label || activeChain}.`;
+    if (asReply) return ctx.reply(failMsg);
+    return safeEdit(ctx, failMsg, { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] });
+  }
+
+  const chainIcons = { SOL: '🟣', HOOD: '🟢' };
+  const explorerUrl = `${chainCfg?.explorer_url || ''}/address/${tokenAddress}`;
+  const tName = tInfo.name !== "Unknown"
+    ? `<a href="${explorerUrl}"><b>${tInfo.name}</b>${tInfo.symbol ? " ("+tInfo.symbol+")" : ""}</a>`
+    : `<a href="${explorerUrl}"><b>${tokenAddress.slice(0,8)}...</b></a>`;
+
+  let infoLines = `${chainIcons[activeChain] || '🔗'} <b>${chainCfg?.label || activeChain}</b>\n${tName}\n📋 <code>${tokenAddress}</code>\n\n`;
+  if (tInfo.priceInEth > 0) {
+    infoLines += `💰 <b>Price</b> ${tInfo.priceInEth.toFixed(8)} ${chainCfg?.native_symbol || 'ETH'}\n`;
+  } else {
+    infoLines += `💰 <i>Price unavailable - no liquidity pool found for this pair</i>\n`;
+  }
+
+  const kb = { inline_keyboard: [
+    [
+      { text: `🟢 Buy ${b1}`, callback_data: `evm_buy_${b1}` },
+      { text: `🟢 Buy ${b2}`, callback_data: `evm_buy_${b2}` },
+      { text: `🟢 Buy ${b3}`, callback_data: `evm_buy_${b3}` },
+    ],
+    [{ text: "✏️ Custom Amount", callback_data: "evm_buy_custom" }],
+    [{ text: "🔄 Refresh", callback_data: "evm_token_refresh" }, { text: "← Back", callback_data: "menu_main" }],
+  ]};
+
+  if (asReply) return ctx.reply(infoLines, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+  return safeEdit(ctx, infoLines, kb, { parse_mode: "HTML", disable_web_page_preview: true });
+}
+
 async function showTokenScanner(ctx, user, ca, asReply = false, forceRefresh = false) {
   const userId = user.user_id;
   const settings = db.getSettings(userId) || {};
@@ -1168,6 +1217,7 @@ async function showWatchlistScreen(ctx, userId) {
 
 module.exports = {
   showTokenScanner,
+  showEvmTokenScreen,
   LAUNCHPAD_INFO,
   showWatchlistScreen,
   handlePnlCard,

@@ -138,6 +138,12 @@ function setupMessages(bot) {
       db.setSysConfig(`pending_${userId}`, "");
       if (promptId) { try { await ctx.api.deleteMessage(ctx.chat.id, promptId); } catch {} }
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      const { isEvmAddress: _isEvm1 } = require("../walletVault");
+      if (_isEvm1(text)) {
+        const { showEvmTokenScreen } = require("./helpers.routes");
+        await showEvmTokenScreen(ctx, user, text);
+        return;
+      }
       const autoBought = await handleAutoBuy(ctx, user, text);
       if (autoBought) return;
       const { showTokenScanner } = require("./helpers.routes");
