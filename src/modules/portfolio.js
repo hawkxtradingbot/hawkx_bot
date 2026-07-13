@@ -101,10 +101,12 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
           const untrackedPositions = await Promise.all(untrackedPf.map(async (t) => {
             const info = await _gti(t.mint).catch(() => null);
             const price = info?.price || 0;
+            const rawName = info?.name || t.symbol || t.mint.slice(0,8);
+            const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40); // strip HTML-breaking chars - token metadata is arbitrary on-chain data we do not control
             return {
               position_id: `untracked_${t.mint}`,
               user_id: user.user_id, wallet_id: user.active_wallet_id,
-              token_ca: t.mint, token_name: info?.name || t.symbol || t.mint.slice(0,8),
+              token_ca: t.mint, token_name: safeName || t.mint.slice(0,8),
               buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
               status: "open", source: "external", source_ref: "", chain: "SOL",
               entry_mcap: info?.mcap || 0, _untracked: true,
