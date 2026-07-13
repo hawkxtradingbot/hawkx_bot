@@ -307,7 +307,28 @@ function setupMessages(bot) {
       const pct = parseInt(text);
       if (isNaN(pct) || pct <= 0 || pct > 100) { await ctx.reply("❌ Enter 1-100%."); return; }
       const pos = db.getDb().prepare("SELECT * FROM positions WHERE user_id = ? AND token_ca = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1").get(userId, ca);
-      if (!pos) { await ctx.reply("❌ No position found!"); return; }
+      if (!pos) {
+        // Check if the user actually holds this token on-chain but it just was not bought through HawkX
+        // (external wallet transfer, CEX withdrawal, bought elsewhere) - give a clearer warning than a
+        // generic "not found", since the confusing case is "I have it but the bot does not know about it".
+        try {
+          const activeWallet = db.getWallet(user.active_wallet_id);
+          if (activeWallet && db.getActiveChain(userId) === "SOL") {
+            const { Connection, PublicKey } = require("@solana/web3.js");
+            const config2 = require("../../../config");
+            const conn = new Connection(config2.HELIUS_RPC_URL, "confirmed");
+            const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+            const resp = await conn.getParsedTokenAccountsByOwner(new PublicKey(activeWallet.public_key), { programId: TOKEN_PROGRAM_ID });
+            const held = resp.value.find(acc => acc.account.data.parsed.info.mint === ca && acc.account.data.parsed.info.tokenAmount.uiAmount > 0);
+            if (held) {
+              await ctx.reply("⚠️ *You hold this token, but it wasn't bought through HawkX*\n\nWe don't have purchase price/tracking for tokens received from an external wallet, CEX withdrawal, or another platform. You can still trade it manually elsewhere, or transfer it out.", { parse_mode: "Markdown" });
+              return;
+            }
+          }
+        } catch {}
+        await ctx.reply("❌ No position found!");
+        return;
+      }
       const { mockSell } = require("../executor");
       await mockSell(ctx, user, pos, pct);
       return;
