@@ -9,11 +9,21 @@ const config = require("../../../config");
 
 async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     const freshUser = db.getUser(userId);
-    const wallets = db.getWallets(userId) || [];
-    const walletId = activeWalletId || freshUser.active_wallet_id;
-    const active = db.getWallet(walletId);
+    const activeChain = db.getActiveChain(userId);
+    const wallets = (db.getWallets(userId) || []).filter(w => (w.chain || "SOL") === activeChain);
+    const walletId = activeWalletId || (wallets.find(w => w.wallet_id === freshUser.active_wallet_id) ? freshUser.active_wallet_id : wallets[0]?.wallet_id);
+    const active = wallets.find(w => w.wallet_id === walletId) || wallets[0];
     const address = active?.public_key || "No wallet";
-    const balance = await getBalance(address);
+    let balance = 0;
+    if (activeChain === "SOL") {
+      balance = await getBalance(address);
+    } else if (active) {
+      try {
+        const { getEvmBalance } = require("../chains/evm/wallet");
+        const chainCfg = db.getChainConfig(activeChain);
+        balance = await getEvmBalance(address, chainCfg.rpc_url);
+      } catch { balance = 0; }
+    }
     const label = active?.label || "Wallet";
     
     // P&L for active wallet
@@ -306,23 +316,29 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
     if (data === "wallet_deposit") {
       await ctx.answerCallbackQuery();
       const freshUser = db.getUser(userId);
-      const wallets = db.getWallets(userId) || [];
-      const activeWallet = db.getWallet(freshUser.active_wallet_id);
+      const activeChain = db.getActiveChain(userId);
+      const chainCfg = db.getChainConfig(activeChain);
+      const wallets = (db.getWallets(userId) || []).filter(w => (w.chain || "SOL") === activeChain);
+      const activeWallet = wallets.find(w => w.wallet_id === freshUser.active_wallet_id) || wallets[0];
       const activeAddr = activeWallet?.public_key || "No wallet";
-      const activeBal = await getBalance(activeAddr);
+      let activeBal = 0;
+      if (activeChain === "SOL") { activeBal = await getBalance(activeAddr); }
+      else if (activeWallet) { try { const { getEvmBalance } = require("../chains/evm/wallet"); activeBal = await getEvmBalance(activeAddr, chainCfg.rpc_url); } catch {} }
       const activeIdx =
-        wallets.findIndex((w) => w.wallet_id === freshUser.active_wallet_id) +
+        wallets.findIndex((w) => w.wallet_id === (activeWallet?.wallet_id)) +
         1;
       const walletRows = [];
       for (let i = 0; i < wallets.length; i += 3) {
-        walletRows.push(wallets.slice(i, i + 3).map((w, idx) => getWalletBtn(w, i+idx+1, w.wallet_id===freshUser.active_wallet_id, `deposit_select_${w.wallet_id}`)));
+        walletRows.push(wallets.slice(i, i + 3).map((w, idx) => getWalletBtn(w, i+idx+1, w.wallet_id===activeWallet?.wallet_id, `deposit_select_${w.wallet_id}`)));
       }
       const depMsg =
-        `💰 *Deposit SOL*\n\n` +
-        `Active: *W${activeIdx}* ✅\n` +
+        `💰 *Deposit ${chainCfg?.native_symbol || 'SOL'}*\n\n` +
+        `Active: *W${activeIdx}* ✅ (${chainCfg?.label || activeChain})\n` +
         `📋 Address (tap to copy):\n\`${activeAddr}\`\n\n` +
-        `💰 Balance: *${activeBal.toFixed(4)} SOL*\n\n` +
-        `⚠️ _Send only *SOL* or *SPL tokens* on the *Solana network* to this address. Other networks = lost funds._\n\n` +
+        `💰 Balance: *${activeBal.toFixed(4)} ${chainCfg?.native_symbol || 'SOL'}*\n\n` +
+        (activeChain === "SOL"
+          ? `⚠️ _Send only *SOL* or *SPL tokens* on the *Solana network* to this address. Other networks = lost funds._\n\n`
+          : `⚠️ _Send only *${chainCfg?.native_symbol}* or tokens on *${chainCfg?.label}* to this address. Other networks = lost funds._\n\n`) +
         `_Tap a wallet below to switch deposit address._`;
       try {
         await ctx.editMessageText(depMsg, {
