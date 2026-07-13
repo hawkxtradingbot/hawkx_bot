@@ -534,11 +534,19 @@ async function handleTextInput(ctx, user, pendingKey) {
       // ── Export key helper ─────────────────────────────────────────
       async function doExportKey(ctx, userId, walletId) {
         try {
-          const { decryptWallet } = require("../walletVault");
-          const bs58    = require("bs58");
-          const keypair = decryptWallet(walletId);
-          const privKey = bs58.encode(keypair.secretKey);
           const wallet  = db.getWallet(walletId);
+          const walletChain = wallet?.chain || "SOL";
+          let privKey;
+          if (walletChain === "SOL") {
+            const { decryptWallet } = require("../walletVault");
+            const bs58    = require("bs58");
+            const keypair = decryptWallet(walletId);
+            privKey = bs58.encode(keypair.secretKey);
+          } else {
+            const { decryptEvmWallet } = require("../chains/evm/wallet");
+            const evmWallet = decryptEvmWallet(wallet);
+            privKey = evmWallet.privateKey;
+          }
 
           const msg = await ctx.reply(
             `🔑 *Private Key* — ${wallet?.label || "Wallet"}\n\n\`${privKey}\`\n\n` +

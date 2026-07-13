@@ -233,7 +233,8 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
 
     if (data === "wallet_export_select") {
       await ctx.answerCallbackQuery();
-      const wallets = db.getWallets(userId) || [];
+      const activeChain = db.getActiveChain(userId);
+      const wallets = (db.getWallets(userId) || []).filter(w => (w.chain || "SOL") === activeChain);
       const freshUser = db.getUser(userId);
       const walletRows = [];
       for (let i = 0; i < wallets.length; i += 3) {
