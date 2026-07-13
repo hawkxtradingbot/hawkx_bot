@@ -92,6 +92,13 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
       platform: "evm_real", source, sourceRef, chain,
     });
 
+    // Shared rank: convert ETH volume to SOL-equivalent (via USD) so cross-chain volume combines fairly, not raw unit mixing
+    try {
+      const [ethPx, solPx] = await Promise.all([db.getEthPriceUsdShared(), db.getSolPriceUsdShared()]);
+      const solEquivalent = (amountEth * ethPx) / solPx;
+      db.addVolume(user.user_id, solEquivalent);
+    } catch (e) { console.error("[EVM Buy] volume tracking failed:", e.message); }
+
     if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ Bought ${tokenAmountFloat.toFixed(4)} tokens\nTx: ${result.txHash.slice(0,12)}...`); } catch {} }
     return { tradeId, txHash: result.txHash, tokenAmount: tokenAmountFloat };
   } catch (e) {
@@ -202,6 +209,12 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
       db.getDb().prepare("UPDATE positions SET token_amount = token_amount - ?, sol_invested = sol_invested - ? WHERE position_id = ?")
         .run(sellTokenAmount, position.sol_invested * sellFraction, position.position_id);
     }
+
+    try {
+      const [ethPx2, solPx2] = await Promise.all([db.getEthPriceUsdShared(), db.getSolPriceUsdShared()]);
+      const solEquivalent2 = (solReceived * ethPx2) / solPx2;
+      db.addVolume(user.user_id, solEquivalent2);
+    } catch (e) { console.error("[EVM Sell] volume tracking failed:", e.message); }
 
     const msg = `✅ Sold ${pctToSell}% — ${solReceived.toFixed(4)} ${chainCfg?.native_symbol} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)\nTx: ${result.txHash.slice(0,12)}...`;
     if (sellProcMsg) { try { await ctx.api.editMessageText(ctx.chat.id, sellProcMsg.message_id, msg); } catch {} }

@@ -1615,9 +1615,21 @@ async function getSolPriceUsdShared() {
   return _solPxC.px || 150;
 }
 
+let _ethPxC = { px: 0, t: 0 };
+async function getEthPriceUsdShared() {
+  if (Date.now() - _ethPxC.t < 60000 && _ethPxC.px > 0) return _ethPxC.px;
+  const axios = require("axios");
+  try {
+    const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", { timeout: 5000 });
+    const px = parseFloat(data?.ethereum?.usd || 0);
+    if (px > 0) { _ethPxC = { px, t: Date.now() }; return px; }
+  } catch {}
+  return _ethPxC.px || 3500;
+}
+
 module.exports = {
   seedChainConfig, getEnabledChains, getChainConfig, setChainEnabled, getActiveChain, setActiveChain, getWalletForChain,
-  getSolPriceUsdShared,
+  getSolPriceUsdShared, getEthPriceUsdShared,
   getTrendingTokens, getAllOpenPositionsForNotify, getTokenName,
   getTokenTraderAnalytics, applyCriteria, saveSnapshot, getSnapshot, getSnapshots,
   addTrackedToken, getTrackedTokens, removeTrackedToken, getTrackedTokenTraders, logReward, getRewardHistory, alreadyRewarded,
