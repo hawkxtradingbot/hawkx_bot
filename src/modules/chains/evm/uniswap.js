@@ -80,4 +80,17 @@ async function getTokenInfo(chain, tokenAddress) {
   return { name, symbol, decimals, priceInEth, address: tokenAddress };
 }
 
-module.exports = { getQuote, executeSwap, getTokenInfo, DEFAULT_FEE_TIER };
+
+async function getTokenDecimals(chain, tokenAddress) {
+  const cfg = db.getChainConfig(chain);
+  const provider = new ethers.JsonRpcProvider(cfg.rpc_url);
+  const erc20 = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+  try {
+    const d = await erc20.decimals();
+    return Number(d);
+  } catch {
+    return 18; // fallback only if the call itself fails (rare) - most tokens are 18 but this is now the exception path, not the default assumption
+  }
+}
+
+module.exports = { getQuote, executeSwap, getTokenInfo, getTokenDecimals, DEFAULT_FEE_TIER };

@@ -74,7 +74,9 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
       amountIn: amountInWei, slippagePct: slippage, isNativeIn: true,
     });
 
-    const tokenAmountFloat = parseFloat(ethers.formatUnits(result.amountOut, 18)); // assumes 18 decimals - real decimals lookup is a follow-up improvement
+    const { getTokenDecimals } = require("./uniswap");
+    const outDecimals = await getTokenDecimals(chain, tokenAddress);
+    const tokenAmountFloat = parseFloat(ethers.formatUnits(result.amountOut, outDecimals));
     const tradeId = db.recordTrade({
       userId: user.user_id, walletId: wallet.wallet_id,
       tokenCa: tokenAddress, tokenName: tokenAddress.slice(0,8),
@@ -154,7 +156,9 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
     const { executeSwap } = require("./uniswap");
     const { ethers } = require("ethers");
     const evmWallet = decryptEvmWallet(wallet);
-    const amountInWei = ethers.parseUnits(String(sellTokenAmount), 18); // assumes 18 decimals - real decimals lookup is a follow-up improvement
+    const { getTokenDecimals } = require("./uniswap");
+    const inDecimals = await getTokenDecimals(chain, position.token_ca);
+    const amountInWei = ethers.parseUnits(String(sellTokenAmount), inDecimals);
     const settings = db.getSettings(user.user_id) || {};
     const slippage = settings.slippage_pct || 10;
 
