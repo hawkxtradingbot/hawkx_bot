@@ -121,8 +121,15 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
           await addWallet(ctx, user, "generate");
           createdNew = true;
         } else {
-          await ctx.answerCallbackQuery("This chain's wallet system is still being built. Check back soon!");
-          return true;
+          try {
+            const { createEvmWallet } = require("../chains/evm/wallet");
+            await createEvmWallet(userId, nextChain.chain, "W1");
+            createdNew = true;
+          } catch (e) {
+            console.error("[EVM Wallet] creation failed:", e.message);
+            await ctx.answerCallbackQuery("Couldn't create wallet for this chain. Try again shortly.");
+            return true;
+          }
         }
       }
       db.setActiveChain(userId, nextChain.chain);

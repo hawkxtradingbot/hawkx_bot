@@ -8,6 +8,7 @@
   },
   "type": "commonjs",
   "dependencies": {
+    "ethers": "^6.17.0",
     "@solana/web3.js": "1.87.6",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",

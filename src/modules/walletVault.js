@@ -158,4 +158,4 @@ function isSolanaAddress(address) {
   }
 }
 
-module.exports = { addWallet, deleteWallet, decryptWallet, isSolanaAddress };
+module.exports = { addWallet, deleteWallet, decryptWallet, isSolanaAddress, encryptKey, decryptKey };
