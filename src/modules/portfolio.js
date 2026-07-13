@@ -89,7 +89,11 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       const activeWalletPf = db.getWallet(user.active_wallet_id);
       if (activeWalletPf) {
         const { getWalletTokenBalances } = require("./walletScanner");
-        const onChainTokens = await getWalletTokenBalances(activeWalletPf.public_key);
+        const _timeoutMs = 5000;
+        const onChainTokens = await Promise.race([
+          getWalletTokenBalances(activeWalletPf.public_key),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("wallet scan timeout")), _timeoutMs)),
+        ]);
         const trackedCasPf = new Set(positions.map(p => p.token_ca));
         const untrackedPf = onChainTokens.filter(t => !trackedCasPf.has(t.mint));
         if (untrackedPf.length) {
