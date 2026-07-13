@@ -204,7 +204,14 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       msg += `🗓 *This Month:* *${ms}${monthly.toFixed(4)} SOL* · Saved: *$${monthlyFee.toFixed(4)}*\n\n`;
       msg += `📈 *All Time*\n`;
       msg += `Volume: *${vol.toFixed(4)} SOL*\n`;
-      msg += `Win: *${allTime.winRate || 0}%* · Loss: *${allTime.lossRate || 0}%*\n\n`;
+      msg += `Win: *${allTime.winRate || 0}%* · Loss: *${allTime.lossRate || 0}%*\n`;
+      const _chainBreakdown = db.getChainBreakdown(userId);
+      const _chainIcons2 = { SOL: '🟣', HOOD: '🟢' };
+      const _breakdownParts = Object.entries(_chainBreakdown).map(([ch, cnt]) => `${_chainIcons2[ch] || '🔗'} ${ch}: ${cnt}`);
+      if (_breakdownParts.length > 1) {
+        msg += `By Chain: ${_breakdownParts.join(' · ')}\n`;
+      }
+      msg += `\n`;
       msg += `━━━━━━━━━━━━━━━━━━━\n`;
       msg += `🎯 *Rank Progress → ${nextRankNames[freshUser.rank] || "MAX"}*\n`;
       msg += `\`${bar}\` ${rankPct.toFixed(0)}%\n`;

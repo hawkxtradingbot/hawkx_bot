@@ -1206,6 +1206,13 @@ function addVolume(userId, solAmount) {
   getDb().prepare("UPDATE users SET cumulative_volume_sol = cumulative_volume_sol + ? WHERE user_id = ?").run(solAmount, userId);
 }
 
+function getChainBreakdown(userId) {
+  const rows = getDb().prepare("SELECT chain, COUNT(*) as trades FROM trades WHERE user_id = ? AND status = 'confirmed' GROUP BY chain").all(userId);
+  const result = {};
+  rows.forEach(r => { result[r.chain || 'SOL'] = r.trades; });
+  return result;
+}
+
 // ── BLACKLISTS ────────────────────────────────────────────────
 function getGlobalBlacklist() {
   return getDb().prepare("SELECT deployer_address FROM global_blacklist").all().map((r) => r.deployer_address);
@@ -1629,7 +1636,7 @@ async function getEthPriceUsdShared() {
 
 module.exports = {
   seedChainConfig, getEnabledChains, getChainConfig, setChainEnabled, getActiveChain, setActiveChain, getWalletForChain,
-  getSolPriceUsdShared, getEthPriceUsdShared,
+  getSolPriceUsdShared, getEthPriceUsdShared, getChainBreakdown,
   getTrendingTokens, getAllOpenPositionsForNotify, getTokenName,
   getTokenTraderAnalytics, applyCriteria, saveSnapshot, getSnapshot, getSnapshots,
   addTrackedToken, getTrackedTokens, removeTrackedToken, getTrackedTokenTraders, logReward, getRewardHistory, alreadyRewarded,
