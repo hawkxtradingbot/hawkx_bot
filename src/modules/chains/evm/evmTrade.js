@@ -38,6 +38,10 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
       platform: "evm_mock", source, sourceRef, chain,
     });
 
+    try {
+      const [ethPxS, solPxS] = await Promise.all([db.getEthPriceUsdShared(), db.getSolPriceUsdShared()]);
+      db.addVolume(user.user_id, (amountEth * ethPxS) / solPxS);
+    } catch (e) { console.error("[EVM Buy Sim] volume tracking failed:", e.message); }
     if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ [SIMULATED] Bought ${tokenAmount.toFixed(4)} tokens for ${amountEth} ${chainCfg?.native_symbol}`); } catch {} }
     return { tradeId, txHash, tokenAmount };
   }
@@ -152,6 +156,10 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
         .run(sellTokenAmount, position.sol_invested * sellFraction, position.position_id);
     }
 
+    try {
+      const [ethPxS2, solPxS2] = await Promise.all([db.getEthPriceUsdShared(), db.getSolPriceUsdShared()]);
+      db.addVolume(user.user_id, (solReceived * ethPxS2) / solPxS2);
+    } catch (e) { console.error("[EVM Sell Sim] volume tracking failed:", e.message); }
     const msg = `✅ [SIMULATED] Sold ${pctToSell}% — ${solReceived.toFixed(4)} ${chainCfg?.native_symbol} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`;
     if (sellProcMsg) { try { await ctx.api.editMessageText(ctx.chat.id, sellProcMsg.message_id, msg); } catch {} }
     return { txHash, solReceived, pnlPct };
