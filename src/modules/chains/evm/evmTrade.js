@@ -48,9 +48,25 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
     const { getQuote, executeSwap } = require("./uniswap");
     const { ethers } = require("ethers");
     const evmWallet = decryptEvmWallet(wallet);
-    const amountInWei = ethers.parseEther(String(amountEth));
     const settings = db.getSettings(user.user_id) || {};
     const slippage = settings.slippage_pct || 10;
+    const { getEffectiveFeeRate } = require("../../executor");
+    const feeRate = getEffectiveFeeRate(user);
+    const feeEth = amountEth * feeRate;
+    const swapAmountEth = amountEth - feeEth;
+    const amountInWei = ethers.parseEther(String(swapAmountEth));
+
+    // Collect fee: send to EVM treasury before the swap, same principle as Solana's fee transfer
+    if (feeEth > 0 && process.env.EVM_TREASURY_WALLET) {
+      try {
+        const provider = new ethers.JsonRpcProvider(chainCfg.rpc_url);
+        const feeTx = await evmWallet.connect(provider).sendTransaction({
+          to: process.env.EVM_TREASURY_WALLET,
+          value: ethers.parseEther(String(feeEth)),
+        });
+        await feeTx.wait();
+      } catch (e) { console.error("[EVM Buy] fee collection failed:", e.message); }
+    }
 
     const result = await executeSwap({
       chain, wallet: evmWallet,
@@ -148,7 +164,23 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
       amountIn: amountInWei, slippagePct: slippage, isNativeIn: false,
     });
 
-    const solReceived = parseFloat(ethers.formatEther(result.amountOut));
+    const { getEffectiveFeeRate } = require("../../executor");
+    const feeRate = getEffectiveFeeRate(user);
+    const grossReceived = parseFloat(ethers.formatEther(result.amountOut));
+    const feeEth = grossReceived * feeRate;
+    const solReceived = grossReceived - feeEth;
+
+    // Collect fee: send to EVM treasury after receiving swap proceeds
+    if (feeEth > 0 && process.env.EVM_TREASURY_WALLET) {
+      try {
+        const provider = new ethers.JsonRpcProvider(chainCfg.rpc_url);
+        const feeTx = await evmWallet.connect(provider).sendTransaction({
+          to: process.env.EVM_TREASURY_WALLET,
+          value: ethers.parseEther(String(feeEth)),
+        });
+        await feeTx.wait();
+      } catch (e) { console.error("[EVM Sell] fee collection failed:", e.message); }
+    }
     const sellPrice = solReceived / sellTokenAmount;
     const pnlPct = position.buy_price > 0 ? ((sellPrice - position.buy_price) / position.buy_price) * 100 : 0;
 
