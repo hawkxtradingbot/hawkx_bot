@@ -213,7 +213,23 @@ function setupMessages(bot) {
       try {
         await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
       } catch {}
-      await addWallet(ctx, user, text);
+      const activeChain = db.getActiveChain(userId);
+      if (activeChain === "SOL") {
+        await addWallet(ctx, user, text);
+      } else {
+        try {
+          const { importEvmWallet } = require("../chains/evm/wallet");
+          const chainCfg = db.getChainConfig(activeChain);
+          const count = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === activeChain).length;
+          const result = await importEvmWallet(userId, activeChain, text, `W${count + 1}`);
+          await ctx.reply(
+            `✅ *Wallet Imported!*\n\n🏷 Label: *W${count + 1}* (${chainCfg?.label})\n📋 Address:\n\`${result.address}\`\n\n💡 Tap the address to copy it.`,
+            { parse_mode: "Markdown" }
+          );
+        } catch (e) {
+          await ctx.reply("❌ Invalid private key for this chain. Please send a valid key (0x... hex format for EVM chains).");
+        }
+      }
       return;
     }
 
