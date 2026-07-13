@@ -131,11 +131,13 @@ function runMigrations(d) {
         swap_router TEXT DEFAULT '',
         quoter TEXT DEFAULT '',
         factory TEXT DEFAULT '',
-        explorer_url TEXT DEFAULT '')`,
+        explorer_url TEXT DEFAULT '',
+        weth_address TEXT DEFAULT '')`,
       "ALTER TABLE chain_config ADD COLUMN swap_router TEXT DEFAULT ''",
       "ALTER TABLE chain_config ADD COLUMN quoter TEXT DEFAULT ''",
       "ALTER TABLE chain_config ADD COLUMN factory TEXT DEFAULT ''",
       "ALTER TABLE chain_config ADD COLUMN explorer_url TEXT DEFAULT ''",
+      "ALTER TABLE chain_config ADD COLUMN weth_address TEXT DEFAULT ''",
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (
@@ -408,12 +410,13 @@ function seedChainConfig() {
   }
   // Verified addresses (confirmed via robinhoodchain.blockscout.com) - always kept up to date
   // regardless of whether the row already existed, since these can change/improve over time.
-  getDb().prepare("UPDATE chain_config SET swap_router = ?, quoter = ?, factory = ?, explorer_url = ? WHERE chain = 'HOOD'")
+  getDb().prepare("UPDATE chain_config SET swap_router = ?, quoter = ?, factory = ?, explorer_url = ?, weth_address = ? WHERE chain = 'HOOD'")
     .run(
-      "0xcaf681a66d020601342297493863e78c959e5cb2", // SwapRouter02 (V3)
-      "0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7", // QuoterV2
-      "0x1f7d7550b1b028f7571e69a784071f0205fd2efa", // UniswapV3Factory
-      "https://robinhoodchain.blockscout.com"
+      "0xcaf681a66d020601342297493863e78c959e5cb2", // SwapRouter02 (V3) - verified via robinhoodchain.blockscout.com
+      "0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7", // QuoterV2 - verified via robinhoodchain.blockscout.com
+      "0x1f7d7550b1b028f7571e69a784071f0205fd2efa", // UniswapV3Factory - verified via robinhoodchain.blockscout.com
+      "https://robinhoodchain.blockscout.com",
+      "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"  // L2 WETH - verified via docs.robinhood.com/chain/protocol-contracts
     );
 }
 
