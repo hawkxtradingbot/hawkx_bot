@@ -155,6 +155,39 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
 
 
     // ── RANK INFO ─────────────────────────────────────────────
+    if (data.startsWith("adopt_token_")) {
+      const ca = data.replace("adopt_token_", "");
+      await ctx.answerCallbackQuery("⏳ Adopting token...");
+      const pending = db.getSysConfig(`adopt_pending_${userId}`);
+      let heldAmount = 0;
+      try { const parsed = JSON.parse(pending || "{}"); if (parsed.ca === ca) heldAmount = parsed.amount || 0; } catch {}
+      if (heldAmount <= 0) {
+        await ctx.reply("❌ Couldn't confirm your holding - please try again from the sell screen.");
+        return true;
+      }
+      const { getTokenInfo } = require("../tokenInfo");
+      const tInfo = await getTokenInfo(ca).catch(() => null);
+      const currentPrice = tInfo?.price || 0;
+      if (currentPrice <= 0) {
+        await ctx.reply("❌ Couldn't fetch current price for this token - please try again shortly.");
+        return true;
+      }
+      const freshUser = db.getUser(userId);
+      db.openPosition({
+        userId, walletId: freshUser.active_wallet_id,
+        tokenCa: ca, tokenName: tInfo?.name || ca.slice(0,8),
+        buyPrice: currentPrice, solInvested: heldAmount * currentPrice, tokenAmount: heldAmount,
+        platform: process.env.MOCK_TRADES === "false" ? "adopted_real" : "adopted_mock",
+        source: "adopted", sourceRef: "", chain: "SOL",
+      });
+      db.setSysConfig(`adopt_pending_${userId}`, "");
+      await ctx.reply(
+        `✅ *Token Adopted!*\n\n${tInfo?.name || ca.slice(0,8)} is now tracked in your Portfolio, using the current market price as its entry point. You can sell it through HawkX going forward.\n\n_Note: since this wasn't bought through HawkX, the P&L shown reflects price movement from adoption time, not your true original cost._`,
+        { parse_mode: "Markdown" }
+      );
+      return true;
+    }
+
     if (data === "menu_rank_info") {
       await ctx.answerCallbackQuery();
       const freshUser = db.getUser(userId);

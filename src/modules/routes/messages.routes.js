@@ -321,7 +321,14 @@ function setupMessages(bot) {
             const resp = await conn.getParsedTokenAccountsByOwner(new PublicKey(activeWallet.public_key), { programId: TOKEN_PROGRAM_ID });
             const held = resp.value.find(acc => acc.account.data.parsed.info.mint === ca && acc.account.data.parsed.info.tokenAmount.uiAmount > 0);
             if (held) {
-              await ctx.reply("⚠️ *You hold this token, but it wasn't bought through HawkX*\n\nWe don't have purchase price/tracking for tokens received from an external wallet, CEX withdrawal, or another platform. You can still trade it manually elsewhere, or transfer it out.", { parse_mode: "Markdown" });
+              const heldAmount = held.account.data.parsed.info.tokenAmount.uiAmount;
+              db.setSysConfig(`adopt_pending_${userId}`, JSON.stringify({ ca, amount: heldAmount }));
+              await ctx.reply(
+                "⚠️ *You hold this token, but it wasn't bought through HawkX*\n\nWe don't have purchase price/tracking for tokens received from an external wallet, CEX withdrawal, or another platform.\n\nYou can adopt it into HawkX using the current market price as its entry point, which lets you sell it through the bot going forward.",
+                { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+                  [{ text: "🔗 Adopt & Track This Token", callback_data: `adopt_token_${ca}` }],
+                ]}}
+              );
               return;
             }
           }
