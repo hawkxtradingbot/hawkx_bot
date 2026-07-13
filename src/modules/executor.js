@@ -109,6 +109,13 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     return null;
   }
 
+  // ── EVM chain branch (Robinhood Chain etc) - completely separate path, Solana code below untouched ──
+  const _activeChainForBuy = db.getActiveChain(user.user_id);
+  if (_activeChainForBuy !== "SOL") {
+    const { evmBuy } = require("./chains/evm/evmTrade");
+    return evmBuy(ctx, user, ca, solAmount, source, sourceRef, opts, _activeChainForBuy);
+  }
+
   // Always get fresh user for correct wallet
   user = db.getUser(user.user_id) || user;
   if (!user.active_wallet_id) {

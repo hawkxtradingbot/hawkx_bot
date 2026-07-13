@@ -513,14 +513,15 @@ function recordTrade(data) {
   const result = getDb().prepare(
     `INSERT INTO trades
      (user_id, wallet_id, token_ca, token_name, platform, action,
-      sol_amount, token_amount, price_sol, fee_sol, fee_rate, tx_hash, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      sol_amount, token_amount, price_sol, fee_sol, fee_rate, tx_hash, status, chain)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     data.userId, data.walletId, data.tokenCa,
     data.tokenName || "Unknown", data.platform || "devnet_mock",
     data.action, data.solAmount, data.tokenAmount || 0,
     data.priceSol || 0, data.feeSol || 0, data.feeRate || 0,
-    data.txHash || "DEVNET_MOCK_TX", data.status || "confirmed"
+    data.txHash || "DEVNET_MOCK_TX", data.status || "confirmed",
+    data.chain || "SOL"
   );
   return result.lastInsertRowid;
 }
@@ -701,8 +702,8 @@ function openPosition(data) {
     `INSERT INTO positions
      (user_id, wallet_id, token_ca, token_name, buy_price,
       sol_invested, token_amount, platform, stop_loss_pct, take_profit_pct,
-      source, source_ref, entry_mcap)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      source, source_ref, entry_mcap, chain)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     data.userId, data.walletId, data.tokenCa,
     data.tokenName || "Unknown", data.buyPrice || 0,
@@ -713,6 +714,7 @@ function openPosition(data) {
     data.source    || "manual",
     data.sourceRef || "",
     data.entryMcap || 0,
+    data.chain || "SOL",
   );
 }
 
