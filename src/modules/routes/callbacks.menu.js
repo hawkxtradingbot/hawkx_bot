@@ -155,6 +155,42 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
 
 
     // ── RANK INFO ─────────────────────────────────────────────
+    if (data === "scan_wallet_tokens") {
+      await ctx.answerCallbackQuery("🔍 Scanning wallet...");
+      const activeChain = db.getActiveChain(userId);
+      if (activeChain !== "SOL") {
+        await ctx.reply("🔍 Wallet scanning is currently available for Solana only.");
+        return true;
+      }
+      const freshUser = db.getUser(userId);
+      const activeWallet = db.getWallet(freshUser.active_wallet_id);
+      if (!activeWallet) { await ctx.reply("❌ No active wallet found."); return true; }
+
+      const { getWalletTokenBalances } = require("../walletScanner");
+      const allTokens = await getWalletTokenBalances(activeWallet.public_key);
+
+      // Exclude tokens already tracked as open positions
+      const trackedCas = new Set(db.getOpenPositions(userId).map(p => p.token_ca));
+      const untracked = allTokens.filter(t => !trackedCas.has(t.mint));
+
+      if (!untracked.length) {
+        await ctx.reply("✅ No untracked tokens found — everything in this wallet is already tracked, or the wallet only holds tokens bought through HawkX.");
+        return true;
+      }
+
+      let msg = `🔍 *Other Wallet Tokens*\n\nFound ${untracked.length} token(s) not bought through HawkX:\n\n`;
+      const rows = untracked.slice(0, 10).map(t => {
+        const label = t.symbol || t.mint.slice(0,8);
+        msg += `• ${label}: ${t.amount.toLocaleString()}\n`;
+        return [{ text: `🔗 Adopt ${label}`, callback_data: `adopt_token_${t.mint}` }];
+      });
+      msg += `\n💡 Tap Adopt to start tracking a token (uses current market price as entry).`;
+      // Pre-store amounts for each so adopt_token_ handler can use them without a second query
+      untracked.forEach(t => db.setSysConfig(`adopt_pending_${userId}_${t.mint}`, String(t.amount)));
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: rows } });
+      return true;
+    }
+
     if (data.startsWith("adopt_token_")) {
       const ca = data.replace("adopt_token_", "");
       await ctx.answerCallbackQuery("⏳ Adopting token...");
