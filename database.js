@@ -113,6 +113,8 @@ function runMigrations(d) {
       "ALTER TABLE users ADD COLUMN promoter_rate REAL DEFAULT 0",
       // ── Multi-chain support (EVM/Robinhood Chain) - chains are kept fully independent ──
       "ALTER TABLE users ADD COLUMN active_chain TEXT DEFAULT 'SOL'",
+      "ALTER TABLE dca_orders ADD COLUMN chain TEXT DEFAULT 'SOL'",
+      "ALTER TABLE limit_orders ADD COLUMN chain TEXT DEFAULT 'SOL'",
       "UPDATE chain_config SET chain = 'HOOD' WHERE chain = 'RBH'",
       "UPDATE wallets SET chain = 'HOOD' WHERE chain = 'RBH'",
       "UPDATE positions SET chain = 'HOOD' WHERE chain = 'RBH'",
@@ -1075,8 +1077,9 @@ function cancelSnipe(userId, id) {
 
 // ── LIMIT ORDERS ──────────────────────────────────────────────
 function getLimitOrders(userId, tokenCa) {
-  if (tokenCa) return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND token_ca = ? AND active = 1 ORDER BY created_at DESC").all(userId, tokenCa);
-  return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND active = 1 ORDER BY created_at DESC").all(userId);
+  const chain = getActiveChain(userId);
+  if (tokenCa) return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND token_ca = ? AND active = 1 AND (chain = ? OR chain IS NULL) ORDER BY created_at DESC").all(userId, tokenCa, chain);
+  return getDb().prepare("SELECT * FROM limit_orders WHERE user_id = ? AND active = 1 AND (chain = ? OR chain IS NULL) ORDER BY created_at DESC").all(userId, chain);
 }
 
 function pauseLimitOrder(userId, id) {
@@ -1092,8 +1095,8 @@ function addLimitOrder(userId, data) {
     expiresAt = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
   }
   const result = getDb().prepare(
-    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused, wallet_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)"
-  ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100, data.walletId || null, expiresAt);
+    "INSERT INTO limit_orders (user_id, token_ca, token_name, order_type, target_price, target_mcap, sol_amount, sell_pct, active, paused, wallet_id, expires_at, chain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)"
+  ).run(userId, data.tokenCa, data.tokenName || "", data.orderType, data.targetPrice || 0, data.targetMcap || 0, data.solAmount || 0.1, data.sellPct || 100, data.walletId || null, expiresAt, data.chain || "SOL");
   return result.lastInsertRowid;
 }
 
@@ -1106,14 +1109,15 @@ function cancelLimitOrder(userId, id) {
 }
 // ── DCA ORDERS ───────────────────────────────────────
 function getDcaOrders(userId, tokenCa) {
-  if (tokenCa) return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND token_ca = ? AND active = 1 ORDER BY created_at DESC").all(userId, tokenCa);
-  return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND active = 1 ORDER BY created_at DESC").all(userId);
+  const chain = getActiveChain(userId);
+  if (tokenCa) return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND token_ca = ? AND active = 1 AND (chain = ? OR chain IS NULL) ORDER BY created_at DESC").all(userId, tokenCa, chain);
+  return getDb().prepare("SELECT * FROM dca_orders WHERE user_id = ? AND active = 1 AND (chain = ? OR chain IS NULL) ORDER BY created_at DESC").all(userId, chain);
 }
 function addDcaOrder(userId, data) {
   const nextBuy = new Date(Date.now() + (data.intervalSec || 3600) * 1000).toISOString(); // first buy after first interval
   const result = getDb().prepare(
-    "INSERT INTO dca_orders (user_id, token_ca, token_name, sol_per_buy, total_buys, buys_done, interval_sec, next_buy_at, active, paused, wallet_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1, 0, ?)"
-  ).run(userId, data.tokenCa, data.tokenName || "", data.solPerBuy || 0.1, data.totalBuys || 5, data.intervalSec || 3600, nextBuy, data.walletId || null);
+    "INSERT INTO dca_orders (user_id, token_ca, token_name, sol_per_buy, total_buys, buys_done, interval_sec, next_buy_at, active, paused, wallet_id, chain) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1, 0, ?, ?)"
+  ).run(userId, data.tokenCa, data.tokenName || "", data.solPerBuy || 0.1, data.totalBuys || 5, data.intervalSec || 3600, nextBuy, data.walletId || null, data.chain || "SOL");
   return result.lastInsertRowid;
 }
 function pauseDcaOrder(userId, id) {
