@@ -443,7 +443,8 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
     // ── WITHDRAW ──────────────────────────────────────────────
     if (data === "wallet_withdraw") {
       await ctx.answerCallbackQuery();
-      const wallets = db.getWallets(userId) || [];
+      const activeChain = db.getActiveChain(userId);
+      const wallets = (db.getWallets(userId) || []).filter(w => (w.chain || "SOL") === activeChain);
       const freshUser = db.getUser(userId);
       const walletRows = [];
       for (let i = 0; i < wallets.length; i += 3) {
