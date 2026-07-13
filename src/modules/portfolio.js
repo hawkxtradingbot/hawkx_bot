@@ -73,13 +73,44 @@ function formatSol(val) {
 async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
   const _activeChainPf = db.getActiveChain(user.user_id);
   const allPositions = db.getPositionsBySource(user.user_id, filter === "launch" ? "all" : filter);
-  const positions = allPositions.filter((p) => {
+  let positions = allPositions.filter((p) => {
     if ((p.chain || "SOL") !== _activeChainPf) return false;
     if (p.wallet_id !== user.active_wallet_id) return false;
     if (filter === "launch") return p.source === "launch";
     if (filter === "manual") return p.source === "manual";
     return true;
   });
+
+  // Merge in REAL on-chain tokens not already tracked as a position - shown the same way as
+  // HawkX-bought tokens, using current price as both entry and current (so PnL starts at 0%
+  // until price moves, since we do not know the true historical cost for externally-acquired tokens).
+  if (_activeChainPf === "SOL" && (filter === "all" || filter === "manual")) {
+    try {
+      const activeWalletPf = db.getWallet(user.active_wallet_id);
+      if (activeWalletPf) {
+        const { getWalletTokenBalances } = require("./walletScanner");
+        const onChainTokens = await getWalletTokenBalances(activeWalletPf.public_key);
+        const trackedCasPf = new Set(positions.map(p => p.token_ca));
+        const untrackedPf = onChainTokens.filter(t => !trackedCasPf.has(t.mint));
+        if (untrackedPf.length) {
+          const { getTokenInfo: _gti } = require("./tokenInfo");
+          const untrackedPositions = await Promise.all(untrackedPf.map(async (t) => {
+            const info = await _gti(t.mint).catch(() => null);
+            const price = info?.price || 0;
+            return {
+              position_id: `untracked_${t.mint}`,
+              user_id: user.user_id, wallet_id: user.active_wallet_id,
+              token_ca: t.mint, token_name: info?.name || t.symbol || t.mint.slice(0,8),
+              buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
+              status: "open", source: "external", source_ref: "", chain: "SOL",
+              entry_mcap: info?.mcap || 0, _untracked: true,
+            };
+          }));
+          positions = positions.concat(untrackedPositions);
+        }
+      }
+    } catch (e) { console.error("[Portfolio] on-chain merge failed:", e.message); }
+  }
 
   const isProMode    = user.mode === "pro";
   const settings     = db.getSettings(user.user_id) || {};
