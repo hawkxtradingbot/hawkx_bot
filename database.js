@@ -127,7 +127,15 @@ function runMigrations(d) {
         label TEXT DEFAULT '',
         native_symbol TEXT DEFAULT '',
         chain_id INTEGER DEFAULT 0,
-        rpc_url TEXT DEFAULT '')`,
+        rpc_url TEXT DEFAULT '',
+        swap_router TEXT DEFAULT '',
+        quoter TEXT DEFAULT '',
+        factory TEXT DEFAULT '',
+        explorer_url TEXT DEFAULT '')`,
+      "ALTER TABLE chain_config ADD COLUMN swap_router TEXT DEFAULT ''",
+      "ALTER TABLE chain_config ADD COLUMN quoter TEXT DEFAULT ''",
+      "ALTER TABLE chain_config ADD COLUMN factory TEXT DEFAULT ''",
+      "ALTER TABLE chain_config ADD COLUMN explorer_url TEXT DEFAULT ''",
       "ALTER TABLE settings ADD COLUMN auto_sell_enabled INTEGER DEFAULT 0",
       "ALTER TABLE settings ADD COLUMN auto_sell_template_id INTEGER DEFAULT NULL",
       `CREATE TABLE IF NOT EXISTS auto_sell_templates (
@@ -392,11 +400,21 @@ function getSettings(userId) {
 // ── MULTI-CHAIN (EVM/Robinhood Chain) ──────────────────────────
 function seedChainConfig() {
   const existing = getDb().prepare("SELECT COUNT(*) as cnt FROM chain_config").get().cnt;
-  if (existing > 0) return;
-  getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
-    .run("SOL", 1, "Solana", "SOL", 0, "");
-  getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
-    .run("HOOD", 0, "Robinhood Chain", "ETH", 4663, "https://rpc.mainnet.chain.robinhood.com");
+  if (existing === 0) {
+    getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("SOL", 1, "Solana", "SOL", 0, "");
+    getDb().prepare("INSERT INTO chain_config (chain, enabled, label, native_symbol, chain_id, rpc_url) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("HOOD", 0, "Robinhood Chain", "ETH", 4663, "https://rpc.mainnet.chain.robinhood.com");
+  }
+  // Verified addresses (confirmed via robinhoodchain.blockscout.com) - always kept up to date
+  // regardless of whether the row already existed, since these can change/improve over time.
+  getDb().prepare("UPDATE chain_config SET swap_router = ?, quoter = ?, factory = ?, explorer_url = ? WHERE chain = 'HOOD'")
+    .run(
+      "0xcaf681a66d020601342297493863e78c959e5cb2", // SwapRouter02 (V3)
+      "0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7", // QuoterV2
+      "0x1f7d7550b1b028f7571e69a784071f0205fd2efa", // UniswapV3Factory
+      "https://robinhoodchain.blockscout.com"
+    );
 }
 
 function getEnabledChains() {
