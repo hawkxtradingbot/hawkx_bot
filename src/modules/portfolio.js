@@ -104,7 +104,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
             const rawName = info?.name || t.symbol || t.mint.slice(0,8);
             const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40); // strip HTML-breaking chars - token metadata is arbitrary on-chain data we do not control
             return {
-              position_id: `untracked_${t.mint}`,
+              position_id: `unt${t.mint.slice(0,8)}`,
               user_id: user.user_id, wallet_id: user.active_wallet_id,
               token_ca: t.mint, token_name: safeName || t.mint.slice(0,8),
               buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
