@@ -265,12 +265,14 @@ function buildWalletMenu(wallets, activeWalletId, mode = "pro") {
     kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
     if (process.env.MOCK_TRADES !== "false") kb.text("➕ New Wallet", "wallet_generate").text("🚰 Airdrop SOL", "devnet_faucet").row();
     else kb.text("➕ New Wallet", "wallet_generate").row();
+    kb.text("🌉 Bridge", "bridge_start").row();
   } else {
     // BEGINNER — simplified (Delete on top, then Deposit/Withdraw/Import/Export/New)
     if (wallets.length > 0) kb.text("🗑 Delete Wallet", "wallet_delete_select").row();
     kb.text(" Deposit 🟢",  "wallet_deposit").text("📤 Withdraw ", "wallet_withdraw").row();
     kb.text("📥 Import Key",  "wallet_import").text("🔑 Export Key",  "wallet_export_select").row();
     kb.text("➕ New Wallet",  "wallet_generate").row();
+    kb.text("🌉 Bridge", "bridge_start").row();
   }
   kb.text("← Back",    "menu_main")
     .text("🔄 Refresh", "menu_wallets")

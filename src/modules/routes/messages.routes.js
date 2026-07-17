@@ -213,6 +213,20 @@ function setupMessages(bot) {
       return;
     }
 
+    if (pending === "bridge_amount_input") {
+      db.setSysConfig(`pending_${userId}`, "");
+      await deleteMsg(ctx, promptId);
+      try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+      const amt = parseFloat(text);
+      if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Invalid amount."); return; }
+      const state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
+      state.amount = amt;
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
+      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
+      await ctx.reply(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) });
+      return;
+    }
+
     if (pending === "wallet_import_key") {
       db.setSysConfig(`pending_${userId}`, "");
       await deleteMsg(ctx, promptId);

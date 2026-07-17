@@ -155,6 +155,71 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
 
 
     // ── RANK INFO ─────────────────────────────────────────────
+    // ── UNIVERSAL BRIDGE (Relay Protocol) ────────────────────
+    if (data === "bridge_start" || data === "bridge_reset_from" || data === "bridge_reset_to") {
+      await ctx.answerCallbackQuery();
+      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
+      let state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
+      if (data === "bridge_start") state = {};
+      if (data === "bridge_reset_from") { state.fromChain = null; state.fromToken = null; }
+      if (data === "bridge_reset_to") { state.toChain = null; state.toToken = null; }
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
+      try { await ctx.editMessageText(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
+      catch { await ctx.reply(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
+      return true;
+    }
+
+    if (data.startsWith("bridge_from_") || data.startsWith("bridge_ftok_") || data.startsWith("bridge_to_") || data.startsWith("bridge_ttok_")) {
+      await ctx.answerCallbackQuery();
+      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
+      let state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
+      if (data.startsWith("bridge_from_")) state.fromChain = data.replace("bridge_from_", "");
+      if (data.startsWith("bridge_ftok_")) state.fromToken = data.replace("bridge_ftok_", "");
+      if (data.startsWith("bridge_to_")) state.toChain = data.replace("bridge_to_", "");
+      if (data.startsWith("bridge_ttok_")) state.toToken = data.replace("bridge_ttok_", "");
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
+      try { await ctx.editMessageText(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
+      catch (e) { console.error("[Bridge] render failed:", e.message); }
+      return true;
+    }
+
+    if (data === "bridge_enter_amount") {
+      await ctx.answerCallbackQuery();
+      db.setSysConfig(`pending_${userId}`, "bridge_amount_input");
+      const sent = await ctx.reply("✏️ Enter the amount you want to bridge:");
+      db.setSysConfig(`pending_msg_${userId}`, String(sent.message_id));
+      return true;
+    }
+
+    if (data === "bridge_confirm") {
+      await ctx.answerCallbackQuery("⏳ Fetching quote...");
+      const state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
+      const { CHAIN_OPTIONS, TOKEN_OPTIONS } = require("./callbacks.bridge");
+      const fromCfg = CHAIN_OPTIONS.find(c => c.key === state.fromChain);
+      const toCfg = CHAIN_OPTIONS.find(c => c.key === state.toChain);
+      const fromWallet = db.getWalletForChain(userId, state.fromChain) || db.getWalletForChain(userId, "SOL");
+      if (!fromWallet) { await ctx.reply("❌ No wallet found for the source chain."); return true; }
+      try {
+        const relay = require("../bridge/relay");
+        const fromTokenAddr = (TOKEN_OPTIONS[state.fromChain] || []).find(t => t.symbol === state.fromToken)?.address;
+        const toTokenAddr = (TOKEN_OPTIONS[state.toChain] || []).find(t => t.symbol === state.toToken)?.address;
+        const amountRaw = String(Math.floor(parseFloat(state.amount) * 1e9)); // lamports/wei-style base unit, chain-dependent - simplified for now
+        const quote = await relay.getQuote({
+          userAddress: fromWallet.public_key,
+          originChainId: fromCfg.relayId, destinationChainId: toCfg.relayId,
+          originCurrency: fromTokenAddr, destinationCurrency: toTokenAddr,
+          amount: amountRaw,
+        });
+        await ctx.reply(
+          `🌉 *Bridge Quote*\n\n${state.amount} ${state.fromToken} (${fromCfg.label}) → ${state.toToken} (${toCfg.label})\n\n_Real execution wiring is the next build step - quote fetch confirmed working._`,
+          { parse_mode: "Markdown" }
+        );
+      } catch (e) {
+        await ctx.reply("❌ Couldn't fetch bridge quote: " + e.message);
+      }
+      return true;
+    }
+
     if (data === "scan_wallet_tokens") {
       await ctx.answerCallbackQuery("🔍 Scanning wallet...");
       const activeChain = db.getActiveChain(userId);
