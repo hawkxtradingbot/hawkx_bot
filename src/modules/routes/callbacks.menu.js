@@ -192,6 +192,13 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     if (data === "bridge_confirm") {
+      // Double-tap guard: prevent duplicate bridge transactions if the user taps Confirm twice quickly
+      const _bridgeLock = db.getSysConfig(`bridge_processing_${userId}`);
+      if (_bridgeLock && (Date.now() - parseInt(_bridgeLock)) < 30000) {
+        await ctx.answerCallbackQuery("⏳ Already processing your bridge - please wait.");
+        return true;
+      }
+      db.setSysConfig(`bridge_processing_${userId}`, String(Date.now()));
       await ctx.answerCallbackQuery("⏳ Fetching quote...");
       const state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
       const { CHAIN_OPTIONS, TOKEN_OPTIONS } = require("./callbacks.bridge");
@@ -268,7 +275,9 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
           await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Bridge status: ${result.status}. Tx: ${txHash.slice(0,12)}... - check the explorer for details.`);
         }
         db.setSysConfig(`bridge_state_${userId}`, "");
+        db.setSysConfig(`bridge_processing_${userId}`, "");
       } catch (e) {
+        db.setSysConfig(`bridge_processing_${userId}`, "");
         console.error("[Bridge Confirm] failed:", e.message);
         const rawMsg = String(e.message || "");
         let friendlyMsg = "❌ *Bridge Failed*\n\n";
