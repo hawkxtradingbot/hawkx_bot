@@ -4,7 +4,7 @@ const axios = require("axios");
 
 const RELAY_API_BASE = "https://api.relay.link";
 const NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
-const SOLANA_NATIVE_MINT = "11111111111111111111111111111111111111112";
+const SOLANA_NATIVE_MINT = "11111111111111111111111111111111"; // Relay's native-currency convention per their own docs (docs.relay.link/features/deposit-addresses) - NOT the WSOL wrapped mint address
 
 // Chain ID reference for Relay (standard EVM chain IDs; Solana uses a special identifier per Relay's docs)
 const CHAIN_IDS = {
