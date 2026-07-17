@@ -109,10 +109,19 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
     if (process.env.MOCK_TRADES !== "false") kb.text('🚰 Get Test SOL', 'devnet_faucet').row();
     kb.text('⚡ Pro Mode →', 'mode_set_pro').row();
   }
-  const chainIcons = { SOL: '🟣', HOOD: '🟢' };
-  const chainNames = { SOL: 'Solana', HOOD: 'Robinhood Chain' };
+  // Chain selector - matches the speed_mode (Std/Fast/Turbo) button-row pattern, extensible for future chains
+  const chainIcons = { SOL: '🟣', HOOD: '🪶' }; // 🪶 feather = Robinhood's actual logo symbol, avoids clashing with 🟢 used elsewhere as a positive/success signal
+  const chainShortNames = { SOL: 'Solana', HOOD: 'Robinhood' };
   const activeChain = user?.active_chain || 'SOL';
-  kb.text(`${chainIcons[activeChain] || '🔗'} Chain: ${chainNames[activeChain] || activeChain} ▾`, 'chain_switch_do').row();
+  const _enabledChainsForMenu = db.getEnabledChains ? db.getEnabledChains() : [{ chain: 'SOL' }];
+  const _chainRow = _enabledChainsForMenu.map(c => {
+    const isActive = c.chain === activeChain;
+    const icon = chainIcons[c.chain] || '🔗';
+    const name = chainShortNames[c.chain] || c.chain;
+    return { text: isActive ? `✅ ${icon} ${name}` : `${icon} ${name}`, callback_data: `chain_select_${c.chain}` };
+  });
+  _chainRow.forEach(btn => kb.text(btn.text, btn.callback_data));
+  kb.row();
   return kb;
 }
 

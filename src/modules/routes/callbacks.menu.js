@@ -104,13 +104,20 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     // ── CHAIN SWITCHER (single tap cycles to next enabled chain, updates same message in place) ──
-    if (data === "chain_switch_do") {
+    if (data === "chain_switch_do" || data.startsWith("chain_select_")) {
       const chains = db.getEnabledChains();
       const activeChain = db.getActiveChain(userId);
-      const idx = chains.findIndex(c => c.chain === activeChain);
-      const nextChain = chains[(idx + 1) % chains.length];
-      if (!nextChain || chains.length < 2) {
-        await ctx.answerCallbackQuery("Only one chain available right now.");
+      let nextChain;
+      if (data.startsWith("chain_select_")) {
+        const targetChainKey = data.replace("chain_select_", "");
+        nextChain = chains.find(c => c.chain === targetChainKey);
+        if (targetChainKey === activeChain) { await ctx.answerCallbackQuery("Already on this chain."); return true; }
+      } else {
+        const idx = chains.findIndex(c => c.chain === activeChain);
+        nextChain = chains[(idx + 1) % chains.length];
+      }
+      if (!nextChain || chains.length < 1) {
+        await ctx.answerCallbackQuery("Chain not available right now.");
         return true;
       }
       let wallet = db.getWalletForChain(userId, nextChain.chain);
