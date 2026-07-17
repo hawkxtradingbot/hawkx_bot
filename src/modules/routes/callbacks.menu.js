@@ -220,7 +220,8 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         const decimals = state.fromChain === "SOL" ? 9 : 18;
         const amountRaw = String(Math.floor(parseFloat(state.amount) * Math.pow(10, decimals)));
         const quote = await relay.getQuote({
-          userAddress: toWallet.public_key,
+          userAddress: fromWallet.public_key, // sender - must match ORIGIN chain format
+          recipient: toWallet.public_key, // recipient - must match DESTINATION chain format
           originChainId: fromCfg.relayId, destinationChainId: toCfg.relayId,
           originCurrency: fromTokenAddr, destinationCurrency: toTokenAddr,
           amount: amountRaw,
@@ -264,7 +265,20 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         db.setSysConfig(`bridge_state_${userId}`, "");
       } catch (e) {
         console.error("[Bridge Confirm] failed:", e.message);
-        await ctx.reply("❌ Bridge failed: " + e.message);
+        const rawMsg = String(e.message || "");
+        let friendlyMsg = "❌ *Bridge Failed*\n\n";
+        if (rawMsg.includes("Invalid address")) {
+          friendlyMsg += "The recipient address doesn't match the destination chain's format. This usually means a wallet wasn't created correctly for that chain - try switching to the destination chain first, then come back to Bridge.";
+        } else if (rawMsg.includes("liquidity") || rawMsg.includes("route")) {
+          friendlyMsg += "No route found for this token pair right now - try a smaller amount, a different token, or try again shortly (liquidity can shift).";
+        } else if (rawMsg.includes("timeout")) {
+          friendlyMsg += "The bridge service didn't respond in time. Your funds are safe (nothing was sent yet) - please try again.";
+        } else if (rawMsg.includes("insufficient") || rawMsg.includes("balance")) {
+          friendlyMsg += "Not enough balance to cover this amount plus network fees. Try a smaller amount.";
+        } else {
+          friendlyMsg += `Something went wrong: ${rawMsg.slice(0,150)}\n\nYour funds are safe - nothing was sent if this happened before the transaction step. If you already saw a transaction hash, check the block explorer to confirm status.`;
+        }
+        await ctx.reply(friendlyMsg, { parse_mode: "Markdown" });
       }
       return true;
     }

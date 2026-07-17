@@ -27,10 +27,11 @@ async function getSupportedChains() {
   }
 }
 
-async function getQuote({ userAddress, originChainId, destinationChainId, originCurrency, destinationCurrency, amount }) {
+async function getQuote({ userAddress, recipient, originChainId, destinationChainId, originCurrency, destinationCurrency, amount }) {
   try {
     const { data } = await axios.post(`${RELAY_API_BASE}/quote/v2`, {
-      user: userAddress,
+      user: userAddress, // must match ORIGIN chain address format (the sender)
+      recipient: recipient || userAddress, // must match DESTINATION chain address format
       originChainId,
       destinationChainId,
       originCurrency: originCurrency || NATIVE_TOKEN,
