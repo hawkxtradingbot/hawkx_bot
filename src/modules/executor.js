@@ -116,6 +116,18 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
     return evmBuy(ctx, user, ca, solAmount, source, sourceRef, opts, _activeChainForBuy);
   }
 
+  // Double-tap guard: real bug found - the "Rate Limit" banner text had no actual enforcement anywhere.
+  // Prevents duplicate real trades if a user taps Buy twice quickly (common on mobile).
+  if (!opts.skipLock) {
+    const _buyLockKey = `trade_lock_${user.user_id}`;
+    const _buyLock = db.getSysConfig(_buyLockKey);
+    if (_buyLock && (Date.now() - parseInt(_buyLock)) < 3000) {
+      await ctx.reply("⏳ Your previous trade is still processing - please wait a moment.");
+      return null;
+    }
+    db.setSysConfig(_buyLockKey, String(Date.now()));
+  }
+
   // Always get fresh user for correct wallet
   user = db.getUser(user.user_id) || user;
   if (!user.active_wallet_id) {
@@ -362,6 +374,17 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
   if (position.chain && position.chain !== "SOL") {
     const { evmSell } = require("./chains/evm/evmTrade");
     return evmSell(ctx, user, position, pctToSell, opts);
+  }
+
+  // Double-tap guard - same protection as mockBuy
+  if (!opts.skipLock) {
+    const _sellLockKey = `trade_lock_${user.user_id}`;
+    const _sellLock = db.getSysConfig(_sellLockKey);
+    if (_sellLock && (Date.now() - parseInt(_sellLock)) < 3000) {
+      await ctx.reply("⏳ Your previous trade is still processing - please wait a moment.");
+      return null;
+    }
+    db.setSysConfig(_sellLockKey, String(Date.now()));
   }
 
   const sellFraction  = pctToSell / 100;
