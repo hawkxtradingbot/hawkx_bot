@@ -197,25 +197,74 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const { CHAIN_OPTIONS, TOKEN_OPTIONS } = require("./callbacks.bridge");
       const fromCfg = CHAIN_OPTIONS.find(c => c.key === state.fromChain);
       const toCfg = CHAIN_OPTIONS.find(c => c.key === state.toChain);
-      const fromWallet = db.getWalletForChain(userId, state.fromChain) || db.getWalletForChain(userId, "SOL");
-      if (!fromWallet) { await ctx.reply("❌ No wallet found for the source chain."); return true; }
+      const fromWallet = db.getWalletForChain(userId, state.fromChain);
+      // Recipient must be valid for the DESTINATION chain type, not the source wallet blindly
+      let toWallet = db.getWalletForChain(userId, state.toChain);
+      if (!fromWallet) { await ctx.reply(`❌ No ${fromCfg?.label} wallet found. Switch to that chain first to create one.`); return true; }
+      if (!toWallet) {
+        // Auto-create a destination wallet on that chain, matching our chain-switch pattern
+        if (state.toChain === "SOL") {
+          await ctx.reply("❌ No Solana wallet found for receiving.");
+          return true;
+        } else {
+          const { createEvmWallet } = require("../chains/evm/wallet");
+          await createEvmWallet(userId, state.toChain, "W1");
+          toWallet = db.getWalletForChain(userId, state.toChain);
+        }
+      }
+
       try {
         const relay = require("../bridge/relay");
         const fromTokenAddr = (TOKEN_OPTIONS[state.fromChain] || []).find(t => t.symbol === state.fromToken)?.address;
         const toTokenAddr = (TOKEN_OPTIONS[state.toChain] || []).find(t => t.symbol === state.toToken)?.address;
-        const amountRaw = String(Math.floor(parseFloat(state.amount) * 1e9)); // lamports/wei-style base unit, chain-dependent - simplified for now
+        const decimals = state.fromChain === "SOL" ? 9 : 18;
+        const amountRaw = String(Math.floor(parseFloat(state.amount) * Math.pow(10, decimals)));
         const quote = await relay.getQuote({
-          userAddress: fromWallet.public_key,
+          userAddress: toWallet.public_key,
           originChainId: fromCfg.relayId, destinationChainId: toCfg.relayId,
           originCurrency: fromTokenAddr, destinationCurrency: toTokenAddr,
           amount: amountRaw,
         });
-        await ctx.reply(
-          `🌉 *Bridge Quote*\n\n${state.amount} ${state.fromToken} (${fromCfg.label}) → ${state.toToken} (${toCfg.label})\n\n_Real execution wiring is the next build step - quote fetch confirmed working._`,
+
+        const procMsg = await ctx.reply(
+          `🔄 *Executing bridge...*\n\n${state.amount} ${state.fromToken} (${fromCfg.label}) → ${state.toToken} (${toCfg.label})`,
           { parse_mode: "Markdown" }
         );
+
+        // Solana source not yet wired for real signing (needs @solana/web3.js VersionedTransaction handling) - EVM source fully wired
+        if (state.fromChain === "SOL") {
+          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, "🔲 Solana-origin bridge execution is not wired yet - EVM-origin bridges (ETH/Base/Arbitrum/Robinhood Chain) are ready now.");
+          return true;
+        }
+
+        const { decryptEvmWallet } = require("../chains/evm/wallet");
+        const { ethers } = require("ethers");
+        const evmWallet = decryptEvmWallet(fromWallet);
+        const fromChainCfg = db.getChainConfig(state.fromChain);
+        const provider = new ethers.JsonRpcProvider(fromChainCfg.rpc_url);
+        const signer = evmWallet.connect(provider);
+
+        const depositStep = quote.steps.find(s => s.id === "deposit") || quote.steps[0];
+        const txData = depositStep.items[0].data;
+        const tx = await signer.sendTransaction({
+          to: txData.to, data: txData.data, value: txData.value, chainId: txData.chainId,
+        });
+        await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⏳ Transaction submitted, waiting for bridge to complete...\nTx: ${tx.hash.slice(0,12)}...`);
+
+        const result = await relay.pollStatus(quote.steps[0].requestId, 40);
+        if (result.success) {
+          const explorerUrl = fromChainCfg.explorer_url ? `${fromChainCfg.explorer_url}/tx/${tx.hash}` : tx.hash;
+          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id,
+            `✅ *Bridge Complete!*\n\n${state.amount} ${state.fromToken} → ${state.toToken} on ${toCfg.label}\n\n[View Transaction](${explorerUrl})`,
+            { parse_mode: "Markdown", disable_web_page_preview: true }
+          );
+        } else {
+          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Bridge status: ${result.status}. Tx: ${tx.hash.slice(0,12)}... - check the explorer for details.`);
+        }
+        db.setSysConfig(`bridge_state_${userId}`, "");
       } catch (e) {
-        await ctx.reply("❌ Couldn't fetch bridge quote: " + e.message);
+        console.error("[Bridge Confirm] failed:", e.message);
+        await ctx.reply("❌ Bridge failed: " + e.message);
       }
       return true;
     }
