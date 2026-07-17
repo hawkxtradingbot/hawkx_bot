@@ -43,6 +43,7 @@ async function showAdminPanel(ctx) {
         [{ text: "🎁 Rewards", callback_data: "admin_rewards" }, { text: "📢 Broadcast", callback_data: "admin_broadcast" }],
         [{ text: "⭐ Promoters", callback_data: "admin_m_promoters" }, { text: "💰 Revenue", callback_data: "admin_revenue" }],
         [{ text: "🛡 Safety", callback_data: "admin_m_safety" }, { text: "⚙️ System", callback_data: "admin_m_system" }],
+        [{ text: "🔗 Chains", callback_data: "admin_m_chains" }],
         [{ text: "🔙 Close", callback_data: "menu_main" }],
       ],
     },
@@ -53,6 +54,31 @@ async function showAdminPanel(ctx) {
 async function handleAdminCallback(ctx, action) {
   if (!isAdmin(ctx.from.id)) {
     return ctx.answerCallbackQuery("❌ Admin only.");
+  }
+
+  // ── CHAIN MANAGEMENT ──────────────────────────────────────
+  if (action === "admin_m_chains") {
+    await ctx.answerCallbackQuery();
+    const chains = db.getEnabledChains ? db.getDb().prepare("SELECT * FROM chain_config").all() : [];
+    let msg = "🔗 *Chain Management*\n\n";
+    const rows = [];
+    chains.forEach(c => {
+      const status = c.enabled ? "✅ Enabled" : "🔴 Disabled";
+      msg += `${c.label} (${c.chain}): ${status}\n`;
+      rows.push([{ text: `${c.enabled ? "🔴 Disable" : "✅ Enable"} ${c.label}`, callback_data: `admin_chain_toggle_${c.chain}` }]);
+    });
+    rows.push([{ text: "← Back", callback_data: "admin_panel" }]);
+    await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: rows } });
+    return;
+  }
+
+  if (action.startsWith("admin_chain_toggle_")) {
+    const chainKey = action.replace("admin_chain_toggle_", "");
+    const current = db.getChainConfig(chainKey);
+    if (!current) { await ctx.answerCallbackQuery("❌ Chain not found."); return; }
+    db.setChainEnabled(chainKey, current.enabled ? 0 : 1);
+    await ctx.answerCallbackQuery(`${current.enabled ? "Disabled" : "Enabled"} ${current.label}`);
+    return handleAdminCallback(ctx, "admin_m_chains");
   }
 
   // ── REWARDS MENU ──────────────────────────────────────────
