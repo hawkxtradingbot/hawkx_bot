@@ -41,7 +41,7 @@ async function executeRealtimeSnipe(ctx, user, tokenCa, meta = {}) {
   // Reuse the proven real-buy path (mockBuy -> realBuy) instead of simulating - this was
   // previously 100% fake even on mainnet (fake tx hash "DEVNET_RT_...", no real swap ever executed).
   const result = await mockBuy(ctx, user, tokenCa, solAmount, "realtime_sniper", meta.sourceRef || "", {
-    silent: true, skipSafety: true, tokenName: meta.tokenName,
+    silent: true, skipSafety: true, tokenName: meta.tokenName, skipLock: true,
   });
   if (!result) return null;
 
