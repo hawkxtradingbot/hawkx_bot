@@ -4,6 +4,7 @@
 
 const { InlineKeyboard } = require("grammy");
 const config = require("../../config");
+const db = require("../../database");
 
 // nextSol values pull from config.RANK_THRESHOLDS so the display always matches the REAL
 // promotion thresholds (this was previously hardcoded to devnet test values even on mainnet,
