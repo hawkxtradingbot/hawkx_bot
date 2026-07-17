@@ -133,6 +133,10 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         }
       }
       db.setActiveChain(userId, nextChain.chain);
+      // CRITICAL: active_wallet_id must also switch to the wallet on the NEW chain, otherwise
+      // Portfolio/Wallets/Deposit etc keep showing the OLD chain's wallet despite the chain switch.
+      const targetWallet = wallet || db.getWalletForChain(userId, nextChain.chain);
+      if (targetWallet) db.updateUser(userId, { active_wallet_id: targetWallet.wallet_id });
       const chainIcons = { SOL: '🟣', HOOD: '🟢' };
       await ctx.answerCallbackQuery(`${chainIcons[nextChain.chain] || ''} Switched to ${nextChain.label}${createdNew ? ' - wallet created' : ''}`);
 
