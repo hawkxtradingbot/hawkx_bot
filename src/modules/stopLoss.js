@@ -498,7 +498,7 @@ async function checkDcaOrders(notifyFn) {
           db.getDb().prepare("UPDATE users SET active_wallet_id = ? WHERE user_id = ?").run(o.wallet_id, o.user_id);
           user = db.getUser(o.user_id);
         }
-        await mockBuy({ chat: { id: o.user_id }, api: globalBotApi, reply: async()=>{} }, user, o.token_ca, o.sol_per_buy, "dca", String(o.id), { silent: true, skipSafety: true });
+        await mockBuy({ chat: { id: o.user_id }, api: globalBotApi, reply: async()=>{} }, user, o.token_ca, o.sol_per_buy, "dca", String(o.id), { silent: true, skipSafety: true, skipLock: true });
       } catch (e) { /* keep going */ }
       finally {
         // Restore the user's original active wallet

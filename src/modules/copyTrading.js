@@ -14,7 +14,7 @@ async function executeCopyWalletBuy(bot, copyWallet, tokenCa, tokenName) {
   // Reuse the proven real-buy path (same as manual buys/DCA) instead of simulating -
   // this was previously 100% fake even on mainnet (fake tx hash, no real swap ever executed).
   const fakeCtx = { chat: { id: user.user_id }, api: bot.api, reply: async () => {} };
-  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_wallet", copyWallet.label || copyWallet.wallet_address.slice(0,8), { silent: true, skipSafety: true });
+  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_wallet", copyWallet.label || copyWallet.wallet_address.slice(0,8), { silent: true, skipSafety: true, skipLock: true });
 
   const safeLabel = String(copyWallet.label || "").replace(/[_*`[\]]/g, "");
   if (!result) {
@@ -54,7 +54,7 @@ async function executeCopyChannelBuy(bot, channel, tokenCa) {
   // Reuse the proven real-buy path instead of simulating - this was previously 100% fake
   // even on mainnet (fake tx hash, no real swap ever executed).
   const fakeCtx = { chat: { id: user.user_id }, api: bot.api, reply: async () => {} };
-  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_channel", channel.channel_id, { silent: true, skipSafety: true });
+  const result = await mockBuy(fakeCtx, user, tokenCa, solAmount, "copy_channel", channel.channel_id, { silent: true, skipSafety: true, skipLock: true });
 
   const safeName = String(channel.channel_name || channel.channel_id || "").replace(/[_*`[\]]/g, "");
   if (!result) {

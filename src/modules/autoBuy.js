@@ -33,7 +33,7 @@ async function processCA(ca, source, bot) {
         },
         message: null,
       };
-      await mockBuy(fakeCtx, user, ca, s.max_buy_sol || 0.1);
+      await mockBuy(fakeCtx, user, ca, s.max_buy_sol || 0.1, undefined, undefined, { skipLock: true });
     } finally {
       userQueues.delete(qKey);
     }
