@@ -232,35 +232,40 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
           { parse_mode: "Markdown" }
         );
 
-        // Solana source not yet wired for real signing (needs @solana/web3.js VersionedTransaction handling) - EVM source fully wired
+        const depositStep = quote.steps.find(s => s.id === "deposit") || quote.steps[0];
+        let txHash;
+
         if (state.fromChain === "SOL") {
-          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, "🔲 Solana-origin bridge execution is not wired yet - EVM-origin bridges (ETH/Base/Arbitrum/Robinhood Chain) are ready now.");
-          return true;
+          const { decryptWallet } = require("../walletVault");
+          const { signAndSendSolanaDeposit } = require("../bridge/solanaSign");
+          const keypair = decryptWallet(fromWallet.wallet_id);
+          txHash = await signAndSendSolanaDeposit(keypair, depositStep.items[0].data);
+        } else {
+          const { decryptEvmWallet } = require("../chains/evm/wallet");
+          const { ethers } = require("ethers");
+          const evmWallet = decryptEvmWallet(fromWallet);
+          const fromChainCfg = db.getChainConfig(state.fromChain);
+          const provider = new ethers.JsonRpcProvider(fromChainCfg.rpc_url);
+          const signer = evmWallet.connect(provider);
+          const txData = depositStep.items[0].data;
+          const tx = await signer.sendTransaction({
+            to: txData.to, data: txData.data, value: txData.value, chainId: txData.chainId,
+          });
+          txHash = tx.hash;
         }
 
-        const { decryptEvmWallet } = require("../chains/evm/wallet");
-        const { ethers } = require("ethers");
-        const evmWallet = decryptEvmWallet(fromWallet);
-        const fromChainCfg = db.getChainConfig(state.fromChain);
-        const provider = new ethers.JsonRpcProvider(fromChainCfg.rpc_url);
-        const signer = evmWallet.connect(provider);
+        await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⏳ Transaction submitted, waiting for bridge to complete...\nTx: ${txHash.slice(0,12)}...`);
 
-        const depositStep = quote.steps.find(s => s.id === "deposit") || quote.steps[0];
-        const txData = depositStep.items[0].data;
-        const tx = await signer.sendTransaction({
-          to: txData.to, data: txData.data, value: txData.value, chainId: txData.chainId,
-        });
-        await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⏳ Transaction submitted, waiting for bridge to complete...\nTx: ${tx.hash.slice(0,12)}...`);
-
-        const result = await relay.pollStatus(quote.steps[0].requestId, 40);
+        const result = await relay.pollStatus(depositStep.requestId, 40);
+        const fromChainCfgFinal = db.getChainConfig(state.fromChain);
         if (result.success) {
-          const explorerUrl = fromChainCfg.explorer_url ? `${fromChainCfg.explorer_url}/tx/${tx.hash}` : tx.hash;
+          const explorerUrl = fromChainCfgFinal.explorer_url ? `${fromChainCfgFinal.explorer_url}/tx/${txHash}` : txHash;
           await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id,
             `✅ *Bridge Complete!*\n\n${state.amount} ${state.fromToken} → ${state.toToken} on ${toCfg.label}\n\n[View Transaction](${explorerUrl})`,
             { parse_mode: "Markdown", disable_web_page_preview: true }
           );
         } else {
-          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Bridge status: ${result.status}. Tx: ${tx.hash.slice(0,12)}... - check the explorer for details.`);
+          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Bridge status: ${result.status}. Tx: ${txHash.slice(0,12)}... - check the explorer for details.`);
         }
         db.setSysConfig(`bridge_state_${userId}`, "");
       } catch (e) {
