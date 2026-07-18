@@ -72,6 +72,7 @@ function formatSol(val) {
 // ── Main portfolio screen ─────────────────────────────────────
 async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
   const _activeChainPf = db.getActiveChain(user.user_id);
+  const _chainLabelPf = ({ SOL: "🟣 Solana", HOOD: "🪶 Robinhood" })[_activeChainPf] || _activeChainPf;
   const _awPf = db.getWallet(user.active_wallet_id);
   if (_awPf && (_awPf.chain || "SOL") !== _activeChainPf) {
     const _fix = db.getWalletForChain(user.user_id, _activeChainPf);
@@ -162,7 +163,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       .text("🔄 Refresh",  `pos_filter_${filter}_0_0`)
       .row();
       kb.text("← Back", "menu_main").row();
-    const msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
+    const msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n<i>${_chainLabelPf}</i>\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
     try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
     catch (e) {
       if (!String(e.description || e.message || "").includes("not modified")) {
@@ -186,7 +187,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   }
 
   // ── Build message ────────────────────────────────────────────
-  let msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n`;
+  let msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n<i>${_chainLabelPf}</i>\n`;
   msg += `🤖 auto-sell · 📉 DCA · 📍 limit\n`;
   msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
