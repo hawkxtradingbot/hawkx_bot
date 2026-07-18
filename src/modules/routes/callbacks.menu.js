@@ -167,143 +167,122 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
 
     // ── RANK INFO ─────────────────────────────────────────────
     // ── UNIVERSAL BRIDGE (Relay Protocol) ────────────────────
-    if (data === "bridge_start" || data === "bridge_reset_from" || data === "bridge_reset_to") {
+    if (data === "bridge_start" || data.startsWith("bridge_exp_") || data.startsWith("bridge_from_") ||
+        data.startsWith("bridge_to_") || data.startsWith("bridge_fw_") || data.startsWith("bridge_tw_") ||
+        data === "bridge_reverse" || data.startsWith("bridge_pct_")) {
       await ctx.answerCallbackQuery();
-      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
-      let state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
-      if (data === "bridge_start") state = {};
-      if (data === "bridge_reset_from") { state.fromChain = null; state.fromToken = null; }
-      if (data === "bridge_reset_to") { state.toChain = null; state.toToken = null; }
-      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
-      try { await ctx.editMessageText(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
-      catch { await ctx.reply(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
-      return true;
-    }
+      const B = require("./callbacks.bridge");
+      let st = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
 
-    if (data.startsWith("bridge_from_") || data.startsWith("bridge_ftok_") || data.startsWith("bridge_to_") || data.startsWith("bridge_ttok_")) {
-      await ctx.answerCallbackQuery();
-      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
-      let state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
-      if (data.startsWith("bridge_from_")) state.fromChain = data.replace("bridge_from_", "");
-      if (data.startsWith("bridge_ftok_")) state.fromToken = data.replace("bridge_ftok_", "");
-      if (data.startsWith("bridge_to_")) state.toChain = data.replace("bridge_to_", "");
-      if (data.startsWith("bridge_ttok_")) state.toToken = data.replace("bridge_ttok_", "");
-      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
-      try { await ctx.editMessageText(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) }); }
-      catch (e) { console.error("[Bridge] render failed:", e.message); }
+      if (data === "bridge_start") st = {};
+      else if (data.startsWith("bridge_exp_")) { const w = data.replace("bridge_exp_", ""); st.exp = st.exp === w ? null : w; }
+      else if (data.startsWith("bridge_from_")) { st.fromChain = data.replace("bridge_from_", ""); st.fromWallet = null; st.exp = null; st.amount = null; st.quoteOut = null; }
+      else if (data.startsWith("bridge_to_"))   { st.toChain = data.replace("bridge_to_", ""); st.toWallet = null; st.exp = null; st.quoteOut = null; }
+      else if (data.startsWith("bridge_fw_"))   { st.fromWallet = parseInt(data.replace("bridge_fw_", "")); st.exp = null; }
+      else if (data.startsWith("bridge_tw_"))   { st.toWallet = parseInt(data.replace("bridge_tw_", "")); st.exp = null; }
+      else if (data === "bridge_reverse") { const a = st.fromChain, b = st.toChain; st.fromChain = b; st.toChain = a; st.fromWallet = null; st.toWallet = null; st.amount = null; st.quoteOut = null; st.exp = null; }
+      else if (data.startsWith("bridge_pct_")) {
+        const pct = parseInt(data.replace("bridge_pct_", ""));
+        const pre = await B.buildBridgeScreen(userId, st);
+        st = pre.state;
+        let amt = pre.fromBal * (pct / 100);
+        if (pct === 100) amt = Math.max(0, amt - (B.isSol(st.fromChain) ? 0.003 : 0.0004));
+        st.amount = amt > 0 ? Number(amt.toFixed(B.isSol(st.fromChain) ? 4 : 6)) : null;
+        st.quoteOut = null;
+      }
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(st));
+
+      if (st.amount && !st.quoteOut) {
+        try {
+          const relay = require("../bridge/relay");
+          const s2 = B.seed(userId, st);
+          const fw = B.pick(userId, s2, "from"), tw = B.pick(userId, s2, "to");
+          if (fw && tw) {
+            const q = await relay.getQuote({
+              userAddress: fw.public_key, recipient: tw.public_key,
+              originChainId: B.cfg(s2.fromChain).relayId, destinationChainId: B.cfg(s2.toChain).relayId,
+              originCurrency: B.currencyFor(s2.fromChain), destinationCurrency: B.currencyFor(s2.toChain),
+              amount: String(Math.floor(st.amount * Math.pow(10, B.cfg(s2.fromChain).dec))),
+            });
+            const out = q?.details?.currencyOut?.amountFormatted;
+            if (out) { st.quoteOut = Number(out).toFixed(6); }
+          }
+        } catch (e) { console.error("[Bridge] quote:", e.message); }
+      }
+
+      const scr = await B.buildBridgeScreen(userId, st);
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify({ ...scr.state, quoteOut: st.quoteOut }));
+      try { await ctx.editMessageText(scr.text, { parse_mode: "Markdown", reply_markup: scr.reply_markup }); }
+      catch { await ctx.reply(scr.text, { parse_mode: "Markdown", reply_markup: scr.reply_markup }); }
       return true;
     }
 
     if (data === "bridge_enter_amount") {
       await ctx.answerCallbackQuery();
       db.setSysConfig(`pending_${userId}`, "bridge_amount_input");
-      const sent = await ctx.reply("✏️ Enter the amount you want to bridge:");
+      const sent = await ctx.reply("✏️ Enter the amount to bridge:");
       db.setSysConfig(`pending_msg_${userId}`, String(sent.message_id));
       return true;
     }
 
     if (data === "bridge_confirm") {
-      // Double-tap guard: prevent duplicate bridge transactions if the user taps Confirm twice quickly
-      const _bridgeLock = db.getSysConfig(`bridge_processing_${userId}`);
-      if (_bridgeLock && (Date.now() - parseInt(_bridgeLock)) < 30000) {
-        await ctx.answerCallbackQuery("⏳ Already processing your bridge - please wait.");
-        return true;
-      }
+      const _bl = db.getSysConfig(`bridge_processing_${userId}`);
+      if (_bl && (Date.now() - parseInt(_bl)) < 60000) { await ctx.answerCallbackQuery("⏳ Already processing."); return true; }
       db.setSysConfig(`bridge_processing_${userId}`, String(Date.now()));
-      await ctx.answerCallbackQuery("⏳ Fetching quote...");
-      const state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
-      const { CHAIN_OPTIONS, TOKEN_OPTIONS } = require("./callbacks.bridge");
-      const fromCfg = CHAIN_OPTIONS.find(c => c.key === state.fromChain);
-      const toCfg = CHAIN_OPTIONS.find(c => c.key === state.toChain);
-      const fromWallet = db.getWalletForChain(userId, state.fromChain);
-      // Recipient must be valid for the DESTINATION chain type, not the source wallet blindly
-      let toWallet = db.getWalletForChain(userId, state.toChain);
-      if (!fromWallet) { await ctx.reply(`❌ No ${fromCfg?.label} wallet found. Switch to that chain first to create one.`); return true; }
-      if (!toWallet) {
-        // Auto-create a destination wallet on that chain, matching our chain-switch pattern
-        if (state.toChain === "SOL") {
-          await ctx.reply("❌ No Solana wallet found for receiving.");
-          return true;
-        } else {
-          const { createEvmWallet } = require("../chains/evm/wallet");
-          await createEvmWallet(userId, state.toChain, "W1");
-          toWallet = db.getWalletForChain(userId, state.toChain);
-        }
-      }
-
+      await ctx.answerCallbackQuery("⏳ Starting...");
+      const B = require("./callbacks.bridge");
+      const st = B.seed(userId, JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}"));
+      const fC = B.cfg(st.fromChain), tC = B.cfg(st.toChain);
+      const fw = B.pick(userId, st, "from"), tw = B.pick(userId, st, "to");
+      let procMsg;
       try {
+        if (!fw || !tw || !st.amount) { await ctx.reply("❌ Pick chains, wallets and an amount first."); return true; }
+        procMsg = await ctx.reply(`⏳ Bridging ${st.amount} ${fC.sym} → ${tC.short}...`);
         const relay = require("../bridge/relay");
-        const fromTokenAddr = (TOKEN_OPTIONS[state.fromChain] || []).find(t => t.symbol === state.fromToken)?.address;
-        const toTokenAddr = (TOKEN_OPTIONS[state.toChain] || []).find(t => t.symbol === state.toToken)?.address;
-        const decimals = state.fromChain === "SOL" ? 9 : 18;
-        const amountRaw = String(Math.floor(parseFloat(state.amount) * Math.pow(10, decimals)));
         const quote = await relay.getQuote({
-          userAddress: fromWallet.public_key, // sender - must match ORIGIN chain format
-          recipient: toWallet.public_key, // recipient - must match DESTINATION chain format
-          originChainId: fromCfg.relayId, destinationChainId: toCfg.relayId,
-          originCurrency: fromTokenAddr, destinationCurrency: toTokenAddr,
-          amount: amountRaw,
+          userAddress: fw.public_key, recipient: tw.public_key,
+          originChainId: fC.relayId, destinationChainId: tC.relayId,
+          originCurrency: B.currencyFor(st.fromChain), destinationCurrency: B.currencyFor(st.toChain),
+          amount: String(Math.floor(st.amount * Math.pow(10, fC.dec))),
         });
-
-        const procMsg = await ctx.reply(
-          `🔄 *Executing bridge...*\n\n${state.amount} ${state.fromToken} (${fromCfg.label}) → ${state.toToken} (${toCfg.label})`,
-          { parse_mode: "Markdown" }
-        );
-
-        const depositStep = quote.steps.find(s => s.id === "deposit") || quote.steps[0];
+        const step = quote.steps.find(s => s.id === "deposit") || quote.steps[0];
         let txHash;
-
-        if (state.fromChain === "SOL") {
+        if (B.isSol(st.fromChain)) {
           const { decryptWallet } = require("../walletVault");
           const { signAndSendSolanaDeposit } = require("../bridge/solanaSign");
-          const keypair = decryptWallet(fromWallet.wallet_id);
-          txHash = await signAndSendSolanaDeposit(keypair, depositStep.items[0].data);
+          txHash = await signAndSendSolanaDeposit(decryptWallet(fw.wallet_id), step.items[0].data);
         } else {
           const { decryptEvmWallet } = require("../chains/evm/wallet");
           const { ethers } = require("ethers");
-          const evmWallet = decryptEvmWallet(fromWallet);
-          const fromChainCfg = db.getChainConfig(state.fromChain);
-          const provider = new ethers.JsonRpcProvider(fromChainCfg.rpc_url);
-          const signer = evmWallet.connect(provider);
-          const txData = depositStep.items[0].data;
-          const tx = await signer.sendTransaction({
-            to: txData.to, data: txData.data, value: txData.value, chainId: txData.chainId,
-          });
+          const cc = db.getChainConfig(st.fromChain);
+          const signer = decryptEvmWallet(fw).connect(new ethers.JsonRpcProvider(cc.rpc_url));
+          const d = step.items[0].data;
+          const tx = await signer.sendTransaction({ to: d.to, data: d.data, value: d.value, chainId: d.chainId });
           txHash = tx.hash;
         }
-
-        await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⏳ Transaction submitted, waiting for bridge to complete...\nTx: ${txHash.slice(0,12)}...`);
-
-        const result = await relay.pollStatus(depositStep.requestId, 40);
-        const fromChainCfgFinal = db.getChainConfig(state.fromChain);
-        if (result.success) {
-          const explorerUrl = fromChainCfgFinal.explorer_url ? `${fromChainCfgFinal.explorer_url}/tx/${txHash}` : txHash;
+        await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⏳ Sent. Waiting for ${tC.short}...`);
+        const res = await relay.pollStatus(step.requestId, 40);
+        const cc2 = db.getChainConfig(st.fromChain);
+        const url = cc2 && cc2.explorer_url ? `${cc2.explorer_url}/tx/${txHash}` : "";
+        if (res.success) {
           await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id,
-            `✅ *Bridge Complete!*\n\n${state.amount} ${state.fromToken} → ${state.toToken} on ${toCfg.label}\n\n[View Transaction](${explorerUrl})`,
-            { parse_mode: "Markdown", disable_web_page_preview: true }
-          );
+            `✅ *Done.* ${st.amount} ${fC.sym} → ${tC.short}` + (url ? `\n\n[View transaction](${url})` : ""),
+            { parse_mode: "Markdown", disable_web_page_preview: true });
+          db.setSysConfig(`bridge_state_${userId}`, "");
         } else {
-          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Bridge status: ${result.status}. Tx: ${txHash.slice(0,12)}... - check the explorer for details.`);
+          await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, `⚠️ Still pending. Funds are safe.` + (url ? `\n\n[Check transaction](${url})` : ""), { parse_mode: "Markdown", disable_web_page_preview: true });
         }
-        db.setSysConfig(`bridge_state_${userId}`, "");
-        db.setSysConfig(`bridge_processing_${userId}`, "");
       } catch (e) {
+        const m = String(e.message || "");
+        let msg = "❌ ";
+        if (m.includes("Invalid address")) msg += "Wallet doesn't match the destination chain. Switch to that chain once to create one.";
+        else if (m.includes("insufficient") || m.includes("balance")) msg += "Not enough balance for this amount plus fees. Try less.";
+        else if (m.includes("route") || m.includes("liquidity")) msg += "No route right now. Try a smaller amount or again shortly.";
+        else if (m.includes("timeout")) msg += "Timed out. Nothing was sent.";
+        else msg += m.slice(0, 120);
+        try { if (procMsg) await ctx.api.editMessageText(ctx.chat.id, procMsg.message_id, msg); else await ctx.reply(msg); } catch { await ctx.reply(msg); }
+      } finally {
         db.setSysConfig(`bridge_processing_${userId}`, "");
-        console.error("[Bridge Confirm] failed:", e.message);
-        const rawMsg = String(e.message || "");
-        let friendlyMsg = "❌ *Bridge Failed*\n\n";
-        if (rawMsg.includes("Invalid address")) {
-          friendlyMsg += "The recipient address doesn't match the destination chain's format. This usually means a wallet wasn't created correctly for that chain - try switching to the destination chain first, then come back to Bridge.";
-        } else if (rawMsg.includes("liquidity") || rawMsg.includes("route")) {
-          friendlyMsg += "No route found for this token pair right now - try a smaller amount, a different token, or try again shortly (liquidity can shift).";
-        } else if (rawMsg.includes("timeout")) {
-          friendlyMsg += "The bridge service didn't respond in time. Your funds are safe (nothing was sent yet) - please try again.";
-        } else if (rawMsg.includes("insufficient") || rawMsg.includes("balance")) {
-          friendlyMsg += "Not enough balance to cover this amount plus network fees. Try a smaller amount.";
-        } else {
-          friendlyMsg += `Something went wrong: ${rawMsg.slice(0,150)}\n\nYour funds are safe - nothing was sent if this happened before the transaction step. If you already saw a transaction hash, check the block explorer to confirm status.`;
-        }
-        await ctx.reply(friendlyMsg, { parse_mode: "Markdown" });
       }
       return true;
     }

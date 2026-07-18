@@ -219,11 +219,26 @@ function setupMessages(bot) {
       try { await ctx.api.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
       const amt = parseFloat(text);
       if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Invalid amount."); return; }
-      const state = JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}");
-      state.amount = amt;
-      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(state));
-      const { buildBridgeText, buildBridgeKeyboard } = require("./callbacks.bridge");
-      await ctx.reply(buildBridgeText(state), { parse_mode: "Markdown", reply_markup: buildBridgeKeyboard(state) });
+      const B = require("./callbacks.bridge");
+      let st = B.seed(userId, JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}"));
+      st.amount = amt; st.quoteOut = null; st.exp = null;
+      try {
+        const relay = require("../bridge/relay");
+        const fw = B.pick(userId, st, "from"), tw = B.pick(userId, st, "to");
+        if (fw && tw) {
+          const q = await relay.getQuote({
+            userAddress: fw.public_key, recipient: tw.public_key,
+            originChainId: B.cfg(st.fromChain).relayId, destinationChainId: B.cfg(st.toChain).relayId,
+            originCurrency: B.currencyFor(st.fromChain), destinationCurrency: B.currencyFor(st.toChain),
+            amount: String(Math.floor(amt * Math.pow(10, B.cfg(st.fromChain).dec))),
+          });
+          const out = q?.details?.currencyOut?.amountFormatted;
+          if (out) st.quoteOut = Number(out).toFixed(6);
+        }
+      } catch (e) { console.error("[Bridge] quote:", e.message); }
+      db.setSysConfig(`bridge_state_${userId}`, JSON.stringify(st));
+      const scr = await B.buildBridgeScreen(userId, st);
+      await ctx.reply(scr.text, { parse_mode: "Markdown", reply_markup: scr.reply_markup });
       return;
     }
 
