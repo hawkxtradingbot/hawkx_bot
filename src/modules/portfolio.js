@@ -127,7 +127,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   const settings     = db.getSettings(user.user_id) || {};
   const activeWallet = db.getWallet(user.active_wallet_id);
   const walletBal    = activeWallet ? await db.getWalletBalance(activeWallet.public_key) : 0;
-  const wallets2     = db.getWallets(user.user_id) || [];
+  const wallets2     = (db.getWallets(user.user_id) || []).filter(w => (w.chain || "SOL") === _activeChainPf);
   const walletIdx    = wallets2.findIndex((w) => w.wallet_id === user.active_wallet_id) + 1;
   const walletLabel  = walletIdx > 0 ? `W${walletIdx}` : "W1";
 
@@ -135,7 +135,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
   // ── Wallet + Filter dropdowns ────────────────────────────────
   if (walletExpanded) {
-    const wallets4 = db.getWallets(user.user_id) || [];
+    const wallets4 = wallets2;
     for (let i = 0; i < wallets2.length; i += 3) {
       wallets2.slice(i, i+3).forEach((w, idx) => {
         const num = i+idx+1;
@@ -155,15 +155,13 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       .text(`${FILTER_LABELS[filter] || FILTER_LABELS.all} ▼`, `pos_expand_${filter}_${page}`)
       .row();
   }
-  kb.text("🔍 Other Wallet Tokens", "scan_wallet_tokens").row();
 
   // ── Empty state ──────────────────────────────────────────────
   if (!positions.length) {
     kb.text("🟢 Buy a Token", "trade_quickbuy")
       .text("🔄 Refresh",  `pos_filter_${filter}_0_0`)
       .row();
-    kb.text("🔍 Other Wallet Tokens", "scan_wallet_tokens").row();
-    kb.text("← Back", "menu_main").row();
+      kb.text("← Back", "menu_main").row();
     const msg = `📂 <b>Portfolio</b> — ${FILTER_LABELS[filter] || "All"}\n\n<i>No open positions yet.</i>\n\n💡 Tap 🟢 Buy a Token to make your first trade — it shows here with live PnL.\n\n💼 ${walletLabel}: <b>${walletBal.toFixed(4)} SOL</b>`;
     try { await ctx.editMessageText(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); }
     catch (e) {
