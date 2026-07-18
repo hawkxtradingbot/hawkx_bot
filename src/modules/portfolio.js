@@ -72,6 +72,11 @@ function formatSol(val) {
 // ── Main portfolio screen ─────────────────────────────────────
 async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = false, selectedPosId = null, walletExpanded = false) {
   const _activeChainPf = db.getActiveChain(user.user_id);
+  const _awPf = db.getWallet(user.active_wallet_id);
+  if (_awPf && (_awPf.chain || "SOL") !== _activeChainPf) {
+    const _fix = db.getWalletForChain(user.user_id, _activeChainPf);
+    if (_fix) { db.updateUser(user.user_id, { active_wallet_id: _fix.wallet_id }); user.active_wallet_id = _fix.wallet_id; }
+  }
   const allPositions = db.getPositionsBySource(user.user_id, filter === "launch" ? "all" : filter);
   let positions = allPositions.filter((p) => {
     if ((p.chain || "SOL") !== _activeChainPf) return false;
