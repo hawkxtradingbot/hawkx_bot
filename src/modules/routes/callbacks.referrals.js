@@ -36,6 +36,14 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
     }
 
     if (data === "referral_claim_confirm") {
+      const _claimLockKey = `claim_lock_${userId}`;
+      const _claimLock = db.getSysConfig(_claimLockKey);
+      if (_claimLock && (Date.now() - parseInt(_claimLock)) < 60000) {
+        await ctx.answerCallbackQuery({ text: "A claim is already processing. Please wait.", show_alert: true });
+        return true;
+      }
+      db.setSysConfig(_claimLockKey, String(Date.now()));
+      try {
       const wallets = db.getWallets(userId) || [];
       let payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
       const pw = wallets.find(w => w.public_key === payoutAddr);
@@ -100,6 +108,9 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
         { parse_mode: "Markdown" }
       );
       return buildReferralScreen(ctx, userId, false);
+      } finally {
+        db.setSysConfig(`claim_lock_${userId}`, "");
+      }
     }
 
     // ── ENTER REFERRAL CODE ───────────────────────────────────
