@@ -176,8 +176,16 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
 
       if (data === "bridge_start") st = {};
       else if (data.startsWith("bridge_exp_")) { const w = data.replace("bridge_exp_", ""); st.exp = st.exp === w ? null : w; }
-      else if (data.startsWith("bridge_from_")) { st.fromChain = data.replace("bridge_from_", ""); st.fromWallet = null; st.exp = null; st.amount = null; st.quoteOut = null; }
-      else if (data.startsWith("bridge_to_"))   { st.toChain = data.replace("bridge_to_", ""); st.toWallet = null; st.exp = null; st.quoteOut = null; }
+      else if (data.startsWith("bridge_from_")) {
+        const k = data.replace("bridge_from_", "");
+        if (k === st.toChain) st.toChain = st.fromChain; // picking the other side's chain swaps them
+        st.fromChain = k; st.fromWallet = null; st.toWallet = null; st.exp = null; st.amount = null; st.quoteOut = null;
+      }
+      else if (data.startsWith("bridge_to_")) {
+        const k = data.replace("bridge_to_", "");
+        if (k === st.fromChain) st.fromChain = st.toChain;
+        st.toChain = k; st.toWallet = null; st.fromWallet = null; st.exp = null; st.quoteOut = null;
+      }
       else if (data.startsWith("bridge_fw_"))   { st.fromWallet = parseInt(data.replace("bridge_fw_", "")); st.exp = null; }
       else if (data.startsWith("bridge_tw_"))   { st.toWallet = parseInt(data.replace("bridge_tw_", "")); st.exp = null; }
       else if (data === "bridge_reverse") { const a = st.fromChain, b = st.toChain; st.fromChain = b; st.toChain = a; st.fromWallet = null; st.toWallet = null; st.amount = null; st.quoteOut = null; st.exp = null; }

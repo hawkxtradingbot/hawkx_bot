@@ -14,6 +14,19 @@ const NATIVE_EVM = "0x0000000000000000000000000000000000000000";
 const NATIVE_SOL = "11111111111111111111111111111111";
 
 const cfg = k => CHAIN_OPTIONS.find(c => c.key === k);
+// A chain is bridgeable once chain_config has a row the bot can read balances from.
+// SOL is exempt from rpc_url because it reads via HELIUS_RPC_URL from env, not chain_config.
+// Chains listed here but not in chain_config stay hidden until their DB row exists.
+function supportedChains() {
+  const list = CHAIN_OPTIONS.filter(c => {
+    try {
+      const cc = db.getChainConfig(c.key);
+      if (!cc) return false;
+      return isSol(c.key) ? true : !!cc.rpc_url;
+    } catch { return false; }
+  });
+  return list.length ? list : CHAIN_OPTIONS.filter(c => c.key === "SOL");
+}
 const isSol = k => k === "SOL";
 
 // EVM wallets share one address across every EVM chain, so any non-SOL wallet works for all of them.
@@ -27,7 +40,7 @@ async function balanceOf(chainKey, address) {
   try {
     if (isSol(chainKey)) return await db.getWalletBalance(address);
     const { ethers } = require("ethers");
-    const c = db.getChainConfig(chainKey) || db.getChainConfig("HOOD");
+    const c = db.getChainConfig(chainKey); // no cross-chain fallback - a wrong balance is worse than none
     if (!c || !c.rpc_url) return 0;
     const bal = await new ethers.JsonRpcProvider(c.rpc_url).getBalance(address);
     return Number(ethers.formatEther(bal));
@@ -45,7 +58,10 @@ function pick(userId, state, side) {
 function seed(userId, state) {
   const s = { ...state };
   if (!s.fromChain) s.fromChain = db.getActiveChain(userId) || "SOL";
-  if (!s.toChain || s.toChain === s.fromChain) s.toChain = s.fromChain === "SOL" ? "HOOD" : "SOL";
+  if (!s.toChain || s.toChain === s.fromChain) {
+    const alt = supportedChains().find(c => c.key !== s.fromChain);
+    s.toChain = alt ? alt.key : (s.fromChain === "SOL" ? "HOOD" : "SOL");
+  }
   const fw = pick(userId, s, "from"); if (fw) s.fromWallet = fw.wallet_id;
   const tw = pick(userId, s, "to");   if (tw) s.toWallet   = tw.wallet_id;
   return s;
@@ -72,8 +88,23 @@ async function buildBridgeScreen(userId, rawState) {
   t += `━━━━━━━━━━━━━━━\n`;
   if (s.amount) {
     t += `Amount:   *${s.amount} ${fC.sym}*\n`;
-    t += s.quoteOut ? `Receive:  *~${s.quoteOut} ${tC.sym}*\nFee:      ~0.15%  ·  ~30s\n`
-                    : `Receive:  _fetching…_\n`;
+    if (s.quoteOut) {
+      t += `Receive:  *~${s.quoteOut} ${tC.sym}*\n`;
+      // Relayer + destination-gas costs are largely fixed, so small bridges lose a big share.
+      // Real example: 0.0024 SOL bridged to HOOD lost ~68%, vs ~0.15% on a 0.1 SOL quote.
+      let lossPct = null;
+      try {
+        const inUsd  = s.amount * (await (isSol(s.fromChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared()));
+        const outUsd = Number(s.quoteOut) * (await (isSol(s.toChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared()));
+        if (inUsd > 0 && outUsd >= 0) lossPct = ((inUsd - outUsd) / inUsd) * 100;
+      } catch {}
+      if (lossPct === null) t += `Fee:      ~0.15%  ·  ~30s\n`;
+      else if (lossPct >= 25) t += `\n⚠️ *You lose ~${lossPct.toFixed(0)}% on this amount.*\nNetwork costs are fixed, so small bridges lose most of the value. Send more, or skip it.\n`;
+      else if (lossPct >= 5)  t += `⚠️ Cost: ~${lossPct.toFixed(1)}% — higher than usual for a small amount.\n`;
+      else t += `Cost:     ~${lossPct.toFixed(2)}%  ·  ~30s\n`;
+    } else {
+      t += `Receive:  _fetching…_\n`;
+    }
   } else {
     t += `_Pick an amount below._\n`;
   }
@@ -87,11 +118,11 @@ function buildBridgeKeyboard(userId, s) {
   // expandable pickers — only one open at a time
   if (s.exp === "fchain") {
     rows.push([{ text: "FROM — pick chain:", callback_data: "noop" }]);
-    CHAIN_OPTIONS.filter(c => c.key !== s.toChain).forEach(c =>
+    supportedChains().forEach(c =>
       rows.push([{ text: c.key === s.fromChain ? `✅ ${c.label}` : c.label, callback_data: `bridge_from_${c.key}` }]));
   } else if (s.exp === "tchain") {
     rows.push([{ text: "TO — pick chain:", callback_data: "noop" }]);
-    CHAIN_OPTIONS.filter(c => c.key !== s.fromChain).forEach(c =>
+    supportedChains().forEach(c =>
       rows.push([{ text: c.key === s.toChain ? `✅ ${c.label}` : c.label, callback_data: `bridge_to_${c.key}` }]));
   } else if (s.exp === "fwallet") {
     rows.push([{ text: "FROM — pick wallet:", callback_data: "noop" }]);
@@ -117,10 +148,12 @@ function buildBridgeKeyboard(userId, s) {
     ]);
     if (s.amount) rows.push([{ text: "✅ Confirm Bridge", callback_data: "bridge_confirm" }]);
   }
+  // collapse an open picker back to the main bridge screen instead of leaving Bridge entirely
+  if (s.exp) rows.push([{ text: "← Back to bridge", callback_data: `bridge_exp_${s.exp}` }]);
   rows.push([{ text: "🔄 Reset", callback_data: "bridge_start" }, { text: "← Back", callback_data: "menu_wallets" }]);
   return { inline_keyboard: rows };
 }
 
 function currencyFor(chainKey) { return isSol(chainKey) ? NATIVE_SOL : NATIVE_EVM; }
 
-module.exports = { CHAIN_OPTIONS, NATIVE_EVM, NATIVE_SOL, cfg, isSol, walletsFor, balanceOf, pick, seed, buildBridgeScreen, buildBridgeKeyboard, currencyFor };
+module.exports = { CHAIN_OPTIONS, supportedChains, NATIVE_EVM, NATIVE_SOL, cfg, isSol, walletsFor, balanceOf, pick, seed, buildBridgeScreen, buildBridgeKeyboard, currencyFor };
