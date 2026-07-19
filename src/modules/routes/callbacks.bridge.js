@@ -78,8 +78,42 @@ async function buildBridgeScreen(userId, rawState) {
   const lbl = (list, w) => { const i = list.findIndex(x => x.wallet_id === w?.wallet_id); return i >= 0 ? `W${i+1}` : "—"; };
   const fList = walletsFor(userId, s.fromChain), tList = walletsFor(userId, s.toChain);
 
+  // Fixed relayer + destination-gas costs don't scale down, so tiny bridges lose most of
+  // their value. Real case: 0.0024 SOL (~$0.36) lost ~68%. Below MIN_USD we block the send.
+  const MIN_USD = 5;
+  let usdIn = null, lossPct = null;
+  if (s.amount) {
+    try {
+      const px = await (isSol(s.fromChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared());
+      usdIn = s.amount * px;
+      if (s.quoteOut) {
+        const pxOut = await (isSol(s.toChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared());
+        const usdOut = Number(s.quoteOut) * pxOut;
+        if (usdIn > 0 && usdOut >= 0) lossPct = ((usdIn - usdOut) / usdIn) * 100;
+      }
+    } catch {}
+  }
+  // Balance guards: sending more than you hold fails on-chain, and spending down to zero
+  // leaves nothing for the network fee. Reserve matches what the Max button already subtracts.
+  const GAS_RESERVE  = isSol(s.fromChain) ? 0.003 : 0.0004;
+  const insufficient = !!s.amount && s.amount > fBal;
+  const noGasLeft    = !!s.amount && !insufficient && (fBal - s.amount) < GAS_RESERVE;
+  const tooSmall = usdIn !== null && usdIn < MIN_USD;
+  const blocked  = insufficient || noGasLeft || tooSmall || (lossPct !== null && lossPct >= 40);
+
   // ── text ──
-  let t  = `🌉 *Bridge*\n`;
+  let t = `🌉 *Bridge*\n`;
+  if (insufficient) {
+    t += `\n🚫 *Not enough ${fC.sym}.*\nYou entered ${s.amount} but hold ${fBal.toFixed(4)}. Tap Max for the most you can send.\n`;
+  } else if (noGasLeft) {
+    t += `\n🚫 *Keep some ${fC.sym} for the network fee.*\nYou hold ${fBal.toFixed(4)} — leave at least ${GAS_RESERVE} back. Tap Max.\n`;
+  } else if (tooSmall) {
+    t += `\n🚫 *Too small — you'd lose most of it.*\nNetwork costs are fixed (~$0.25), so amounts under ~$${MIN_USD} lose a huge share. Send more.\n`;
+  } else if (lossPct !== null && lossPct >= 25) {
+    t += `\n⚠️ *You'd lose ~${lossPct.toFixed(0)}% of this.*\nSend a larger amount to make it worthwhile.\n`;
+  } else if (lossPct !== null && lossPct >= 5) {
+    t += `\n⚠️ *Cost ~${lossPct.toFixed(1)}%* — higher than usual for a small amount.\n`;
+  }
   t += `━━━━━━━━━━━━━━━\n`;
   t += `*FROM*  ${fC.label}  ·  ${lbl(fList, fW)}\n`;
   t += `        ${fBal.toFixed(4)} ${fC.sym}\n\n`;
@@ -87,31 +121,25 @@ async function buildBridgeScreen(userId, rawState) {
   t += `        ${tBal.toFixed(4)} ${tC.sym}\n`;
   t += `━━━━━━━━━━━━━━━\n`;
   if (s.amount) {
-    t += `Amount:   *${s.amount} ${fC.sym}*\n`;
+    t += `Amount:   *${s.amount} ${fC.sym}*`;
+    t += usdIn !== null ? `  (~$${usdIn.toFixed(2)})\n` : `\n`;
     if (s.quoteOut) {
       t += `Receive:  *~${s.quoteOut} ${tC.sym}*\n`;
-      // Relayer + destination-gas costs are largely fixed, so small bridges lose a big share.
-      // Real example: 0.0024 SOL bridged to HOOD lost ~68%, vs ~0.15% on a 0.1 SOL quote.
-      let lossPct = null;
-      try {
-        const inUsd  = s.amount * (await (isSol(s.fromChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared()));
-        const outUsd = Number(s.quoteOut) * (await (isSol(s.toChain) ? db.getSolPriceUsdShared() : db.getEthPriceUsdShared()));
-        if (inUsd > 0 && outUsd >= 0) lossPct = ((inUsd - outUsd) / inUsd) * 100;
-      } catch {}
-      if (lossPct === null) t += `Fee:      ~0.15%  ·  ~30s\n`;
-      else if (lossPct >= 25) t += `\n⚠️ *You lose ~${lossPct.toFixed(0)}% on this amount.*\nNetwork costs are fixed, so small bridges lose most of the value. Send more, or skip it.\n`;
-      else if (lossPct >= 5)  t += `⚠️ Cost: ~${lossPct.toFixed(1)}% — higher than usual for a small amount.\n`;
-      else t += `Cost:     ~${lossPct.toFixed(2)}%  ·  ~30s\n`;
+      t += lossPct !== null ? `Cost:     ~${lossPct.toFixed(2)}%  ·  ~30s\n` : `Cost:     ~0.15%  ·  ~30s\n`;
     } else {
       t += `Receive:  _fetching…_\n`;
     }
   } else {
     t += `_Pick an amount below._\n`;
   }
-  return { text: t, reply_markup: buildBridgeKeyboard(userId, s), state: s, fromBal: fBal };
+  const blockReason = insufficient ? `Not enough ${fC.sym} — you hold ${fBal.toFixed(4)}.`
+    : noGasLeft ? `Keep at least ${GAS_RESERVE} ${fC.sym} back for the network fee.`
+    : tooSmall ? `Amount too small — send at least ~$${MIN_USD}.`
+    : blocked ? `This amount loses too much to network costs.` : null;
+  return { text: t, reply_markup: buildBridgeKeyboard(userId, s, blocked), state: s, fromBal: fBal, blocked, blockReason, minUsd: MIN_USD };
 }
 
-function buildBridgeKeyboard(userId, s) {
+function buildBridgeKeyboard(userId, s, blocked) {
   const rows = [];
   const fList = walletsFor(userId, s.fromChain), tList = walletsFor(userId, s.toChain);
 
@@ -146,10 +174,10 @@ function buildBridgeKeyboard(userId, s) {
       { text: "Max",  callback_data: "bridge_pct_100" },
       { text: "✏️",   callback_data: "bridge_enter_amount" },
     ]);
-    if (s.amount) rows.push([{ text: "✅ Confirm Bridge", callback_data: "bridge_confirm" }]);
+    if (s.amount && !blocked) rows.push([{ text: "✅ Confirm Bridge", callback_data: "bridge_confirm" }]);
   }
-  // collapse an open picker back to the main bridge screen instead of leaving Bridge entirely
-  if (s.exp) rows.push([{ text: "← Back to bridge", callback_data: `bridge_exp_${s.exp}` }]);
+  // While a picker is open, the only exit shown is back to the bridge screen - no duplicate row.
+  if (s.exp) { rows.push([{ text: "← Back to bridge", callback_data: `bridge_exp_${s.exp}` }]); return { inline_keyboard: rows }; }
   rows.push([{ text: "🔄 Reset", callback_data: "bridge_start" }, { text: "← Back", callback_data: "menu_wallets" }]);
   return { inline_keyboard: rows };
 }

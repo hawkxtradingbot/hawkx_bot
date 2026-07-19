@@ -245,6 +245,8 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       let procMsg;
       try {
         if (!fw || !tw || !st.amount) { await ctx.reply("❌ Pick chains, wallets and an amount first."); return true; }
+        const chk = await B.buildBridgeScreen(userId, st);
+        if (chk.blocked) { await ctx.reply("🚫 " + (chk.blockReason || "Can't send this amount.")); return true; }
         procMsg = await ctx.reply(`⏳ Bridging ${st.amount} ${fC.sym} → ${tC.short}...`);
         const relay = require("../bridge/relay");
         const quote = await relay.getQuote({
