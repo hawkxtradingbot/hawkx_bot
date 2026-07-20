@@ -656,9 +656,19 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       const destAddr = db.getSysConfig(`withdraw_addr_${userId}`) || "";
       await ctx.answerCallbackQuery(`Sending ${amtLabel} ${token}...`);
 
+      // TOCTOU guard: without this, a double-tapped Confirm sends the withdrawal twice.
+      const _wLockKey = `withdraw_lock_${userId}`;
+      const _wLock = db.getSysConfig(_wLockKey);
+      if (_wLock && (Date.now() - parseInt(_wLock)) < 60000) {
+        await ctx.reply("⏳ A withdrawal is already processing. Please wait.");
+        return true;
+      }
+      db.setSysConfig(_wLockKey, String(Date.now()));
+
       const REAL_W = process.env.MOCK_TRADES === "false";
 
       if (!REAL_W) {
+        db.setSysConfig(`withdraw_lock_${userId}`, "");
         db.setSysConfig(`withdraw_pending_${userId}`, "");
         db.setSysConfig(`withdraw_addr_${userId}`, "");
         await ctx.reply(
@@ -717,6 +727,8 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
       } catch (err) {
         const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
         await ctx.reply("❌ Withdraw failed: " + em);
+      } finally {
+        db.setSysConfig(`withdraw_lock_${userId}`, "");
       }
       return true;
     }
