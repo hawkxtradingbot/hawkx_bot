@@ -737,7 +737,7 @@ const GUIDES = {
   copy_trade:    "👥 Copy Wallet = follows a trader. Copy Channel = buys signals from Telegram.",
   copy_wallet:   "💼 When followed wallet buys, you auto-buy. Max 5 wallets.",
   copy_channel:  "📚 *GUIDE:*\n\n➕ *Add* — add a channel to follow\n🟢 *Active* — tap to view/edit settings\n⏸ *Pause* — stop copying from channel\n▶ *Resume* — start copying again\n🗑 *Delete* — remove permanently\n\n💡 *HOW IT WORKS:*\nAdd any Telegram channel.\nWhen a token CA is posted there,\nbot auto-buys using your settings.",
-  sniper:        "🎯 Auto Sniper catches new launches. Migration Sniper targets PumpFun→Raydium.",
+  sniper:        "🎯 Paste a token address to snipe it instantly with your preset amount, slippage and priority fee.",
   limit_orders:  "📋 Set price targets. Bot auto-buys or sells when price is reached.",
   referrals:     "💰 Share your link. Earn % of every trade your referrals make forever.",
 };
