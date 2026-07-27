@@ -105,7 +105,7 @@ function isAutoBuyEnabled(userId) {
 
 async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
   if (killSwitch.isActive()) {
-    await ctx.reply("🔴 *Trading Paused*\n\nAdmin has paused trading. Your positions are safe.", { parse_mode: "Markdown" });
+    await ctx.reply("⏸ *HawkX is briefly paused.*\n\nBuying is off right now — your funds are safe and fully yours. You can still *sell* your positions any time. Back shortly.", { parse_mode: "Markdown" });
     return null;
   }
 
@@ -365,10 +365,7 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
 }
 // (buy end)
 async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
-  if (killSwitch.isActive()) {
-    await ctx.reply("🔴 *Trading Paused*", { parse_mode: "Markdown" });
-    return null;
-  }
+  // Kill-switch deliberately does NOT block sells - users must always be able to exit positions.
 
   // ── EVM chain branch - this position belongs to an EVM chain, not Solana ──
   if (position.chain && position.chain !== "SOL") {

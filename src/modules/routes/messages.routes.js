@@ -1406,7 +1406,7 @@ const t = text.trim().toLowerCase();
       db.updateRealtimeSniperConfig(userId, patch);
       db.setSysConfig(`sniper_screen_${userId}`, "realtime");
       const rtMsgId = parseInt(db.getSysConfig(`rt_msg_${userId}`) || "0");
-      const rtMsgText = "⚡ *Real-Time Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Snipes ANY new Raydium pool instantly\n▸ Fastest entry — catches first block\n▸ No CA needed — fully automatic\n▸ Toggle sources: Raydium, Migrations, HawkX\n▸ All settings auto-save instantly\n━━━━━━━━━━━━━━━━━━━\n\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n⚡ Jito — bundle priority tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━";
+      const rtMsgText = "⚡ *Real-Time Sniper*\n\n━━━━━━━━━━━━━━━━━━━\n▸ Paste a token address to snipe it instantly with your preset\n▸ Buys at your amount, slippage and priority fee in one tap\n▸ MEV protection on the swap\n▸ Settings auto-save\n━━━━━━━━━━━━━━━━━━━\n\n💰 Amount — SOL per snipe\n📉 Slippage — max price move %\n⛽ Fee — priority fee SOL\n⚡ Jito — bundle priority tip\n🛡 MEV — sandwich protection\n━━━━━━━━━━━━━━━━━━━\n\n_Paste any token address to snipe now._";
       if (rtMsgId) {
         try { await ctx.api.editMessageText(ctx.chat.id, rtMsgId, rtMsgText, { parse_mode: "Markdown", reply_markup: buildRealtimeSnipeMenu(db.getRealtimeSniperConfig(userId)) }); return; } catch {}
       }
@@ -1635,7 +1635,14 @@ const t = text.trim().toLowerCase();
       /^[1-9A-HJ-NP-Za-km-z]+$/.test(text)
     ) {
       if (ks) {
-        await ctx.reply("🔴 Trading paused.");
+        await ctx.reply("⏸ *HawkX is briefly paused.*\n\nBuying is off right now — your funds are safe and fully yours. You can still *sell* your positions any time from Portfolio. Back shortly.", { parse_mode: "Markdown" });
+        return;
+      }
+      // Chain-aware: HOOD/EVM tokens need the EVM scanner (Uniswap fetcher), not the Solana one.
+      const _acChain = db.getActiveChain(userId);
+      if (_acChain && _acChain !== "SOL") {
+        const { showEvmTokenScreen } = require("./helpers.routes");
+        await showEvmTokenScreen(ctx, user, text);
         return;
       }
       // Check auto buy first!

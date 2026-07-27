@@ -541,15 +541,94 @@ async function handleAdminTextInput(ctx, pendingKey) {
     const recipMode = db.getSysConfig(`admin_reward_recipients_${adminId}`) || "all";
     let traders = db.getTrackedTokenTraders(ca);
     if (recipMode === "top10") traders = traders.slice(0, 10);
-    const reason = `airdrop_${ca.slice(0,6)}_${Date.now()}`;
-    let sent = 0;
-    for (const t of traders) {
-      if (db.alreadyRewarded(t.userId, reason)) continue;
-      // DEVNET: simulated. MAINNET TODO: real SOL/SPL transfer to t.userId wallet.
-      db.logReward(t.userId, ca, rtype, amount, reason, adminId, "");
-      sent++;
+    // Stable reason (no timestamp) so a retry after a partial failure skips already-paid users
+    // instead of paying them twice. Same campaign = same reason = deduped by alreadyRewarded().
+    const reason = `airdrop_${ca.slice(0,6)}_${recipMode}_${amount}`;
+    const REAL_R = process.env.MOCK_TRADES === "false";
+
+    // Concurrency guard: this loop can run for a while - a second tap would double-pay everyone.
+    const _rLock = db.getSysConfig(`reward_lock_${adminId}`);
+    if (_rLock && (Date.now() - parseInt(_rLock)) < 300000) {
+      await ctx.reply("⏳ A reward batch is already running. Wait for it to finish.");
+      return;
     }
-    await ctx.reply(`✅ *Reward sent!*\n\n${sent} traders received *${amount} ${rtype}* each.\nTotal: *${(amount*sent).toFixed(3)} ${rtype}*\n\n_[DEVNET simulated — real transfer at mainnet]_`, { parse_mode: "Markdown" });
+    db.setSysConfig(`reward_lock_${adminId}`, String(Date.now()));
+
+    try {
+      // SPL token transfers need @solana/spl-token, which isn't installed. Refuse rather than
+      // report success while sending nothing (the previous behaviour on mainnet).
+      if (REAL_R && rtype === "TOKEN") {
+        await ctx.reply("❌ Token rewards aren't wired yet (needs @solana/spl-token installed). SOL rewards work now.");
+        return;
+      }
+
+      if (!REAL_R) {
+        let simulated = 0;
+        for (const t of traders) {
+          if (db.alreadyRewarded(t.userId, reason)) continue;
+          db.logReward(t.userId, ca, rtype, amount, reason, adminId, "");
+          simulated++;
+        }
+        await ctx.reply(`✅ *Reward logged* [DEVNET]\n\n${simulated} traders × *${amount} ${rtype}*\n\n_Devnet — no real funds moved._`, { parse_mode: "Markdown" });
+        return;
+      }
+
+      // ── REAL PAYOUT (mainnet) ──
+      const treasuryKey = process.env.TREASURY_PRIVATE_KEY || "";
+      if (!treasuryKey) { await ctx.reply("❌ TREASURY_PRIVATE_KEY not set — can't send."); return; }
+
+      const { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Keypair } = require("@solana/web3.js");
+      const bs58 = require("bs58");
+      const connection = new Connection(process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL, "confirmed");
+      const treasury = Keypair.fromSecretKey(bs58.decode(treasuryKey));
+
+      // Build the recipient list first, then verify the treasury can cover the whole batch
+      // before sending anything - avoids paying half the list and running dry.
+      const queue = [];
+      for (const t of traders) {
+        if (db.alreadyRewarded(t.userId, reason)) continue;
+        const ws = db.getWallets(t.userId) || [];
+        const addr = db.getSysConfig(`payout_wallet_${t.userId}`) || (ws[0]?.public_key || "");
+        if (!addr) continue;
+        queue.push({ userId: t.userId, addr });
+      }
+      if (!queue.length) { await ctx.reply("❌ No eligible recipients (already paid, or no payout wallet)."); return; }
+
+      const lamportsEach = Math.floor(amount * LAMPORTS_PER_SOL);
+      const needed = (lamportsEach + 5000) * queue.length;
+      const treasuryBal = await connection.getBalance(treasury.publicKey);
+      if (treasuryBal < needed) {
+        await ctx.reply(`❌ *Treasury too low.*\n\nNeed ~${(needed/LAMPORTS_PER_SOL).toFixed(4)} SOL for ${queue.length} recipients.\nHave ${(treasuryBal/LAMPORTS_PER_SOL).toFixed(4)} SOL.\n\n_Nothing sent._`, { parse_mode: "Markdown" });
+        return;
+      }
+
+      const prog = await ctx.reply(`⏳ Sending ${amount} SOL to ${queue.length} recipients...`);
+      let sent = 0, failed = 0;
+      for (const q of queue) {
+        try {
+          const tx = new Transaction().add(SystemProgram.transfer({
+            fromPubkey: treasury.publicKey, toPubkey: new PublicKey(q.addr), lamports: lamportsEach,
+          }));
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = blockhash; tx.feePayer = treasury.publicKey; tx.sign(treasury);
+          const sig = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
+          await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+          db.logReward(q.userId, ca, rtype, amount, reason, adminId, sig); // real tx hash, not ""
+          sent++;
+        } catch (e) {
+          console.error("[Reward] failed for", q.userId, e.message);
+          failed++;
+        }
+      }
+      await ctx.api.editMessageText(ctx.chat.id, prog.message_id,
+        `✅ *Rewards sent*\n\nPaid: *${sent}* × ${amount} SOL\n${failed ? `Failed: *${failed}* (retry to catch them)\n` : ""}Total: *${(amount*sent).toFixed(4)} SOL*`,
+        { parse_mode: "Markdown" });
+    } catch (e) {
+      console.error("[Reward] batch error:", e.message);
+      await ctx.reply("❌ Reward batch failed: " + String(e.message||"").slice(0,120));
+    } finally {
+      db.setSysConfig(`reward_lock_${adminId}`, "");
+    }
     return;
   }
 

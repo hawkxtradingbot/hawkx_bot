@@ -131,6 +131,14 @@ bot.on("channel_post", async (ctx) => {
     }
   } catch {}
 });
+// ── COPY-CHANNEL MONITOR ─────────────────────────────────────
+// Listens for posts in channels the bot is an admin member of, extracts token addresses,
+// and fires copy-channel buys. Only works for channels the bot has been added to.
+try {
+  const { setupChannelMonitor } = require("./src/modules/copyTrading");
+  setupChannelMonitor(bot);
+} catch (e) { console.error("[CopyTrading] monitor wiring failed:", e.message); }
+
 // ── START POLLING ────────────────────────────────────────────
 bot.start({
   onStart: async (info) => {
