@@ -17,7 +17,7 @@ async function alertAdmin(source, message) {
 
     const adminId = config.ADMIN_IDS[0];
     if (!adminId || !botApiRef) return;
-    await botApiRef.sendMessage(adminId, `⚠️ *[${source}]*\n\n${message}`, { parse_mode: "Markdown" });
+    await botApiRef.sendMessage(adminId, `🦅 *HawkX Team — System Alert*\n\n*Source:* ${source}\n\n${message}`, { parse_mode: "Markdown" });
   } catch (e) {
     console.log("[AdminAlert] failed to send:", e.message);
   }

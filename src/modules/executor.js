@@ -194,9 +194,12 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       const preFeeLamports = Math.floor(solAmount * preFeeRate * 1e9);
       const r = await realBuy({ keypair, tokenMint: ca, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol: settings.priority_fee_manual_sol, feeLamports: preFeeLamports });
       if (!r.ok) {
-        const em = String(r.error||"swap failed").replace(/[_*`[\]]/g,"");
-        if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy failed: " + em); } catch {} }
-        else { await ctx.reply("❌ Buy failed: " + em); }
+        const { formatError } = require("./errorFormat");
+        const fe = formatError(r.error || "swap failed", "buy");
+        if (fe.alert) require("./adminAlert").alertAdmin("Buy", fe.adminDetail || String(r.error)).catch(()=>{});
+        const um = "❌ " + fe.userMsg;
+        if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, um); } catch {} }
+        else { await ctx.reply(um); }
         return null;
       }
       realTxHash = r.signature;
@@ -206,9 +209,12 @@ async function mockBuy(ctx, user, ca, solAmount, source, sourceRef, opts = {}) {
       realTokenAmount = Number(r.outAmount) / Math.pow(10, buyDecimals);
       realPrice = realTokenAmount > 0 ? solAmount / realTokenAmount : 0;
     } catch (err) {
-      const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
-      if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, "❌ Buy error: " + em); } catch {} }
-      else { await ctx.reply("❌ Buy error: " + em); }
+      const { formatError } = require("./errorFormat");
+      const fe = formatError(err, "buy");
+      if (fe.alert) require("./adminAlert").alertAdmin("Buy", fe.adminDetail || String(err.message||err)).catch(()=>{});
+      const um = "❌ " + fe.userMsg;
+      if (processingMsg) { try { await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, um); } catch {} }
+      else { await ctx.reply(um); }
       return null;
     }
   }
@@ -445,7 +451,10 @@ async function mockSell(ctx, user, position, pctToSell = 100, opts = {}) {
       realSellDone = true;
     } catch (err) {
       const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
-      await ctx.reply("❌ Sell error: " + em);
+      const { formatError: _feS } = require("./errorFormat");
+      const _fes = _feS(err, "sell");
+      if (_fes.alert) require("./adminAlert").alertAdmin("Sell", _fes.adminDetail || String(err.message||err)).catch(()=>{});
+      await ctx.reply("❌ " + _fes.userMsg);
       return null;
     }
   } else {
