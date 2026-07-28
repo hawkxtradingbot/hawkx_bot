@@ -127,20 +127,18 @@ async function executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSo
   const txBuf = Buffer.from(swapData.swapTransaction, "base64");
   let tx = VersionedTransaction.deserialize(txBuf);
 
-  // Fold the fee transfer (user -> treasury) AND the HawkX memo into this same transaction
-  const extraIx = [];
+  const originalTx = tx;
   let feeInjected = false;
   if (feeLamports && feeLamports > 0 && process.env.TREASURY_WALLET) {
-    extraIx.push(SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: new PublicKey(process.env.TREASURY_WALLET), lamports: feeLamports }));
-    feeInjected = true;
-  }
-  extraIx.push(buildMemoInstruction("HawkX"));
-
-  if (extraIx.length > 0) {
     try {
-      tx = await injectInstructions(tx, extraIx, connection);
+      const feeIx = SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: new PublicKey(process.env.TREASURY_WALLET), lamports: feeLamports });
+      const injected = await injectInstructions(tx, [feeIx], connection);
+      injected.serialize();
+      tx = injected;
+      feeInjected = true;
     } catch (e) {
-      console.log("[Instruction Inject] failed, proceeding WITHOUT fee/memo:", e.message);
+      console.log("[Fee Inject] overflow/failure, signing original swap without fee:", e.message);
+      tx = originalTx;
       feeInjected = false;
     }
   }
@@ -222,11 +220,33 @@ async function getTokenDecimals(mint) {
 }
 
 async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol, feeLamports }) {
-  const quote = await getQuote(SOL_MINT, tokenMint, String(solLamports), slippageBps);
+  const fee = (feeLamports && feeLamports > 0 && process.env.TREASURY_WALLET) ? feeLamports : 0;
+  let swapLamports = solLamports;
+  let feeCollected = false;
+  if (fee > 0) {
+    try {
+      const connection = getConnection();
+      const feeTx = new (require("@solana/web3.js").Transaction)().add(
+        SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: new PublicKey(process.env.TREASURY_WALLET), lamports: fee })
+      );
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      feeTx.recentBlockhash = blockhash;
+      feeTx.feePayer = keypair.publicKey;
+      feeTx.sign(keypair);
+      await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true, maxRetries: 3 });
+      swapLamports = solLamports - fee;
+      feeCollected = true;
+    } catch (e) {
+      console.log("[Fee-First] fee transfer failed, swapping full amount:", e.message);
+      swapLamports = solLamports;
+      feeCollected = false;
+    }
+  }
+  const quote = await getQuote(SOL_MINT, tokenMint, String(swapLamports), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports: 0 });
   const decimals = await getTokenDecimals(tokenMint);
-  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals };
+  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals, feeCollected };
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.

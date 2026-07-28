@@ -732,7 +732,10 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
         );
       } catch (err) {
         const em = String(err.message||"error").replace(/[_*`[\]]/g,"");
-        await ctx.reply("❌ Withdraw failed: " + em);
+        const { formatError: _feW } = require("../errorFormat");
+        const _few = _feW(err, "withdrawal");
+        if (_few.alert) require("../adminAlert").alertAdmin("Withdraw", _few.adminDetail || String(err.message||err)).catch(()=>{});
+        await ctx.reply("❌ " + _few.userMsg);
       } finally {
         db.setSysConfig(`withdraw_lock_${userId}`, "");
       }

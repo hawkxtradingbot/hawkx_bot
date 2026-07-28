@@ -134,7 +134,7 @@ async function buildBridgeScreen(userId, rawState) {
   }
   const blockReason = insufficient ? `Not enough ${fC.sym} — you hold ${fBal.toFixed(4)}.`
     : noGasLeft ? `Keep at least ${GAS_RESERVE} ${fC.sym} back for the network fee.`
-    : tooSmall ? `Amount too small — send at least ~${MIN_USD}.`
+    : tooSmall ? `Amount too small — send at least ~$${MIN_USD}.`
     : blocked ? `This amount loses too much to network costs.` : null;
   return { text: t, reply_markup: buildBridgeKeyboard(userId, s, blocked), state: s, fromBal: fBal, blocked, blockReason, minUsd: MIN_USD };
 }
