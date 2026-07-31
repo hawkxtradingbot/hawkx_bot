@@ -8,6 +8,7 @@
   },
   "type": "commonjs",
   "dependencies": {
+    "@solana/spl-token": "^0.3.8",
     "@solana/web3.js": "1.87.6",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",

@@ -12,6 +12,14 @@ function isAdmin(userId) {
   return config.ADMIN_IDS.includes(String(userId));
 }
 
+// Edit-in-place screen helper: updates the current message instead of stacking a new one.
+// Falls back to reply if the message can't be edited (e.g. first open).
+async function adminScreen(ctx, msg, keyboard) {
+  const opts = { parse_mode: "Markdown", reply_markup: { inline_keyboard: keyboard } };
+  try { await ctx.editMessageText(msg, opts); }
+  catch { try { await ctx.reply(msg, opts); } catch {} }
+}
+
 // ── Admin Panel Main Screen ───────────────────────────────────
 async function showAdminPanel(ctx) {
   if (!isAdmin(ctx.from.id)) return;
@@ -19,32 +27,63 @@ async function showAdminPanel(ctx) {
   const total = db.getTotalUsers();
   const ranks = db.getRankDistribution();
   const ks    = killSwitch.isActive();
+  const D = getDb => getDb;
+  const _db = db.getDb();
+  const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0,19).replace("T"," "); };
+  const todayIso = new Date().toISOString().slice(0,10) + " 00:00:00";
+
+  // Revenue by period (sum of confirmed fees)
+  const revSum = (since) => { try { const r = _db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed' AND timestamp >= ?").get(since); return (r&&r.t)||0; } catch { return 0; } };
+  const revToday = revSum(todayIso), revWeek = revSum(isoDaysAgo(7)), revMonth = revSum(isoDaysAgo(30));
+  const revAll = (()=>{ try { const r=_db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed'").get(); return (r&&r.t)||0; } catch { return 0; } })();
+
+  // User growth
+  const usersInRange = (since) => { try { const r=_db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= ? OR join_date >= ?").get(since, since); return (r&&r.c)||0; } catch { return 0; } };
+  const newToday = usersInRange(todayIso), newWeek = usersInRange(isoDaysAgo(7));
+  const activeToday = (()=>{ try { const r=_db.prepare("SELECT COUNT(DISTINCT user_id) c FROM trades WHERE timestamp >= ?").get(todayIso); return (r&&r.c)||0; } catch { return 0; } })();
+
+  // Systems
+  const cb = (()=>{ try { return require("./cashback").getConfig(); } catch { return {enabled:false}; } })();
+  const cbWin = (()=>{ try { return require("./cashback").windowInfo(); } catch { return {active:false,msLeft:0}; } })();
+  const cbDays = cbWin.msLeft ? Math.ceil(cbWin.msLeft/86400000) : 0;
+  const chains = (()=>{ try { return _db.prepare("SELECT chain,enabled FROM chain_config").all(); } catch { return []; } })();
+  const chainStr = chains.length ? chains.map(x=>x.chain+" "+(x.enabled?"✅":"🔴")).join(" · ") : "none";
+  const trackedCount = (()=>{ try { return _db.prepare("SELECT COUNT(*) c FROM tracked_tokens WHERE active=1").get().c; } catch { return 0; } })();
+  const promoCount = (()=>{ try { return _db.prepare("SELECT COUNT(*) c FROM users WHERE promoter_status=1").get().c; } catch { return 0; } })();
+
   const now   = new Date().toDateString();
-  const rev   = db.getRevenue(new Date(now).toISOString());
+  const rev   = { total: revToday };
 
   const rankStr = ranks.map((r) => {
     const name = config.RANK_NAMES?.[r.rank] || `R${r.rank}`;
     return `${name}: ${r.cnt}`;
   }).join(" | ");
 
+  const f = (n) => Number(n||0).toFixed(4);
   const msg =
-    `🦅 *HawkX Admin Panel* [DEVNET]\n\n` +
-    `👥 Total Users: *${total}*\n` +
-    `📊 Ranks: ${rankStr}\n\n` +
-    `💰 Revenue Today: *${(rev?.total || 0).toFixed(4)} SOL*\n\n` +
-    `Kill Switch: *${ks ? "🔴 ACTIVE" : "✅ OFF"}*\n\n` +
-    `🧪 DEVNET MODE`;
+    `🦅 *HawkX Admin* ${process.env.MOCK_TRADES === "false" ? "🟢 MAINNET" : "🧪 DEVNET"}\n` +
+    `━━━━━━━━━━━━━━━\n` +
+    `👥 Users: *${total}*  ·  🟢 ${activeToday} active today\n` +
+    `📈 New: +${newToday} today · +${newWeek} this week\n\n` +
+    `💰 *Revenue*\n` +
+    `Today: *${f(revToday)}*  ·  7d: *${f(revWeek)}*\n` +
+    `30d: *${f(revMonth)}*  ·  All: *${f(revAll)}* SOL\n\n` +
+    `⚙️ *Systems*\n` +
+    `Kill Switch: ${ks ? "🔴 ACTIVE" : "✅ OFF"}\n` +
+    `💸 Cashback: ${cb.enabled ? (cbWin.active ? `🟢 ON · ${cb.pct}% · ${cbDays}d left` : `🟡 ON · not started`) : "🔴 OFF"}\n` +
+    `🔗 Chains: ${chainStr}\n` +
+    `🎁 Rewards: ${trackedCount} tracked · ⭐ ${promoCount} promoters\n` +
+    `━━━━━━━━━━━━━━━\n` +
+    `🔄 Tap Refresh to update`;
 
   await ctx.reply(msg, {
     parse_mode: "Markdown",
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📊 Analytics", callback_data: "admin_m_analytics" }, { text: "👤 Users", callback_data: "admin_m_users" }],
-        [{ text: "🎁 Rewards", callback_data: "admin_rewards" }, { text: "📢 Broadcast", callback_data: "admin_broadcast" }],
-        [{ text: "⭐ Promoters", callback_data: "admin_m_promoters" }, { text: "💰 Revenue", callback_data: "admin_revenue" }],
-        [{ text: "🛡 Safety", callback_data: "admin_m_safety" }, { text: "⚙️ System", callback_data: "admin_m_system" }],
-        [{ text: "🔗 Chains", callback_data: "admin_m_chains" }],
-        [{ text: "🔙 Close", callback_data: "menu_main" }],
+        [{ text: "📊 Analytics", callback_data: "admin_m_analytics" }, { text: "💰 Revenue", callback_data: "admin_revenue" }],
+        [{ text: "🎁 Rewards", callback_data: "admin_rewards" }, { text: "⭐ Promoters", callback_data: "admin_m_promoters" }],
+        [{ text: "🛡 Safety", callback_data: "admin_m_safety" }, { text: "⚙️ Config", callback_data: "admin_m_config" }],
+        [{ text: "🔄 Refresh", callback_data: "admin_refresh" }, { text: "🔙 Close", callback_data: "menu_main" }],
       ],
     },
   });
@@ -72,6 +111,60 @@ async function handleAdminCallback(ctx, action) {
     return;
   }
 
+  // ── CASHBACK CONFIG ───────────────────────────────────────
+  if (action === "admin_m_cashback") {
+    await ctx.answerCallbackQuery();
+    const cb = require("./cashback");
+    const c2 = cb.getConfig();
+    const w = cb.windowInfo();
+    const daysLeft = w.msLeft ? Math.ceil(w.msLeft / 86400000) : 0;
+    let msg = "💸 *Cashback*\n\n";
+    msg += `Status: ${c2.enabled ? "✅ ON" : "🔴 OFF"}\n`;
+    msg += `Rate: *${c2.pct}%* of fees\n`;
+    msg += `Pay in: *${c2.mode}*${c2.mode !== "SOL" ? " ("+c2.tokenLabel+")" : ""}\n`;
+    msg += `Window: *${c2.days}d*${w.active ? " — "+daysLeft+"d left" : (c2.enabled ? " — not started/ended" : "")}\n`;
+    msg += `Min fees to qualify: *${c2.minFeeSol}* SOL\n`;
+    if (c2.mode !== "SOL") msg += `Token: \`${c2.tokenMint || "not set"}\`\n`;
+    const rows = [
+      [{ text: c2.enabled ? "🔴 Turn OFF" : "✅ Turn ON", callback_data: "admin_cb_toggle" }],
+      [{ text: "📊 Set %", callback_data: "admin_cb_set_pct" }, { text: "⏱ Set Days", callback_data: "admin_cb_set_days" }],
+      [{ text: "💰 Pay Mode", callback_data: "admin_cb_mode" }, { text: "🎯 Min Fees", callback_data: "admin_cb_set_min" }],
+      [{ text: "🪙 Set Token", callback_data: "admin_cb_set_token" }, { text: "▶ Start Now", callback_data: "admin_cb_start" }],
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ];
+    await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: rows } });
+    return;
+  }
+
+  if (action === "admin_cb_toggle") {
+    const cb = require("./cashback");
+    const cur = cb.getConfig().enabled;
+    cb.setConfig({ enabled: !cur });
+    await ctx.answerCallbackQuery(cur ? "Cashback OFF" : "Cashback ON");
+    return handleAdminCallback(ctx, "admin_m_cashback");
+  }
+
+  if (action === "admin_cb_mode") {
+    const cb = require("./cashback");
+    const order = { SOL: "TOKEN", TOKEN: "BOTH", BOTH: "SOL" };
+    const next = order[cb.getConfig().mode] || "SOL";
+    cb.setConfig({ mode: next });
+    await ctx.answerCallbackQuery("Pay mode: " + next);
+    return handleAdminCallback(ctx, "admin_m_cashback");
+  }
+
+  if (action === "admin_cb_start") {
+    const cb = require("./cashback");
+    cb.setConfig({ startTs: Date.now() });
+    await ctx.answerCallbackQuery("Window started now");
+    return handleAdminCallback(ctx, "admin_m_cashback");
+  }
+
+  if (action === "admin_cb_set_pct")  { await ctx.answerCallbackQuery(); db.setSysConfig(`pending_${ctx.from.id}`, "admin_cb_pct");   return ctx.reply("Enter cashback % (e.g. 20):"); }
+  if (action === "admin_cb_set_days") { await ctx.answerCallbackQuery(); db.setSysConfig(`pending_${ctx.from.id}`, "admin_cb_days");  return ctx.reply("Enter window length in days (e.g. 7):"); }
+  if (action === "admin_cb_set_min")  { await ctx.answerCallbackQuery(); db.setSysConfig(`pending_${ctx.from.id}`, "admin_cb_min");   return ctx.reply("Enter minimum fees in SOL to qualify (e.g. 0.05):"); }
+  if (action === "admin_cb_set_token"){ await ctx.answerCallbackQuery(); db.setSysConfig(`pending_${ctx.from.id}`, "admin_cb_token"); return ctx.reply("Send: <token_mint> <LABEL>  (e.g. Hawk... HAWKX):"); }
+
   if (action.startsWith("admin_chain_toggle_")) {
     const chainKey = action.replace("admin_chain_toggle_", "");
     const current = db.getChainConfig(chainKey);
@@ -87,12 +180,12 @@ async function handleAdminCallback(ctx, action) {
     const tokens = db.getTrackedTokens();
     const history = db.getRewardHistory(100);
     const msg = `🎁 *Rewards & Airdrops*\n━━━━━━━━━━━━━━━\n📍 Tracked tokens: *${tokens.length}*\n📜 Rewards sent: *${history.length}*`;
-    return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+    return adminScreen(ctx, msg, [
       [{ text: "➕ Add Tracked Token", callback_data: "admin_track_add" }],
       [{ text: "📊 Token Stats", callback_data: "admin_track_list" }],
       [{ text: "📜 Reward History", callback_data: "admin_reward_history" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
   }
 
   if (action === "admin_track_add") {
@@ -253,17 +346,28 @@ async function handleAdminCallback(ctx, action) {
   }
 
   if (action === "admin_panel") { await ctx.answerCallbackQuery(); return showAdminPanel(ctx); }
+  if (action === "admin_refresh") { await ctx.answerCallbackQuery("🔄 Updated"); try { await ctx.deleteMessage(); } catch {} return showAdminPanel(ctx); }
+
+  // ── CONFIG (groups Broadcast, Chains, Cashback, System) ──
+  if (action === "admin_m_config") {
+    await ctx.answerCallbackQuery();
+    return adminScreen(ctx, "⚙️ *Config*\n\nBot settings & controls.", [
+      [{ text: "💸 Cashback", callback_data: "admin_m_cashback" }, { text: "🔗 Chains", callback_data: "admin_m_chains" }],
+      [{ text: "📢 Broadcast", callback_data: "admin_broadcast" }, { text: "⚙️ System", callback_data: "admin_m_system" }],
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
+  }
 
   // ── SUBMENUS (match demo) ──
   if (action === "admin_m_analytics") {
     await ctx.answerCallbackQuery();
-    return ctx.reply("📊 *Analytics*", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+    return adminScreen(ctx, "📊 *Analytics*", [
       [{ text: "🔥 Trending Tokens", callback_data: "admin_trending" }],
       [{ text: "👥 All Users", callback_data: "admin_users" }],
       [{ text: "📊 Referral Stats", callback_data: "admin_referral_stats" }],
       [{ text: "📥 Download Data", callback_data: "admin_download" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
   }
   if (action === "admin_trending") {
     await ctx.answerCallbackQuery();
@@ -278,36 +382,29 @@ async function handleAdminCallback(ctx, action) {
     return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: "admin_m_analytics" }]] } });
   }
 
-  if (action === "admin_m_users") {
-    await ctx.answerCallbackQuery();
-    return ctx.reply("👤 *User Management*", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
-      [{ text: "👥 All Users", callback_data: "admin_users" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
-  }
+  if (action === "admin_m_users") { return handleAdminCallback(ctx, "admin_m_analytics"); }
   if (action === "admin_m_promoters") {
     await ctx.answerCallbackQuery();
-    return ctx.reply("⭐ *Promoter Management* (35% tier)", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+    return adminScreen(ctx, "⭐ *Promoter Management* (35% tier)", [
       [{ text: "👑 Add Promoter", callback_data: "admin_add_promoter" }, { text: "🗑 Remove", callback_data: "admin_remove_promoter" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
   }
   if (action === "admin_m_safety") {
     await ctx.answerCallbackQuery();
     const ks2 = killSwitch.isActive();
-    return ctx.reply(`🛡 *Safety Controls*\nTrading: ${ks2 ? "🔴 PAUSED" : "✅ ON"}`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+    return adminScreen(ctx, `🛡 *Safety Controls*\nTrading: ${ks2 ? "🔴 PAUSED" : "✅ ON"}`, [
       [{ text: ks2 ? "✅ Resume Trading" : "🔴 Kill Switch", callback_data: "admin_killswitch" }],
       [{ text: "🚩 Suspicious Activity", callback_data: "admin_suspicious" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
   }
   if (action === "admin_m_system") {
     await ctx.answerCallbackQuery();
-    return ctx.reply("⚙️ *System Health*", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+    return adminScreen(ctx, "⚙️ *System Health*", [
       [{ text: "📡 gRPC / RPC Health", callback_data: "admin_grpc" }],
-      [{ text: "🧪 Simulate +0.5 SOL", callback_data: "admin_sim_trades" }],
-      [{ text: "🔙 Back", callback_data: "admin_panel" }],
-    ]}});
+      [{ text: "← Back", callback_data: "admin_panel" }],
+    ]);
   }
 
   // ── Kill Switch ───────────────────────────────────────────
@@ -528,6 +625,41 @@ async function handleAdminTextInput(ctx, pendingKey) {
     if (!ca || ca.length < 32) { await ctx.reply("❌ Invalid CA."); return; }
     const r = db.addTrackedToken(ca, label, adminId);
     await ctx.reply(r.ok ? `✅ Now tracking *${label || ca.slice(0,10)}*\n\nAll trades of this token are being logged.` : `❌ ${r.reason}`, { parse_mode: "Markdown" });
+    return;
+  }
+
+  // ── Cashback config inputs ──
+  if (pendingKey === "admin_cb_pct") {
+    db.setSysConfig(`pending_${adminId}`, "");
+    const v = parseFloat(text);
+    if (isNaN(v) || v < 0 || v > 100) { await ctx.reply("❌ Enter a % between 0 and 100."); return; }
+    require("./cashback").setConfig({ pct: v });
+    await ctx.reply(`✅ Cashback rate set to *${v}%*`, { parse_mode: "Markdown" });
+    return;
+  }
+  if (pendingKey === "admin_cb_days") {
+    db.setSysConfig(`pending_${adminId}`, "");
+    const v = parseInt(text);
+    if (isNaN(v) || v <= 0) { await ctx.reply("❌ Enter a whole number of days."); return; }
+    require("./cashback").setConfig({ days: v });
+    await ctx.reply(`✅ Window set to *${v} days*`, { parse_mode: "Markdown" });
+    return;
+  }
+  if (pendingKey === "admin_cb_min") {
+    db.setSysConfig(`pending_${adminId}`, "");
+    const v = parseFloat(text);
+    if (isNaN(v) || v < 0) { await ctx.reply("❌ Enter a valid SOL amount."); return; }
+    require("./cashback").setConfig({ minFeeSol: v });
+    await ctx.reply(`✅ Min fees to qualify: *${v} SOL*`, { parse_mode: "Markdown" });
+    return;
+  }
+  if (pendingKey === "admin_cb_token") {
+    db.setSysConfig(`pending_${adminId}`, "");
+    const parts = text.trim().split(/\s+/);
+    const mint = parts[0]; const label = (parts[1] || "TOKEN").toUpperCase();
+    if (!mint || mint.length < 32) { await ctx.reply("❌ Invalid token mint."); return; }
+    require("./cashback").setConfig({ tokenMint: mint, tokenLabel: label });
+    await ctx.reply(`✅ Cashback token set: *${label}*\n\`${mint}\``, { parse_mode: "Markdown" });
     return;
   }
 

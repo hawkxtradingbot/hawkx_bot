@@ -370,8 +370,26 @@ async function buildReferralScreen(ctx, userId, showWallets) {
     msg += `\n\n🎁 *10% fee discount* active! Fee: *0.90%* instead of 1.00%.`;
   }
 
+  // ── Cashback section (only shown when an offer is active) ──
+  const cb = require("../cashback");
+  const cbWin = cb.windowInfo();
+  let cbOwed = 0;
+  if (cbWin.active) {
+    const cbCfg = cb.getConfig();
+    cbOwed = cb.cashbackOwedSol(userId);
+    const daysLeft = Math.ceil(cbWin.msLeft / 86400000);
+    const already = cb.alreadyClaimed(userId);
+    msg += `\n\n💸 *Cashback — ${cbCfg.pct}% of fees*\n`;
+    msg += `Fees paid this period: *${cb.feesPaidInWindow(userId).toFixed(6)} SOL*\n`;
+    msg += `Cashback available: *${cbOwed.toFixed(6)} SOL*${cbCfg.mode !== "SOL" ? " (or "+cbCfg.tokenLabel+")" : ""}\n`;
+    msg += `⏱ ${daysLeft}d left${already ? "  ·  ✅ claimed" : ""}`;
+  }
+
   const claimable = pending2?.total || 0;
   const rows = [];
+  if (cbWin.active && cbOwed > 0 && !cb.alreadyClaimed(userId)) {
+    rows.push([{ text: `💸 Claim ${cbOwed.toFixed(4)} SOL Cashback`, callback_data: "cashback_claim" }]);
+  }
   // Claim — always shown (handler checks 0.01 min)
   rows.push([{ text: `💰 Claim ${claimable.toFixed(4)} SOL`, callback_data: "referral_claim" }]);
 
