@@ -173,19 +173,76 @@ async function checkPosition(pos, notifyFn) {
 }
 
 async function executeSell(pos, user, sellPct, currentPrice, pnlPct, reason, notifyFn) {
-  const solReceived  = pos.sol_invested * (1 + pnlPct / 100) * (sellPct / 100);
   const { getEffectiveFeeRate } = require("./executor");
   const feeRate      = getEffectiveFeeRate(user);
-  const feeSol       = solReceived * feeRate;
-  const txHash       = `DEVNET_AUTO_${Date.now()}`;
+  const sellFraction = sellPct / 100;
   const sign         = pnlPct >= 0 ? "+" : "";
+  const REAL = process.env.MOCK_TRADES === "false";
+  const chain = pos.chain || "SOL";
+
+  let solReceived = pos.sol_invested * (1 + pnlPct / 100) * sellFraction;
+  let feeSol      = solReceived * feeRate;
+  let feeNative   = feeSol;
+  let feeCurrency = "SOL";
+  let txHash      = `DEVNET_AUTO_${Date.now()}`;
+  let platform    = "devnet_mock";
+
+  if (REAL && chain === "SOL") {
+    try {
+      const { realSell, getTokenDecimals } = require("./jupiterSwap");
+      const { decryptWallet } = require("./walletVault");
+      const settingsS = db.getSettings(pos.user_id) || {};
+      const sellWalletId = pos.wallet_id || user.active_wallet_id;
+      const keypair = decryptWallet(sellWalletId);
+      const sellDecimals = await getTokenDecimals(pos.token_ca);
+      const tokensToSell = (pos.token_amount || 0) * sellFraction;
+      const tokenAmountRaw = Math.floor(tokensToSell * Math.pow(10, sellDecimals));
+      if (tokenAmountRaw <= 0) return;
+      const slippageBpsS = Math.floor((settingsS.slippage_pct || 10) * 100);
+      const speedS = settingsS.speed_mode || "fast";
+      const mevOnS = (settingsS.mev_protect ?? 1) ? true : false;
+      const jitoTipS = mevOnS ? Math.floor((settingsS.jito_tip || 0) * 1e9) : 0;
+      const rs = await realSell({ keypair, tokenMint: pos.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol, feeRate });
+      if (!rs.ok) {
+        require("./adminAlert").alertAdmin("AutoSell", `${reason} real sell failed for user ${pos.user_id}: ${rs.error}`).catch(()=>{});
+        if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell didn't go through — will retry. Your position is still open.` });
+        return;
+      }
+      const feeLamports = rs.feeCollected === true ? (rs.feeLamports || 0) : 0;
+      solReceived = (Number(rs.outAmount) - feeLamports) / 1e9;
+      feeSol = feeLamports / 1e9;
+      feeNative = feeSol; feeCurrency = "SOL";
+      txHash = rs.signature; platform = "solana_real";
+    } catch (err) {
+      require("./adminAlert").alertAdmin("AutoSell", `${reason} error for user ${pos.user_id}: ${err.message}`).catch(()=>{});
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell hit an error — will retry. Your position is still open.` });
+      return;
+    }
+  } else if (REAL && chain !== "SOL") {
+    try {
+      const { evmSell } = require("./chains/evm/evmTrade");
+      const r2 = await evmSell(null, user, pos, sellPct, { silent: true });
+      if (!r2 || r2.ok === false) {
+        require("./adminAlert").alertAdmin("AutoSell", `${reason} EVM sell failed for user ${pos.user_id}`).catch(()=>{});
+        if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell didn't go through — will retry. Your position is still open.` });
+        return;
+      }
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `🤖 *${reason} Triggered*\n\nToken: *${pos.token_name || pos.token_ca.slice(0,8)}*\nSold: *${sellPct}%*\nP&L: *${sign}${pnlPct.toFixed(1)}%*` });
+      return;
+    } catch (err) {
+      require("./adminAlert").alertAdmin("AutoSell", `${reason} EVM error for user ${pos.user_id}: ${err.message}`).catch(()=>{});
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell hit an error — will retry. Your position is still open.` });
+      return;
+    }
+  }
 
   db.recordTrade({
     userId: pos.user_id, walletId: pos.wallet_id,
     tokenCa: pos.token_ca, tokenName: pos.token_name || "Unknown",
-    platform: "devnet_mock", action: "sell",
-    solAmount: solReceived, tokenAmount: pos.token_amount * (sellPct / 100),
+    platform, action: "sell",
+    solAmount: solReceived, tokenAmount: pos.token_amount * sellFraction,
     priceSol: currentPrice, feeSol, feeRate, txHash, status: "confirmed",
+    chain, feeNative, feeCurrency,
   });
 
   if (sellPct >= 100) {
