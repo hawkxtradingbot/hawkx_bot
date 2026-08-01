@@ -1037,15 +1037,45 @@ async function showEvmTokenScreen(ctx, user, tokenAddress, asReply = false) {
     infoLines += `💰 <i>Price unavailable - no liquidity pool found for this pair</i>\n`;
   }
 
-  const kb = { inline_keyboard: [
+  // Wallet balance (native coin) — matches the Solana scanner UX
+  const sym = chainCfg?.native_symbol || 'ETH';
+  const evmWallet = db.getWalletForChain(userId, activeChain);
+  if (evmWallet?.public_key) {
+    try {
+      const { getEvmBalance } = require("../chains/evm/wallet");
+      const bal = await getEvmBalance(evmWallet.public_key, chainCfg.rpc_url);
+      infoLines += `👛 <b>Balance</b> ${Number(bal).toFixed(4)} ${sym}\n`;
+    } catch { infoLines += `👛 <i>Balance unavailable</i>\n`; }
+  }
+
+  // Any open position in THIS token on THIS chain → show holdings + sell buttons
+  let heldPos = null;
+  try {
+    const positions = db.getOpenPositions(userId) || [];
+    heldPos = positions.find(pp => (pp.token_ca||"").toLowerCase() === tokenAddress.toLowerCase() && (pp.chain||"SOL") === activeChain);
+  } catch {}
+  if (heldPos) {
+    infoLines += `\n📊 <b>Your Position</b>\n`;
+    infoLines += `Holding: ${Number(heldPos.token_amount||0).toFixed(4)} tokens\n`;
+    infoLines += `Invested: ${Number(heldPos.sol_invested||0).toFixed(4)} ${sym}\n`;
+  }
+
+  const rows = [
     [
       { text: `🟢 Buy ${b1}`, callback_data: `evm_buy_${b1}` },
       { text: `🟢 Buy ${b2}`, callback_data: `evm_buy_${b2}` },
       { text: `🟢 Buy ${b3}`, callback_data: `evm_buy_${b3}` },
     ],
     [{ text: "✏️ Custom Amount", callback_data: "evm_buy_custom" }],
-    [{ text: "🔄 Refresh", callback_data: "evm_token_refresh" }, { text: "← Back", callback_data: "menu_main" }],
-  ]};
+  ];
+  if (heldPos) {
+    rows.push([
+      { text: "🔴 Sell 50%", callback_data: "evm_sell_50" },
+      { text: "🔴 Sell 100%", callback_data: "evm_sell_100" },
+    ]);
+  }
+  rows.push([{ text: "🔄 Refresh", callback_data: "evm_token_refresh" }, { text: "← Back", callback_data: "menu_main" }]);
+  const kb = { inline_keyboard: rows };
 
   if (asReply) return ctx.reply(infoLines, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
   return safeEdit(ctx, infoLines, kb, { parse_mode: "HTML", disable_web_page_preview: true });
