@@ -32,11 +32,22 @@ async function checkPosition(pos, notifyFn) {
   const REAL_SL = process.env.MOCK_TRADES === "false";
   let currentPrice;
   if (REAL_SL) {
+    // MAINNET: only ever decide on a REAL price. Birdeye → DexScreener fallback → if both fail, SKIP this tick.
+    // NEVER use a simulated price to trigger a real sell.
     try {
       const { getTokenOverview } = require("./birdeye");
       const ov = await getTokenOverview(pos.token_ca);
-      currentPrice = (ov && ov.price > 0) ? ov.price : simulatePriceMovement(pos.token_ca);
-    } catch { currentPrice = simulatePriceMovement(pos.token_ca); }
+      if (ov && ov.price > 0) currentPrice = ov.price;
+    } catch {}
+    if (!currentPrice) {
+      try {
+        const axP = require("axios");
+        const drP = await axP.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 5000 });
+        const prP = drP.data && drP.data.pairs && drP.data.pairs[0];
+        if (prP && prP.priceUsd) currentPrice = parseFloat(prP.priceUsd);
+      } catch {}
+    }
+    if (!currentPrice || currentPrice <= 0) return; // no real price → skip, retry next tick (no fake-price decisions)
   } else {
     currentPrice = simulatePriceMovement(pos.token_ca);
   }
@@ -356,11 +367,21 @@ async function checkLimitOrders(notifyFn) {
       const REAL_LO = process.env.MOCK_TRADES === "false";
       let currentPrice;
       if (REAL_LO) {
+        // MAINNET: real price only (Birdeye → DexScreener → skip). Never fire a limit order on a fake price.
         try {
           const { getTokenOverview } = require("./birdeye");
           const ov = await getTokenOverview(order.token_ca);
-          currentPrice = (ov && ov.price > 0) ? ov.price : getMockPrice(order.token_ca);
-        } catch { currentPrice = getMockPrice(order.token_ca); }
+          if (ov && ov.price > 0) currentPrice = ov.price;
+        } catch {}
+        if (!currentPrice) {
+          try {
+            const axL = require("axios");
+            const drL = await axL.get("https://api.dexscreener.com/latest/dex/tokens/" + order.token_ca, { timeout: 5000 });
+            const prL = drL.data && drL.data.pairs && drL.data.pairs[0];
+            if (prL && prL.priceUsd) currentPrice = parseFloat(prL.priceUsd);
+          } catch {}
+        }
+        if (!currentPrice || currentPrice <= 0) continue; // no real price → skip, retry next tick
       } else {
         currentPrice = getMockPrice(order.token_ca);
       }
