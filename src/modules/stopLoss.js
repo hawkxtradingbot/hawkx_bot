@@ -453,70 +453,15 @@ async function checkLimitOrders(notifyFn) {
         if (pos) {
           const user = db.getUser(order.user_id);
           if (user) {
-            const { mockSell } = require("./executor");
-            // Can't use ctx here — use notify instead
             const sellPct   = order.sell_pct || 100;
             const pnlPct    = ((currentPrice - pos.buy_price) / pos.buy_price) * 100;
             const solRec    = pos.sol_invested * (1 + pnlPct / 100) * (sellPct / 100);
-            const { getEffectiveFeeRate } = require("./executor");
-            const feeRate   = getEffectiveFeeRate(user);
-            const feeSol    = solRec * feeRate;
+            const sign      = pnlPct >= 0 ? "+" : "";
 
-            db.recordTrade({
-              userId: pos.user_id, walletId: pos.wallet_id,
-              tokenCa: pos.token_ca, tokenName: pos.token_name || "",
-              platform: "devnet_mock", action: "sell",
-              solAmount: solRec, tokenAmount: pos.token_amount * (sellPct/100),
-              priceSol: currentPrice, feeSol, feeRate,
-              txHash: `DEVNET_LIMIT_${Date.now()}`, status: "confirmed",
-            });
-
-            if (sellPct >= 100) db.closePosition(pos.position_id);
-            db.addVolume(pos.user_id, solRec);
-
-            const sign = pnlPct >= 0 ? "+" : "";
-            if (notifyFn) {
-              notifyFn(order.user_id, "limit_order", {
-                message:
-                  `📌 *Limit Order Executed*\n\n` +
-                  `Token: *${pos.token_name || pos.token_ca.slice(0,8)}*\n` +
-                  `Sold: *${sellPct}%* at target price\n` +
-                  `P&L: *${sign}${pnlPct.toFixed(1)}%*\n` +
-                  `Received: *${solRec.toFixed(4)} SOL*`,
-              });
-              // Generate PnL card
-              try {
-                const { generateTradeCard } = require("./statsCard");
-                const { RANKS } = require("./keyboards");
-                const rank = RANKS[user.rank] || RANKS[1];
-                const soldInvested = pos.sol_invested * (sellPct / 100);
-                const pnlSolVal = solRec - soldInvested;
-                const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
-                const feeSaved = Math.max(0, (solRec * 0.01) - feeSol);
-                const cardResult = await generateTradeCard({
-                  username: user.username || "Trader",
-                  rankName: rank.name, rankNum: user.rank || 1,
-                  tokenName: pos.token_name || pos.token_ca.slice(0,8),
-                  pnlSol: hideAmounts ? 0 : pnlSolVal,
-                  pnlPct, sellPct,
-                  pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * (global.__hawkxSolPx || 150)),
-                  entryMcap: pos.entry_mcap || 0, exitMcap: currentMcap,
-                  invested: hideAmounts ? 0 : soldInvested,
-                  returned: hideAmounts ? 0 : solRec,
-                  feeSaved: hideAmounts ? 0 : feeSaved,
-                  feeRate: rank.fee,
-                  dailyFeeSaved: hideAmounts ? 0 : db.getDailyFeeSaved(user.user_id),
-                  weeklyFeeSaved: hideAmounts ? 0 : db.getWeeklyFeeSaved(user.user_id),
-                  hideAmounts,
-                });
-                if (cardResult?.type === "photo") {
-                  const pnlKb = { inline_keyboard: [[
-                    { text: hideAmounts ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${user.user_id}` }
-                  ]]};
-                  notifyFn(order.user_id, "pnl_card", { buffer: cardResult.buffer, kb: pnlKb });
-                }
-              } catch(e) { console.error('[LimitCard]', e.message); }
-            }
+            // Route through the REAL executeSell (SOL via realSell / HOOD via evmSell / devnet mock,
+            // with safe-fail: no fake record on failure). It records the trade + closes the position.
+            await executeSell(pos, user, sellPct, currentPrice, pnlPct, "📌 Limit Order", notifyFn);
+            db.cancelLimitOrder(order.user_id, order.id);
           }
         }
       }
