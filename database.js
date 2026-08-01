@@ -515,15 +515,17 @@ function recordTrade(data) {
   const result = getDb().prepare(
     `INSERT INTO trades
      (user_id, wallet_id, token_ca, token_name, platform, action,
-      sol_amount, token_amount, price_sol, fee_sol, fee_rate, tx_hash, status, chain)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      sol_amount, token_amount, price_sol, fee_sol, fee_rate, tx_hash, status, chain, fee_native, fee_currency)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     data.userId, data.walletId, data.tokenCa,
     data.tokenName || "Unknown", data.platform || "devnet_mock",
     data.action, data.solAmount, data.tokenAmount || 0,
     data.priceSol || 0, data.feeSol || 0, data.feeRate || 0,
     data.txHash || "DEVNET_MOCK_TX", data.status || "confirmed",
-    data.chain || "SOL"
+    data.chain || "SOL",
+    (data.feeNative != null ? data.feeNative : (data.feeSol || 0)),
+    data.feeCurrency || (data.chain && data.chain !== "SOL" ? "" : "SOL")
   );
   return result.lastInsertRowid;
 }

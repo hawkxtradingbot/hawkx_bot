@@ -106,7 +106,7 @@ async function handleAdminCallback(ctx, action) {
       msg += `${c.label} (${c.chain}): ${status}\n`;
       rows.push([{ text: `${c.enabled ? "🔴 Disable" : "✅ Enable"} ${c.label}`, callback_data: `admin_chain_toggle_${c.chain}` }]);
     });
-    rows.push([{ text: "← Back", callback_data: "admin_panel" }]);
+    rows.push([{ text: "← Back", callback_data: "admin_m_config" }]);
     await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: rows } });
     return;
   }
@@ -130,7 +130,7 @@ async function handleAdminCallback(ctx, action) {
       [{ text: "📊 Set %", callback_data: "admin_cb_set_pct" }, { text: "⏱ Set Days", callback_data: "admin_cb_set_days" }],
       [{ text: "💰 Pay Mode", callback_data: "admin_cb_mode" }, { text: "🎯 Min Fees", callback_data: "admin_cb_set_min" }],
       [{ text: "🪙 Set Token", callback_data: "admin_cb_set_token" }, { text: "▶ Start Now", callback_data: "admin_cb_start" }],
-      [{ text: "← Back", callback_data: "admin_panel" }],
+      [{ text: "← Back", callback_data: "admin_m_config" }],
     ];
     await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: rows } });
     return;
@@ -199,7 +199,7 @@ async function handleAdminCallback(ctx, action) {
     const tokens = db.getTrackedTokens();
     if (!tokens.length) return ctx.reply("No tracked tokens yet. Add one first.");
     const kb = tokens.map(t => [{ text: `${t.label || db.getTokenName(t.token_ca)} · view`, callback_data: `admin_analytics_${t.id}` }]);
-    kb.push([{ text: "🔙 Back", callback_data: "admin_rewards" }]);
+    kb.push([{ text: "← Back", callback_data: "admin_rewards" }]);
     return ctx.reply("📊 *Tracked Tokens* — tap to see traders:", { parse_mode: "Markdown", reply_markup: { inline_keyboard: kb } });
   }
 
@@ -218,9 +218,10 @@ async function handleAdminCallback(ctx, action) {
     });
     if (traders.length > 8) msg += `\n_...+${traders.length-8} more_`;
     return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+      [{ text: "🎁 Reward These Traders", callback_data: `admin_reward_start_${id}` }],
       [{ text: "🎯 Build Airdrop (set criteria)", callback_data: `admin_criteria_${id}` }],
       [{ text: "🗑 Remove Token", callback_data: `admin_track_del_${id}` }],
-      [{ text: "🔙 Back", callback_data: "admin_track_list" }],
+      [{ text: "← Back", callback_data: "admin_track_list" }],
     ]}});
   }
 
@@ -233,7 +234,7 @@ async function handleAdminCallback(ctx, action) {
     return ctx.reply("🎯 Build Airdrop Criteria\n\nAdd tiers one at a time. Each tier = a rule + a reward amount.\n\nExamples:\n• any → 0.01 SOL (everyone who traded)\n• volume >= 5 → 0.4 SOL\n• holdDays >= 3 → 0.6 SOL\n\nTap Add Tier to start.", { reply_markup: { inline_keyboard: [
       [{ text: "➕ Add Tier", callback_data: "admin_crit_add" }],
       [{ text: "✅ Done → Preview", callback_data: "admin_crit_done" }],
-      [{ text: "🔙 Back", callback_data: `admin_analytics_${id}` }],
+      [{ text: "← Back", callback_data: `admin_analytics_${id}` }],
     ]}});
   }
 
@@ -285,26 +286,6 @@ async function handleAdminCallback(ctx, action) {
     return;
   }
 
-  if (action.startsWith("admin_track_view_")) {
-    await ctx.answerCallbackQuery();
-    const id = parseInt(action.replace("admin_track_view_", ""));
-    const tokens = db.getTrackedTokens();
-    const tok = tokens.find(t => t.id === id);
-    if (!tok) return ctx.reply("Not found.");
-    const traders = db.getTrackedTokenTraders(tok.token_ca);
-    db.setSysConfig(`admin_reward_ca_${ctx.from.id}`, tok.token_ca);
-    let msg = `📊 *${tok.label || db.getTokenName(tok.token_ca)}*\n━━━━━━━━━━━━━━━\nTraders: *${traders.length}*\n\n`;
-    traders.slice(0, 10).forEach((t, i) => {
-      const medal = ["🥇","🥈","🥉"][i] || `#${i+1}`;
-      msg += `${medal} ${t.name} · ${t.volume.toFixed(2)} SOL · ${t.trades} trades\n`;
-    });
-    return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
-      [{ text: "🎁 Reward These Traders", callback_data: `admin_reward_start_${id}` }],
-      [{ text: "🗑 Remove Token", callback_data: `admin_track_del_${id}` }],
-      [{ text: "🔙 Back", callback_data: "admin_track_list" }],
-    ]}});
-  }
-
   if (action.startsWith("admin_track_del_")) {
     await ctx.answerCallbackQuery("Removed.");
     db.removeTrackedToken(parseInt(action.replace("admin_track_del_", "")));
@@ -315,7 +296,7 @@ async function handleAdminCallback(ctx, action) {
     await ctx.answerCallbackQuery();
     return ctx.reply("🎁 *Send Reward*\n\nChoose recipients:", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
       [{ text: "🏆 Top 10", callback_data: "admin_reward_top10" }, { text: "👥 All traders", callback_data: "admin_reward_all" }],
-      [{ text: "🔙 Back", callback_data: "admin_rewards" }],
+      [{ text: "← Back", callback_data: "admin_rewards" }],
     ]}});
   }
 
@@ -325,7 +306,7 @@ async function handleAdminCallback(ctx, action) {
     db.setSysConfig(`admin_reward_recipients_${ctx.from.id}`, action === "admin_reward_top10" ? "top10" : "all");
     return ctx.reply("💰 *Reward Type*\n\nPay in SOL or the token?", { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
       [{ text: "💰 SOL", callback_data: "admin_reward_pay_sol" }, { text: "🪙 Token", callback_data: "admin_reward_pay_token" }],
-      [{ text: "🔙 Back", callback_data: "admin_rewards" }],
+      [{ text: "← Back", callback_data: "admin_rewards" }],
     ]}});
   }
 
@@ -379,16 +360,79 @@ async function handleAdminCallback(ctx, action) {
     msg += "\n*Last 7 days:*\n";
     if (!t7d.length) msg += "_No buys in 7d._\n";
     else t7d.forEach((t,i) => { msg += `${i+1}. ${t.token_name||t.token_ca.slice(0,8)} · 👥${t.buyers} · 💰${t.volume.toFixed(1)} SOL\n`; });
-    return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: "admin_m_analytics" }]] } });
+    return adminScreen(ctx, msg, [[{ text: "← Back", callback_data: "admin_m_analytics" }]]);
   }
 
   if (action === "admin_m_users") { return handleAdminCallback(ctx, "admin_m_analytics"); }
   if (action === "admin_m_promoters") {
     await ctx.answerCallbackQuery();
-    return adminScreen(ctx, "⭐ *Promoter Management* (35% tier)", [
-      [{ text: "👑 Add Promoter", callback_data: "admin_add_promoter" }, { text: "🗑 Remove", callback_data: "admin_remove_promoter" }],
-      [{ text: "← Back", callback_data: "admin_panel" }],
+    let proms = [];
+    try { proms = db.getDb().prepare("SELECT user_id, username, promoter_rate FROM users WHERE promoter_status=1").all(); } catch {}
+    let pmsg = "⭐ *Promoter Management*\n━━━━━━━━━━━━━━━\n";
+    const rows = [];
+    if (!proms.length) pmsg += "\n_No promoters yet. Tap Add Promoter._";
+    else {
+      pmsg += `\nActive promoters: *${proms.length}*\n\nTap a name to see their stats, or 🗑 to remove.`;
+      proms.forEach(u => {
+        const rate = u.promoter_rate ? Math.round(u.promoter_rate*100)+"%" : "35%";
+        const name = (u.username || String(u.user_id)).slice(0,18);
+        rows.push([
+          { text: `👑 ${name} · ${rate}`, callback_data: `admin_prom_view_${u.user_id}` },
+          { text: "🗑", callback_data: `admin_prom_del_${u.user_id}` },
+        ]);
+      });
+    }
+    rows.push([{ text: "👑 Add Promoter", callback_data: "admin_add_promoter" }]);
+    rows.push([{ text: "← Back", callback_data: "admin_panel" }]);
+    return adminScreen(ctx, pmsg, rows);
+  }
+
+  // ── Promoter detail: referrals, volume, earnings ──
+  if (action.startsWith("admin_prom_view_")) {
+    await ctx.answerCallbackQuery();
+    const uid = parseInt(action.replace("admin_prom_view_", ""));
+    const u = db.getUser(uid);
+    if (!u) return adminScreen(ctx, "Promoter not found.", [[{ text: "← Back", callback_data: "admin_m_promoters" }]]);
+    const rate = u.promoter_rate ? Math.round(u.promoter_rate*100)+"%" : "35%";
+    const count = db.getDirectReferralCount(uid);
+    const total = db.getTotalEarnings(uid);
+    const paid = db.getPaidEarnings(uid);
+    const pending = db.getPendingEarnings(uid);
+    const vol = (u.cumulative_volume_sol || 0).toFixed(2);
+    let msg = `👑 *${u.username || uid}*\n━━━━━━━━━━━━━━━\n`;
+    msg += `Rate: *${rate}* lifetime rev-share\n`;
+    msg += `Direct referrals: *${count}*\n`;
+    msg += `Their trading volume: *${vol} SOL*\n\n`;
+    msg += `💎 Earned: *${(total?.total||0).toFixed(4)} SOL*\n`;
+    msg += `✅ Paid: *${(paid?.total||0).toFixed(4)} SOL*\n`;
+    msg += `💰 Pending: *${(pending?.total||0).toFixed(4)} SOL*`;
+    return adminScreen(ctx, msg, [
+      [{ text: "🗑 Remove Promoter", callback_data: `admin_prom_del_${uid}` }],
+      [{ text: "← Back", callback_data: "admin_m_promoters" }],
     ]);
+  }
+
+  // ── Delete confirm ──
+  if (action.startsWith("admin_prom_del_") && !action.startsWith("admin_prom_del_yes_")) {
+    await ctx.answerCallbackQuery();
+    const uid = parseInt(action.replace("admin_prom_del_", ""));
+    const u = db.getUser(uid);
+    const name = u ? (u.username || uid) : uid;
+    return adminScreen(ctx, `🗑 *Remove promoter?*\n\n*${name}* will lose their promoter rate and drop to the standard 30% referral rate. They keep any earnings already accrued.\n\nConfirm?`, [
+      [{ text: "✅ Yes, remove", callback_data: `admin_prom_del_yes_${uid}` }],
+      [{ text: "← Cancel", callback_data: "admin_m_promoters" }],
+    ]);
+  }
+
+  // ── Delete confirmed → remove + DM ──
+  if (action.startsWith("admin_prom_del_yes_")) {
+    await ctx.answerCallbackQuery("Removed");
+    const uid = parseInt(action.replace("admin_prom_del_yes_", ""));
+    db.updateUser(uid, { promoter_status: 0 });
+    try {
+      await ctx.api.sendMessage(uid, "📋 *HawkX Partner Program — Update*\n\nYour promoter status has ended, and your referral rate has returned to the standard 30%. Any earnings you've already made are safe and still claimable in the Referrals menu.\n\nThank you for being part of HawkX. You're welcome back anytime.\n\n— The HawkX Team", { parse_mode: "Markdown" });
+    } catch {}
+    return handleAdminCallback(ctx, "admin_m_promoters");
   }
   if (action === "admin_m_safety") {
     await ctx.answerCallbackQuery();
@@ -403,7 +447,7 @@ async function handleAdminCallback(ctx, action) {
     await ctx.answerCallbackQuery();
     return adminScreen(ctx, "⚙️ *System Health*", [
       [{ text: "📡 gRPC / RPC Health", callback_data: "admin_grpc" }],
-      [{ text: "← Back", callback_data: "admin_panel" }],
+      [{ text: "← Back", callback_data: "admin_m_config" }],
     ]);
   }
 
@@ -462,10 +506,7 @@ async function handleAdminCallback(ctx, action) {
       });
     }
 
-    await ctx.reply(msg, {
-      parse_mode: "Markdown",
-      reply_markup: { inline_keyboard: [[{ text: "← Back", callback_data: "admin_panel" }]] },
-    });
+    await adminScreen(ctx, msg, [[{ text: "← Back", callback_data: "admin_panel" }]]);
 
   // ── All Users Referral Stats ──────────────────────────────
   } else if (action === "admin_referral_stats") {
@@ -625,6 +666,39 @@ async function handleAdminTextInput(ctx, pendingKey) {
     if (!ca || ca.length < 32) { await ctx.reply("❌ Invalid CA."); return; }
     const r = db.addTrackedToken(ca, label, adminId);
     await ctx.reply(r.ok ? `✅ Now tracking *${label || ca.slice(0,10)}*\n\nAll trades of this token are being logged.` : `❌ ${r.reason}`, { parse_mode: "Markdown" });
+    return;
+  }
+
+  // ── Airdrop tier input (parse "field op value amount") ──
+  if (pendingKey === "admin_crit_add") {
+    db.setSysConfig(`pending_${adminId}`, "");
+    const parts = text.trim().split(/\s+/);
+    const FIELDS = ["any", "volume", "buys", "sells", "holdDays"];
+    const OPS = [">=", ">", "<=", "<", "=="];
+    let field, op, value, amount;
+    if (parts[0] === "any") {
+      // "any 0 0 <amount>"  or  "any <amount>"
+      field = "any"; op = ">="; value = 0;
+      amount = parseFloat(parts.length >= 4 ? parts[3] : parts[1]);
+    } else {
+      // "field op value amount"
+      if (parts.length < 4) { await ctx.reply("❌ Format: `field op value amount`\nExample: `volume >= 5 0.4`", { parse_mode: "Markdown" }); return; }
+      [field, op] = parts;
+      value = parseFloat(parts[2]);
+      amount = parseFloat(parts[3]);
+      if (!FIELDS.includes(field)) { await ctx.reply(`❌ Unknown field "${field}".\nUse: volume, buys, sells, holdDays, or any.`); return; }
+      if (!OPS.includes(op)) { await ctx.reply(`❌ Unknown operator "${op}".\nUse: >= > <= < ==`); return; }
+      if (isNaN(value)) { await ctx.reply("❌ Value must be a number, e.g. `volume >= 5 0.4`.", { parse_mode: "Markdown" }); return; }
+    }
+    if (isNaN(amount) || amount <= 0) { await ctx.reply("❌ Reward amount must be a positive number (SOL)."); return; }
+    let crit = []; try { crit = JSON.parse(db.getSysConfig(`admin_crit_list_${adminId}`) || "[]"); } catch {}
+    crit.push({ field, op, value, amount });
+    db.setSysConfig(`admin_crit_list_${adminId}`, JSON.stringify(crit));
+    const label = field === "any" ? `everyone → ${amount} SOL` : `${field} ${op} ${value} → ${amount} SOL`;
+    await ctx.reply(`✅ Tier added: *${label}*\n\nYou have *${crit.length}* tier(s). Add another, or tap ✅ Done → Preview.`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [
+      [{ text: "➕ Add Another Tier", callback_data: "admin_crit_add" }],
+      [{ text: "✅ Done → Preview", callback_data: "admin_crit_done" }],
+    ]}});
     return;
   }
 

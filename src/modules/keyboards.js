@@ -132,11 +132,14 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
 function buildBeginnerSettingsMenu(user) {
   const s  = user?.settings || {};
   const kb = new InlineKeyboard();
+  const chain = user?.active_chain || "SOL";
+  const isSol = chain === "SOL";
+  const coin = isSol ? "SOL" : "ETH";
 
-  // Buy amounts — 3 per row
-  kb.text(`🟢 ${s.buy_amt_1||0.1} SOL`, "bset_buy1")
-    .text(`🟢 ${s.buy_amt_2||0.5} SOL`, "bset_buy2")
-    .text(`🟢 ${s.buy_amt_3||1.0} SOL`, "bset_buy3")
+  // Buy amounts — 3 per row (label in the active chain's coin)
+  kb.text(`🟢 ${s.buy_amt_1||0.1} ${coin}`, "bset_buy1")
+    .text(`🟢 ${s.buy_amt_2||0.5} ${coin}`, "bset_buy2")
+    .text(`🟢 ${s.buy_amt_3||1.0} ${coin}`, "bset_buy3")
     .row();
 
   // Sell amounts — 3 per row
@@ -145,23 +148,26 @@ function buildBeginnerSettingsMenu(user) {
     .text("🔴 Initial",               "bset_sell_info")
     .row();
 
-  // Slippage — 2 per row
+  // Slippage — 2 per row (universal, all chains)
   kb.text(`📉 Buy Slippage: ${s.slippage_pct||10}%`,      "set_slippage")
     .text(`📉 Sell Slippage: ${s.sell_slippage_pct||10}%`, "set_sell_slippage")
     .row();
 
-  // Trade speed — 3 per row
-  const spd = s.speed_mode || "fast";
-  kb.text(spd==="fast"   ? "✅ Fast 🐎"   : "Fast 🐎",   "bset_speed_fast")
-    .text(spd==="turbo"  ? "✅ Turbo 🚀"  : "Turbo 🚀",  "bset_speed_turbo")
-    .text(spd==="custom" ? "✅ Custom ✏️" : "Custom ✏️", "bset_speed_custom")
-    .row();
-
-  // MEV protection toggle + Show/Hide side by side
-  const bMev = s?.mev_protect ?? 1;
-  kb.text(bMev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ⬜", "set_mev")
-    .text("👁 Show/Hide", "bset_show_hide")
-    .row();
+  // Trade speed + MEV — SOLANA ONLY (Jito-based priority/protection; N/A on EVM/Uniswap)
+  if (isSol) {
+    const spd = s.speed_mode || "fast";
+    kb.text(spd==="fast"   ? "✅ Fast 🐎"   : "Fast 🐎",   "bset_speed_fast")
+      .text(spd==="turbo"  ? "✅ Turbo 🚀"  : "Turbo 🚀",  "bset_speed_turbo")
+      .text(spd==="custom" ? "✅ Custom ✏️" : "Custom ✏️", "bset_speed_custom")
+      .row();
+    const bMev = s?.mev_protect ?? 1;
+    kb.text(bMev ? "🛡 MEV: ON ✅" : "🛡 MEV: OFF ⬜", "set_mev")
+      .text("👁 Show/Hide", "bset_show_hide")
+      .row();
+  } else {
+    // EVM chains: no Jito speed / no MEV toggle — just keep Show/Hide
+    kb.text("👁 Show/Hide", "bset_show_hide").row();
+  }
   kb.text(user?.sap_enabled ? "🔐 Change PIN" : "🔐 Set PIN", "set_sap").text("🌐 Language", "set_language").row();
   kb.text("📊 PnL Card Settings", "pnlcard_settings_screen").text((s.price_notif ?? 1) ? "🔔 Alerts: ON ✅" : "🔔 Alerts: OFF ⬜", "set_price_notif").row();
   kb.text("⚡ Pro Mode →", "mode_set_pro").row();
@@ -186,8 +192,9 @@ function buildProSettingsMenu(user) {
   return kb;
 }
 
-function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false, slipExpanded = false) {
+function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false, slipExpanded = false, chain = "SOL") {
   const kb = new InlineKeyboard();
+  const isSol = chain === "SOL";
   const spd = s?.speed_mode || "fast";
   const mev = s?.mev_protect ?? 1;
   const cur = s?.jito_tip || 0.001;
@@ -208,22 +215,23 @@ function buildExecutionSettingsMenu(s, jitoExpanded = false, spdExpanded = false
     kb.text(`📉 Buy: ${buySl}% | Sell: ${sellSl}%`, "pset_slippage_expand").row();
   }
 
-  // Speed
-  if (spdExpanded) {
+  // Speed — SOLANA ONLY (Jito-based priority; EVM uses standard gas)
+  if (isSol && spdExpanded) {
     kb.text(spd==="standard"?"✅ Std":"Std", "pset_speed_standard").text(spd==="fast"?"✅ Fast 🐎":"Fast 🐎", "bset_speed_fast").text(spd==="turbo"?"✅ Turbo 🚀":"Turbo 🚀", "bset_speed_turbo").row();
     kb.text(spd==="boost"?"✅ Boost 🔥":"Boost 🔥", "pset_speed_boost").text(spd==="custom"?"✅ Custom ✏️":"Custom ✏️", "bset_speed_custom").row();
-  } else {
+  } else if (isSol) {
     const spdLabel = spd==="standard"?"Std ⬜":spd==="fast"?"Fast 🐎 ✅":spd==="turbo"?"Turbo 🚀 ✅":spd==="boost"?"Boost 🔥 ✅":"Custom ✅";
     kb.text(`⚡ Speed: ${spdLabel}`, "pset_speed_expand").row();
   }
 
-  kb.text(s?.confirm_trades ? "✅ Confirm" : "⬜ Confirm", "pset_confirm").text(mev ? "✅ MEV" : "⬜ MEV", "set_mev").row();
+  if (isSol) { kb.text(s?.confirm_trades ? "✅ Confirm" : "⬜ Confirm", "pset_confirm").text(mev ? "✅ MEV" : "⬜ MEV", "set_mev").row(); }
+  else { kb.text(s?.confirm_trades ? "✅ Confirm" : "⬜ Confirm", "pset_confirm").row(); }
 
-  // Jito
-  if (jitoExpanded) {
+  // Jito — SOLANA ONLY
+  if (isSol && jitoExpanded) {
     kb.text(cur===0.0001?"✅ Min":"Min", "pset_jito_preset_0.0001").text(cur===0.001?"✅ Std":"Std", "pset_jito_preset_0.001").text(cur===0.005?"✅ Fast":"Fast", "pset_jito_preset_0.005").row();
     kb.text(cur===0.01?"✅ Fast":"Fast", "pset_jito_preset_0.01").text(cur===0.05?"✅ Pri":"Pri", "pset_jito_preset_0.05").text("✏️", "pset_jito_custom").row();
-  } else {
+  } else if (isSol) {
     kb.text(`⚡ Jito: ${cur} SOL`, "pset_jito").row();
   }
 

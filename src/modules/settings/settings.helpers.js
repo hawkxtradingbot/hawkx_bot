@@ -14,6 +14,7 @@ const {
 async function showSettings(ctx, user) {
   const settings = db.getSettings(user.user_id);
   const isProMode = user.mode === "pro";
+  const _coin = (user.active_chain && user.active_chain !== "SOL") ? "ETH" : "SOL";
   const userWithSettings = { ...user, settings };
   const guide = isProMode
     ? "⚙️ *Pro Settings* — Choose a category:\n\n" +
@@ -22,7 +23,7 @@ async function showSettings(ctx, user) {
       "🔒 *Risk* — Max trade size, daily limits, SL/TP\n" +
       "🔔 *Alerts* — Price alerts and notifications"
     : "⚙️ *Beginner Settings* — Tap any button to change instantly.\n\n" +
-      "🟢 *Buy amounts* — SOL per trade\n" +
+      `🟢 *Buy amounts* — ${_coin} per trade\n` +
       "🔴 *Sell %* — % of position to sell\n" +
       "📉 *Slippage* — Price tolerance %\n" +
       "⚡ *Speed* — Trade execution priority\n" +
