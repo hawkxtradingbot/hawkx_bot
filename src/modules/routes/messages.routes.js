@@ -193,6 +193,27 @@ function setupMessages(bot) {
       return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
+      // EVM/HOOD custom buy amount
+    if (pending === "evm_buy_custom") {
+      db.setSysConfig(`pending_${userId}`, "");
+      const amt = parseFloat(text);
+      if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Enter a valid amount (e.g. 0.25)."); return; }
+      const tokenCa = db.getSysConfig(`pending_ca_${userId}`) || "";
+      if (!tokenCa) { await ctx.reply("❌ No token selected. Paste a token first."); return; }
+      const freshU = db.getUser(userId);
+      const activeChain = db.getActiveChain(userId);
+      const { evmBuy } = require("../chains/evm/evmTrade");
+      try {
+        await evmBuy(ctx, freshU, tokenCa, amt, "manual", null, {}, activeChain);
+      } catch (e) {
+        const { formatError } = require("../errorFormat");
+        const fe = formatError(e, "evm buy");
+        if (fe.alert) require("../adminAlert").alertAdmin("EVM Buy", fe.adminDetail || String(e.message||e)).catch(()=>{});
+        await ctx.reply("❌ " + fe.userMsg);
+      }
+      return;
+    }
+
       if (settingsPending.includes(pending)) {
       const freshUser = db.getUser(userId);
       return handleTextInput(ctx, freshUser, pending);

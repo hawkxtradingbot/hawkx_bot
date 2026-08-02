@@ -70,6 +70,7 @@ function setupRouter(bot) {
 
 
     if (await handleTradingCallbacks(ctx, data, userId, user, bot, ks)) return;
+    if (await require("./routes/callbacks.evm").handleEvmCallbacks(ctx, data, userId, user, bot, ks)) return;
     if (await handlePnlCardToggle(ctx, data, userId)) return;
     if (await handlePnlCardSettingsScreen(ctx, data, userId, db)) return;
     if (await handlePnlCardGranularToggle(ctx, data, userId, db)) return;
