@@ -31,20 +31,30 @@ async function checkPosition(pos, notifyFn) {
   const settings     = db.getSettings(pos.user_id) || {};
   const REAL_SL = process.env.MOCK_TRADES === "false";
   let currentPrice;
+  const posChain = pos.chain || "SOL";
   if (REAL_SL) {
-    // MAINNET: only ever decide on a REAL price. Birdeye → DexScreener fallback → if both fail, SKIP this tick.
+    // MAINNET: only ever decide on a REAL price. Chain-specific source. If it fails, SKIP this tick.
     // NEVER use a simulated price to trigger a real sell.
-    try {
-      const { getTokenOverview } = require("./birdeye");
-      const ov = await getTokenOverview(pos.token_ca);
-      if (ov && ov.price > 0) currentPrice = ov.price;
-    } catch {}
-    if (!currentPrice) {
+    if (posChain === "SOL") {
       try {
-        const axP = require("axios");
-        const drP = await axP.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 5000 });
-        const prP = drP.data && drP.data.pairs && drP.data.pairs[0];
-        if (prP && prP.priceUsd) currentPrice = parseFloat(prP.priceUsd);
+        const { getTokenOverview } = require("./birdeye");
+        const ov = await getTokenOverview(pos.token_ca);
+        if (ov && ov.price > 0) currentPrice = ov.price;
+      } catch {}
+      if (!currentPrice) {
+        try {
+          const axP = require("axios");
+          const drP = await axP.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 5000 });
+          const prP = drP.data && drP.data.pairs && drP.data.pairs[0];
+          if (prP && prP.priceUsd) currentPrice = parseFloat(prP.priceUsd);
+        } catch {}
+      }
+    } else {
+      // EVM/HOOD: price via the chain's Uniswap quoter (priceInEth), same source used to trade it.
+      try {
+        const { getTokenInfo } = require("./chains/evm/uniswap");
+        const ti = await getTokenInfo(posChain, pos.token_ca);
+        if (ti && ti.priceInEth > 0) currentPrice = ti.priceInEth;
       } catch {}
     }
     if (!currentPrice || currentPrice <= 0) return; // no real price → skip, retry next tick (no fake-price decisions)
@@ -366,19 +376,28 @@ async function checkLimitOrders(notifyFn) {
       if (Date.now() - createdAt < 5000) continue;
       const REAL_LO = process.env.MOCK_TRADES === "false";
       let currentPrice;
+      const ordChain = order.chain || "SOL";
       if (REAL_LO) {
-        // MAINNET: real price only (Birdeye → DexScreener → skip). Never fire a limit order on a fake price.
-        try {
-          const { getTokenOverview } = require("./birdeye");
-          const ov = await getTokenOverview(order.token_ca);
-          if (ov && ov.price > 0) currentPrice = ov.price;
-        } catch {}
-        if (!currentPrice) {
+        // MAINNET: real price only, chain-specific source. Never fire a limit order on a fake price.
+        if (ordChain === "SOL") {
           try {
-            const axL = require("axios");
-            const drL = await axL.get("https://api.dexscreener.com/latest/dex/tokens/" + order.token_ca, { timeout: 5000 });
-            const prL = drL.data && drL.data.pairs && drL.data.pairs[0];
-            if (prL && prL.priceUsd) currentPrice = parseFloat(prL.priceUsd);
+            const { getTokenOverview } = require("./birdeye");
+            const ov = await getTokenOverview(order.token_ca);
+            if (ov && ov.price > 0) currentPrice = ov.price;
+          } catch {}
+          if (!currentPrice) {
+            try {
+              const axL = require("axios");
+              const drL = await axL.get("https://api.dexscreener.com/latest/dex/tokens/" + order.token_ca, { timeout: 5000 });
+              const prL = drL.data && drL.data.pairs && drL.data.pairs[0];
+              if (prL && prL.priceUsd) currentPrice = parseFloat(prL.priceUsd);
+            } catch {}
+          }
+        } else {
+          try {
+            const { getTokenInfo } = require("./chains/evm/uniswap");
+            const ti = await getTokenInfo(ordChain, order.token_ca);
+            if (ti && ti.priceInEth > 0) currentPrice = ti.priceInEth;
           } catch {}
         }
         if (!currentPrice || currentPrice <= 0) continue; // no real price → skip, retry next tick
