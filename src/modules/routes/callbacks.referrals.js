@@ -2,6 +2,7 @@ const db = require("../../../database");
 const { buildReferralScreen } = require("./helpers.routes");
 const { InputFile } = require("grammy");
 
+function cfgExplorer(chain, tx){ try{ const cfg=db.getChainConfig(chain); return cfg&&cfg.explorer_url ? "[Explorer]("+cfg.explorer_url+"/tx/"+tx+")" : tx; }catch{ return tx; } }
 async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
     // ── REFERRALS ─────────────────────────────────────────────
     if (data === "menu_referrals") {
@@ -144,6 +145,26 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
           await ctx.answerCallbackQuery({ text: "Payout failed: " + em.slice(0,60), show_alert: true });
           return true;
         }
+        // ── Also pay any pending HOOD/ETH referral earnings ──
+        try {
+          const ethCurs = db.getPendingCurrencies(userId).filter(x => x.cur !== "SOL");
+          for (const ec of ethCurs) {
+            const owedEth = ec.total || 0;
+            if (owedEth <= 0) continue;
+            const evmWallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === "HOOD");
+            const ethDest = evmWallets[0]?.public_key;
+            if (!ethDest) continue; // no HOOD wallet → leave earnings pending until they have one
+            const { sendEvmNative } = require("../evmPayout");
+            const res = await sendEvmNative(ethDest, owedEth, "HOOD");
+            if (res.ok) {
+              db.claimEarnings(userId, 0, "HOOD");
+              await ctx.reply(`✅ *Also claimed ${owedEth.toFixed(6)} ${ec.cur}!*\nSent to your HOOD wallet.\n🔗 ${cfgExplorer("HOOD", res.txHash)}`, { parse_mode: "Markdown", disable_web_page_preview: true });
+            } else {
+              require("../adminAlert").alertAdmin("EVM Claim", `referral ETH payout failed user ${userId}: ${res.error}`).catch(()=>{});
+            }
+          }
+        } catch (e) { require("../adminAlert").alertAdmin("EVM Claim", "referral ETH claim error: " + e.message).catch(()=>{}); }
+
         return buildReferralScreen(ctx, userId, false);
       }
 

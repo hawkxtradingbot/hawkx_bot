@@ -788,12 +788,17 @@ function getReferralChain(userId) {
 
 function addReferralEarning(data) {
   getDb().prepare(
-    "INSERT INTO referral_earnings (user_id, from_user_id, level, fee_sol, earned_sol, trade_id, paid) VALUES (?, ?, ?, ?, ?, ?, 0)"
-  ).run(data.userId, data.fromUserId, data.level, data.feeSol, data.earnedSol, data.tradeId);
+    "INSERT INTO referral_earnings (user_id, from_user_id, level, fee_sol, earned_sol, fee_native, earned_native, currency, trade_id, paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+  ).run(data.userId, data.fromUserId, data.level, data.feeSol||0, data.earnedSol||0, data.feeNative!=null?data.feeNative:(data.feeSol||0), data.earnedNative!=null?data.earnedNative:(data.earnedSol||0), data.currency||"SOL", data.tradeId);
 }
 
-function getPendingEarnings(userId) {
-  return getDb().prepare("SELECT SUM(earned_sol) as total FROM referral_earnings WHERE user_id = ? AND paid = 0").get(userId);
+function getPendingEarnings(userId, currency = "SOL") {
+  // SOL default preserves existing callers; pass a currency to get that chain's pending native earnings.
+  return getDb().prepare("SELECT SUM(earned_native) as total FROM referral_earnings WHERE user_id = ? AND paid = 0 AND COALESCE(currency,'SOL') = ?").get(userId, currency);
+}
+// Currencies a user has unclaimed earnings in (so the claim screen can show SOL + ETH separately)
+function getPendingCurrencies(userId) {
+  return getDb().prepare("SELECT COALESCE(currency,'SOL') cur, SUM(earned_native) total FROM referral_earnings WHERE user_id = ? AND paid = 0 GROUP BY COALESCE(currency,'SOL') HAVING total > 0").all(userId);
 }
 
 function getTotalEarnings(userId) {
@@ -882,13 +887,13 @@ function markEarningsPaid(userId) {
 }
 
 // Manual claim: check minimum, mark paid, return result
-function claimEarnings(userId, minClaim = 0.01) {
-  const row = getDb().prepare("SELECT SUM(earned_sol) as total FROM referral_earnings WHERE user_id = ? AND paid = 0").get(userId);
+function claimEarnings(userId, minClaim = 0.01, currency = "SOL") {
+  const row = getDb().prepare("SELECT SUM(earned_native) as total FROM referral_earnings WHERE user_id = ? AND paid = 0 AND COALESCE(currency,'SOL') = ?").get(userId, currency);
   const pending = row?.total || 0;
   if (pending < minClaim) {
     return { ok: false, pending, min: minClaim };
   }
-  getDb().prepare("UPDATE referral_earnings SET paid = 1 WHERE user_id = ? AND paid = 0").run(userId);
+  getDb().prepare("UPDATE referral_earnings SET paid = 1 WHERE user_id = ? AND paid = 0 AND COALESCE(currency,'SOL') = ?").run(userId, currency);
   return { ok: true, claimed: pending };
 }
 
@@ -1657,7 +1662,7 @@ module.exports = {
   openPosition, getOpenPositions, getPositionsBySource,
   closePosition, getAllOpenPositions, setPositionNote, getPosition,
   buildReferralChain, getReferralChain, addReferralEarning,
-  getPendingEarnings, getTotalEarnings, getPaidEarnings,
+  getPendingEarnings, getPendingCurrencies, getTotalEarnings, getPaidEarnings,
   getDirectReferralCount, getUserByUsername, getUserByReferralCode, ensureReferralCode, setCustomCode, markEarningsPaid, claimEarnings, getAllPendingPayouts, checkReferralMilestone,
   getWatchlist, addToWatchlist, removeFromWatchlist,
   getCopyWallets, addCopyWallet, deleteCopyWallet, toggleCopyWallet, updateCopyWallet,

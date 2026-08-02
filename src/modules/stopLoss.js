@@ -277,7 +277,7 @@ async function executeSell(pos, user, sellPct, currentPrice, pnlPct, reason, not
 
   db.addVolume(pos.user_id, solReceived);
   const { creditReferralEarnings } = require("./referrals");
-  creditReferralEarnings(pos.user_id, null, feeSol);
+  creditReferralEarnings(pos.user_id, null, feeNative, feeCurrency);
 
   if (notifyFn) {
     notifyFn(pos.user_id, "auto_sell", {
