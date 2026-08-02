@@ -33,9 +33,13 @@ async function showAdminPanel(ctx) {
   const todayIso = new Date().toISOString().slice(0,10) + " 00:00:00";
 
   // Revenue by period (sum of confirmed fees)
-  const revSum = (since) => { try { const r = _db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed' AND timestamp >= ?").get(since); return (r&&r.t)||0; } catch { return 0; } };
+  // SOL revenue (SOL-chain fees, in SOL)
+  const revSum = (since) => { try { const r = _db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed' AND COALESCE(fee_currency,'SOL')='SOL' AND timestamp >= ?").get(since); return (r&&r.t)||0; } catch { return 0; } };
   const revToday = revSum(todayIso), revWeek = revSum(isoDaysAgo(7)), revMonth = revSum(isoDaysAgo(30));
-  const revAll = (()=>{ try { const r=_db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed'").get(); return (r&&r.t)||0; } catch { return 0; } })();
+  const revAll = (()=>{ try { const r=_db.prepare("SELECT SUM(fee_sol) t FROM trades WHERE status='confirmed' AND COALESCE(fee_currency,'SOL')='SOL'").get(); return (r&&r.t)||0; } catch { return 0; } })();
+  // Per-currency non-SOL revenue (ETH etc), grouped so unlike currencies never sum together
+  const revByCurrency = (()=>{ try { return _db.prepare("SELECT fee_currency cur, SUM(fee_native) t FROM trades WHERE status='confirmed' AND COALESCE(fee_currency,'SOL')<>'SOL' AND fee_native>0 GROUP BY fee_currency").all(); } catch { return []; } })();
+  const otherRevStr = revByCurrency.length ? revByCurrency.map(x=>`${Number(x.t||0).toFixed(4)} ${x.cur}`).join(" · ") : "";
 
   // User growth
   const usersInRange = (since) => { try { const r=_db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= ? OR join_date >= ?").get(since, since); return (r&&r.c)||0; } catch { return 0; } };
@@ -67,7 +71,9 @@ async function showAdminPanel(ctx) {
     `📈 New: +${newToday} today · +${newWeek} this week\n\n` +
     `💰 *Revenue*\n` +
     `Today: *${f(revToday)}*  ·  7d: *${f(revWeek)}*\n` +
-    `30d: *${f(revMonth)}*  ·  All: *${f(revAll)}* SOL\n\n` +
+    `30d: *${f(revMonth)}*  ·  All: *${f(revAll)}* SOL\n` +
+    (otherRevStr ? `Other chains: *${otherRevStr}*\n` : "") +
+    `\n` +
     `⚙️ *Systems*\n` +
     `Kill Switch: ${ks ? "🔴 ACTIVE" : "✅ OFF"}\n` +
     `💸 Cashback: ${cb.enabled ? (cbWin.active ? `🟢 ON · ${cb.pct}% · ${cbDays}d left` : `🟡 ON · not started`) : "🔴 OFF"}\n` +
