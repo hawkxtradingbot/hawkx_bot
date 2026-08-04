@@ -359,7 +359,13 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   msg += `👥 Direct referrals: *${dirCount}*\n`;
   msg += `💎 Total earned: *${(total?.total || 0).toFixed(6)} SOL*\n`;
   msg += `✅ Claimed: *${(paid?.total || 0).toFixed(6)} SOL*\n`;
-  msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n\n`;
+  msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n`;
+  // Show other-chain (HOOD/ETH) referral earnings when present
+  try {
+    const otherCurs = db.getPendingCurrencies(userId).filter(x => x.cur !== "SOL");
+    for (const oc of otherCurs) { if (oc.total > 0) msg += `💰 Available (${oc.cur}): *${Number(oc.total).toFixed(6)} ${oc.cur}*\n`; }
+  } catch {}
+  msg += `\n`;
   msg += `🎟 *Your Code:* \`${myCode}\`\n`;
   msg += `🔗 *Your Link:*\n\`${refLink}\`\n\n`;
   msg += `💳 *Payout Wallet:* ${payoutLabel} ✅\n`;

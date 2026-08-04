@@ -44,16 +44,28 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     const walletIdx = wallets.findIndex(w => w.wallet_id === walletId) + 1;
     const walletLimit = config.WALLET_LIMITS[freshUser.rank] || 5;
 
+    const _wc = db.getChainConfig(activeChain);
+    const _sym = activeChain === "SOL" ? "SOL" : (_wc?.native_symbol || "ETH");
+    const _wIcons = { SOL: "🟣", HOOD: "🟢" };
+    const _balLine = activeChain === "SOL"
+      ? `💰 Balance: *${balance.toFixed(4)} SOL* (≈ ${balUsd.toFixed(2)})
+`
+      : `💰 Balance: *${balance.toFixed(4)} ${_sym}*
+`;
+    const _pnlLine = activeChain === "SOL"
+      ? `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / ${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
+`
+      : "";
     const text = 
       `💼 *Wallet Management*
+` +
+      `${_wIcons[activeChain] || "🔗"} Chain: *${_wc?.label || activeChain}*
 
 ` +
       `Active: *W${walletIdx} — ${label}*
 ` +
-      `💰 Balance: *${balance.toFixed(4)} SOL* (≈ ${balUsd.toFixed(2)})
-` +
-      `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / ${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
-` +
+      _balLine +
+      _pnlLine +
       `📋 Address:
 \`${address}\`
 
