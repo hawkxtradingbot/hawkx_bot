@@ -754,9 +754,7 @@ function closePosition(positionId) {
 }
 
 function getAllOpenPositions() {
-  // Only genuinely active positions — skip paused ones so the SL/TP monitor never
-  // price-checks or auto-sells a position the user has paused.
-  return getDb().prepare("SELECT * FROM positions WHERE status = 'open' AND COALESCE(paused,0) = 0").all();
+  return getDb().prepare("SELECT * FROM positions WHERE status = 'open'").all();
 }
 
 function setPositionNote(positionId, userId, note) {
