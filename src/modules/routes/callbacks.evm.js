@@ -1,6 +1,6 @@
 // EVM/HOOD trade button handlers — buy amounts, custom buy, sell 50/100, refresh.
 // Calls the real evmBuy/evmSell (which handle mock-on-devnet, real-on-mainnet + fee tracking).
-const db = require("../../database");
+const db = require("../../../database");
 
 async function handleEvmCallbacks(ctx, data, userId, user, bot, ks) {
   if (!data || !data.startsWith("evm_")) return false;

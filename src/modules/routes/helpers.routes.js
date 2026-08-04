@@ -162,15 +162,12 @@ async function safeEdit(ctx, text, keyboard) {
         await ctx.reply(text, plainOpts);
       }
     } else {
+      // Any other edit failure (stale message, not-modified, etc): re-send as a new message,
+      // falling back to plain text if Markdown fails. Never let the screen silently die.
       try {
         await ctx.reply(text, mdOpts);
       } catch (e2) {
-        if (
-          e2?.description?.includes("parse entities") ||
-          e2?.description?.includes("can't parse")
-        ) {
-          await ctx.reply(text, plainOpts);
-        }
+        try { await ctx.reply(text, plainOpts); } catch {}
       }
     }
   }
