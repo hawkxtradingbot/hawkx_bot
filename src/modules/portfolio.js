@@ -194,28 +194,29 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   let totalInvested = 0, totalCurrent = 0;
 
   const REAL_PORT = process.env.MOCK_TRADES === "false";
-  for (const pos of paginated) {
-    let currentPrice;
-    if (REAL_PORT) {
-      currentPrice = null;
+  // Fetch all position prices IN PARALLEL instead of one-by-one (was sequential -> slow with multiple positions)
+  const _priceMap = new Map();
+  if (REAL_PORT) {
+    await Promise.all(paginated.map(async (pos) => {
+      let cp = null;
       try {
         const { getTokenOverview } = require("./birdeye");
         const ov = await getTokenOverview(pos.token_ca);
-        if (ov && ov.price > 0) currentPrice = ov.price;
+        if (ov && ov.price > 0) cp = ov.price;
       } catch {}
-      // Birdeye failed/rate-limited - try DexScreener before falling back to entry price
-      if (!currentPrice) {
+      if (!cp) {
         try {
           const axios = require("axios");
           const dr = await axios.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 4000 });
           const pair = dr.data?.pairs?.[0];
-          if (pair?.priceUsd) currentPrice = parseFloat(pair.priceUsd);
+          if (pair?.priceUsd) cp = parseFloat(pair.priceUsd);
         } catch {}
       }
-      if (!currentPrice) currentPrice = pos.buy_price || simulatePriceMovement(pos.token_ca);
-    } else {
-      currentPrice = simulatePriceMovement(pos.token_ca);
-    }
+      _priceMap.set(pos.position_id, cp || pos.buy_price || simulatePriceMovement(pos.token_ca));
+    }));
+  }
+  for (const pos of paginated) {
+    const currentPrice = REAL_PORT ? _priceMap.get(pos.position_id) : simulatePriceMovement(pos.token_ca);
     const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
     const currentValue = pos.sol_invested * (1 + pnlPct / 100);
     totalInvested += pos.sol_invested;
