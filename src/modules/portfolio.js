@@ -90,10 +90,10 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   // Merge in REAL on-chain tokens not already tracked as a position - shown the same way as
   // HawkX-bought tokens, using current price as both entry and current (so PnL starts at 0%
   // until price moves, since we do not know the true historical cost for externally-acquired tokens).
-  if (_activeChainPf === "SOL" && (filter === "all" || filter === "manual")) {
+  if (filter === "all" || filter === "manual") {
     try {
       const activeWalletPf = db.getWallet(user.active_wallet_id);
-      if (activeWalletPf) {
+      if (activeWalletPf && _activeChainPf === "SOL") {
         const { getWalletTokenBalances } = require("./walletScanner");
         const _timeoutMs = 5000;
         const onChainTokens = await Promise.race([
@@ -104,21 +104,28 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         const untrackedPf = onChainTokens.filter(t => !trackedCasPf.has(t.mint));
         if (untrackedPf.length) {
           const { getTokenInfo: _gti } = require("./tokenInfo");
-          const untrackedPositions = await Promise.all(untrackedPf.map(async (t) => {
+          // Insert as REAL positions (not synthetic display objects) so select/buy/sell/autosell
+          // all work on them exactly like a HawkX-bought token — same position_id, same DB row.
+          for (const t of untrackedPf) {
             const info = await _gti(t.mint).catch(() => null);
             const price = info?.price || 0;
             const rawName = info?.name || t.symbol || t.mint.slice(0,8);
-            const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40); // strip HTML-breaking chars - token metadata is arbitrary on-chain data we do not control
-            return {
-              position_id: `unt${t.mint.slice(0,8)}`,
-              user_id: user.user_id, wallet_id: user.active_wallet_id,
+            const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40);
+            const newId = db.openPosition({
+              userId: user.user_id, walletId: user.active_wallet_id,
+              tokenCa: t.mint, tokenName: safeName || t.mint.slice(0,8),
+              buyPrice: price, solInvested: t.amount * price, tokenAmount: t.amount,
+              platform: "external", source: "external", sourceRef: "",
+              entryMcap: info?.mcap || 0, chain: "SOL",
+            });
+            positions.push({
+              position_id: newId, user_id: user.user_id, wallet_id: user.active_wallet_id,
               token_ca: t.mint, token_name: safeName || t.mint.slice(0,8),
               buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
               status: "open", source: "external", source_ref: "", chain: "SOL",
-              entry_mcap: info?.mcap || 0, _untracked: true,
-            };
-          }));
-          positions = positions.concat(untrackedPositions);
+              entry_mcap: info?.mcap || 0,
+            });
+          }
         }
       }
     } catch (e) { console.error("[Portfolio] on-chain merge failed:", e.message); }
@@ -261,7 +268,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
     const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
     const mcN = cMc !== "—" ? ` · <b>MC</b> ${cMc}` : "";
-    msg += `${isSel ? "▶ " : ""}${icon} <a href="https://dexscreener.com/solana/${pos.token_ca}"><b>${name}</b></a> ${srcTag}${autoTag}${autoIcons}\n`;
+    const extWarn = pos.source === "external" ? " ⚠️ <i>not bought on HawkX — trade with caution</i>" : "";
+    msg += `${isSel ? "▶ " : ""}${icon} <a href="https://dexscreener.com/solana/${pos.token_ca}"><b>${name}</b></a> ${srcTag}${autoTag}${autoIcons}${extWarn}\n`;
     msg += `📋 <code>${pos.token_ca}</code>\n`;
     msg += `📊 <b>Entry</b>${mcE} · <b>PR</b> ${fmtP(entryPrice)}\n`;
     msg += `💰 <b>Bought</b> ${bSol.toFixed(3)} SOL (${usd(bSol)}) · ${bCount} buys\n`;
