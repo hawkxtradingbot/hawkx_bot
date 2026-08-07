@@ -5,6 +5,9 @@ const db = require("../../../../database");
 
 const SWAP_ROUTER_ABI = [
   "function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96) params) external payable returns (uint256 amountOut)",
+  // SwapRouter02 has NO deadline field on ExactInputSingleParams (confirmed against the real
+  // deployed contract). Deadline protection instead comes from wrapping the call in multicall.
+  "function multicall(uint256 deadline, bytes[] calldata data) external payable returns (bytes[] memory results)",
 ];
 const QUOTER_ABI = [
   "function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) external returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -66,8 +69,13 @@ async function executeSwap({ chain, wallet, tokenIn, tokenOut, amountIn, slippag
   }
 
   const router = new ethers.Contract(cfg.swap_router, SWAP_ROUTER_ABI, signer);
-  const tx = await router.exactInputSingle(
-    { tokenIn, tokenOut, fee: feeTier, recipient: await signer.getAddress(), amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0 },
+  // Deadline protection: SwapRouter02's ExactInputSingleParams has no deadline field, so we
+  // wrap the call in multicall(deadline, [data]) instead — the standard SwapRouter02 pattern.
+  const deadline = Math.floor(Date.now() / 1000) + 120; // 2 minutes
+  const swapData = router.interface.encodeFunctionData("exactInputSingle", [
+    { tokenIn, tokenOut, fee: feeTier, recipient: await signer.getAddress(), amountIn, amountOutMinimum: minOut, sqrtPriceLimitX96: 0 }
+  ]);
+  const tx = await router.multicall(deadline, [swapData],
     isNativeIn ? { value: amountIn } : {}
   );
   const receipt = await tx.wait();
