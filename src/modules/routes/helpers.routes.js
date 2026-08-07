@@ -646,13 +646,22 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
 }
 async function showLimitOrdersScreen(ctx, userId) {
   const orders = db.getLimitOrders(userId);
-  const wallets = db.getWallets(userId) || [];
+  const _loChain = db.getActiveChain(userId);
+  const wallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === _loChain);
   const user = db.getUser(userId);
   // Use lo_selected_wallet if set, otherwise use active wallet
-  const selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
+  let selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
+  if (!wallets.find(w => w.wallet_id === selWalletId)) selWalletId = wallets[0]?.wallet_id;
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
-  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
+  const _loSym = _loChain === "SOL" ? "SOL" : (db.getChainConfig(_loChain)?.native_symbol || "ETH");
+  let balance = 0;
+  if (activeWallet) {
+    try {
+      if (_loChain === "SOL") { balance = await require("../walletSwitcher").getBalance(activeWallet.public_key); }
+      else { const cc = db.getChainConfig(_loChain); balance = await require("../chains/evm/wallet").getEvmBalance(activeWallet.public_key, cc.rpc_url); }
+    } catch { balance = 0; }
+  }
   // Filter positions by SELECTED wallet
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
   // Filter orders by selected wallet
