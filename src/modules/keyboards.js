@@ -84,6 +84,7 @@ function buildRankInfoMessage(user, feeSavedUsd) {
 // ════════════════════════════════════════════════════════════
 function buildMainMenu(user, todayStats, killSwitchActive) {
   const isProMode = user && user.mode === 'pro';
+  const _isSolMenu = !(user?.active_chain && user.active_chain !== "SOL");
   const kb = new InlineKeyboard();
 
   if (killSwitchActive) {
@@ -97,9 +98,10 @@ function buildMainMenu(user, todayStats, killSwitchActive) {
   kb.text('📂 Portfolio', 'menu_portfolio').text('💼 Wallets', 'menu_wallets').row();
 
   if (isProMode) {
-    kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
+    // Sniper / Copy Trade / Launch Token are Solana-only (Jupiter-based) — hidden on HOOD/EVM
+    if (_isSolMenu) kb.text('🎯 Sniper', 'menu_sniper').text('👥 Copy Trade', 'menu_copy_trade').row();
     kb.text('📍 Limit', 'menu_limit_orders').text('🔁 DCA', 'menu_dca').text('🔔 Watchlist', 'menu_watchlist').row();
-    kb.text('🚀 Launch Token', 'menu_launch').row();
+    if (_isSolMenu) kb.text('🚀 Launch Token', 'menu_launch').row();
     kb.text('⚙️ Settings', 'menu_settings').text('💰 Referrals', 'menu_referrals').row();
     kb.text('🏆 Leaderboard', 'menu_leaderboard').text('❓ Help', 'menu_help').row();
     kb.text('🌱 Beginner Mode →', 'mode_set_beginner').row();
