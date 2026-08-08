@@ -552,9 +552,17 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   const loWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user2.active_wallet_id);
   const selWal2 = wallets2.find(w => w.wallet_id === loWalletId) || wallets2[0];
   const walletNum2 = wallets2.indexOf(selWal2) + 1;
+  const _REAL_LO2 = process.env.MOCK_TRADES === "false";
   let priceInfo = "";
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
-  const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
+  let loBal = 0;
+  if (selWal2) {
+    try {
+      const _lc2 = selWal2.chain || "SOL";
+      if (_lc2 === "SOL") { loBal = await require("../walletSwitcher").getBalance(selWal2.public_key); }
+      else { const cc2 = db.getChainConfig(_lc2); loBal = await require("../chains/evm/wallet").getEvmBalance(selWal2.public_key, cc2.rpc_url); }
+    } catch { loBal = 0; }
+  }
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
 
   // MC (live) + Holdings + PnL (if you have an open position in this token)
@@ -570,7 +578,12 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
     try {
       const { simulatePriceMovement } = require("../executor");
       const { formatPnl, formatSol } = require("../portfolio");
-      const curPrice = simulatePriceMovement(ca);
+      let curPrice = null;
+      if (_REAL_LO2) {
+        try { const { getTokenOverview } = require("../birdeye"); const ov3 = await getTokenOverview(ca); if (ov3 && ov3.price > 0) curPrice = ov3.price; } catch {}
+        if (!curPrice) { try { const ax3 = require("axios"); const dr3 = await ax3.get("https://api.dexscreener.com/latest/dex/tokens/" + ca, { timeout: 4000 }); const pr3 = dr3.data?.pairs?.[0]; if (pr3?.priceUsd) curPrice = parseFloat(pr3.priceUsd); } catch {} }
+      }
+      if (!curPrice) curPrice = simulatePriceMovement(ca);
       const pnlPct = pos2.buy_price > 0 ? ((curPrice - pos2.buy_price) / pos2.buy_price * 100) : 0;
       const pnlSol = pos2.sol_invested * (pnlPct / 100);
       holdLine = `\n💎 Holding: ${(pos2.token_amount||0).toLocaleString()}  ·  📈 PnL: ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL)`;

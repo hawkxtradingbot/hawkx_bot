@@ -683,7 +683,14 @@ const t = text.trim().toLowerCase();
       // 1. Buy: check wallet balance
       if (loType3 === "buy") {
         const w = db.getWallets(userId).find(x => x.wallet_id === loWalletId);
-        const bal = w ? parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0") : 0;
+        let bal = 0;
+        if (w) {
+          try {
+            const chainForBal = w.chain || "SOL";
+            if (chainForBal === "SOL") { bal = await require("../walletSwitcher").getBalance(w.public_key); }
+            else { const cc = db.getChainConfig(chainForBal); bal = await require("../chains/evm/wallet").getEvmBalance(w.public_key, cc.rpc_url); }
+          } catch { bal = 0; }
+        }
         if (val > bal) {
           await ctx.reply(`⚠️ *Low Balance Warning*\n\nOrder amount: *${val} SOL*\nWallet balance: *${bal.toFixed(3)} SOL*\n\nThe order is saved, but it may fail to execute if balance is still low when triggered. Top up your wallet.`, { parse_mode: "Markdown" });
         }
