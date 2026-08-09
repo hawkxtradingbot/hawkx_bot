@@ -583,7 +583,7 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
         try { const { getTokenOverview } = require("../birdeye"); const ov3 = await getTokenOverview(ca); if (ov3 && ov3.price > 0) curPrice = ov3.price; } catch {}
         if (!curPrice) { try { const ax3 = require("axios"); const dr3 = await ax3.get("https://api.dexscreener.com/latest/dex/tokens/" + ca, { timeout: 4000 }); const pr3 = dr3.data?.pairs?.[0]; if (pr3?.priceUsd) curPrice = parseFloat(pr3.priceUsd); } catch {} }
       }
-      if (!curPrice) curPrice = simulatePriceMovement(ca);
+      if (!curPrice) curPrice = pos2.buy_price || 0;
       const pnlPct = pos2.buy_price > 0 ? ((curPrice - pos2.buy_price) / pos2.buy_price * 100) : 0;
       const pnlSol = pos2.sol_invested * (pnlPct / 100);
       holdLine = `\n💎 Holding: ${(pos2.token_amount||0).toLocaleString()}  ·  📈 PnL: ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL)`;

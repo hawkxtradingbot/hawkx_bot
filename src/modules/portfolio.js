@@ -104,22 +104,15 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         const untrackedPf = onChainTokens.filter(t => !trackedCasPf.has(t.mint));
         if (untrackedPf.length) {
           const { getTokenInfo: _gti } = require("./tokenInfo");
-          // Insert as REAL positions (not synthetic display objects) so select/buy/sell/autosell
-          // all work on them exactly like a HawkX-bought token — same position_id, same DB row.
+          // Synthetic, RE-COMPUTED EVERY RENDER — no DB write, no stale state.
+          // Reflects exactly what the wallet holds right now on-chain.
           for (const t of untrackedPf) {
             const info = await _gti(t.mint).catch(() => null);
             const price = info?.price || 0;
             const rawName = info?.name || t.symbol || t.mint.slice(0,8);
             const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40);
-            const newId = db.openPosition({
-              userId: user.user_id, walletId: user.active_wallet_id,
-              tokenCa: t.mint, tokenName: safeName || t.mint.slice(0,8),
-              buyPrice: price, solInvested: t.amount * price, tokenAmount: t.amount,
-              platform: "external", source: "external", sourceRef: "",
-              entryMcap: info?.mcap || 0, chain: "SOL",
-            });
             positions.push({
-              position_id: newId, user_id: user.user_id, wallet_id: user.active_wallet_id,
+              position_id: `ext_${t.mint}`, user_id: user.user_id, wallet_id: user.active_wallet_id,
               token_ca: t.mint, token_name: safeName || t.mint.slice(0,8),
               buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
               status: "open", source: "external", source_ref: "", chain: "SOL",
@@ -292,7 +285,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     let name = (pos.token_name || pos.token_ca.slice(0,8)).trim();
     if (name.length > 10) name = name.slice(0, 10) + "…";
     const isSel = selPos && pos.position_id === selPos.position_id;
-    const pnlPct = pos.buy_price > 0 ? ((simulatePriceMovement(pos.token_ca) - pos.buy_price) / pos.buy_price * 100) : 0;
+    const _lpx = REAL_PORT ? (_priceMap.get(pos.position_id) || pos.buy_price) : simulatePriceMovement(pos.token_ca);
+    const pnlPct = pos.buy_price > 0 ? ((_lpx - pos.buy_price) / pos.buy_price * 100) : 0;
     const icon  = pnlPct >= 0 ? "🟢" : "🔴";
     kb.text(isSel ? `${icon} ${name} ✅` : `${icon} ${name}`, `pos_select_${pos.position_id}_${filter}_${page}`);
   });

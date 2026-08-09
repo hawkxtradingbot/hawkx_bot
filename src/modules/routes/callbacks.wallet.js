@@ -29,13 +29,21 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     // P&L for active wallet
     const allPos = db.getOpenPositions(userId);
     const openPos = allPos.filter(p => p.wallet_id === walletId);
+    const _REAL_W = process.env.MOCK_TRADES === "false";
     let totalInv = 0, totalCur = 0;
-    openPos.forEach(p => {
-      const cp = simulatePriceMovement(p.token_ca);
+    for (const p of openPos) {
+      let cp = null;
+      if (_REAL_W && (p.chain||"SOL") === "SOL") {
+        try { const { getTokenOverview } = require("../birdeye"); const ov4 = await getTokenOverview(p.token_ca); if (ov4 && ov4.price > 0) cp = ov4.price; } catch {}
+        if (!cp) { try { const ax4 = require("axios"); const dr4 = await ax4.get("https://api.dexscreener.com/latest/dex/tokens/" + p.token_ca, { timeout: 4000 }); const pr4 = dr4.data?.pairs?.[0]; if (pr4?.priceUsd) cp = parseFloat(pr4.priceUsd); } catch {} }
+      } else if (_REAL_W) {
+        try { const { getTokenInfo } = require("../chains/evm/uniswap"); const ti4 = await getTokenInfo(p.chain, p.token_ca); if (ti4 && ti4.priceInEth > 0) cp = ti4.priceInEth; } catch {}
+      }
+      if (!cp) cp = p.buy_price || 0;
       const pnlPct = p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
       totalInv += p.sol_invested;
       totalCur += p.sol_invested * (1 + pnlPct / 100);
-    });
+    }
     const totalPnlSol = totalCur - totalInv;
     const _solPxW = await db.getSolPriceUsdShared();
     const totalPnlUsd = totalPnlSol * _solPxW;
