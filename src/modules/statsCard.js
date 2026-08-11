@@ -187,37 +187,37 @@ async function generateTradeCard(opts) {
   <rect width="3" height="${H}" fill="url(#ogGrad)"/>
   <rect x="${W-3}" width="3" height="${H}" fill="url(#ogGrad)"/>
 
-  <text x="24" y="34" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="24" y="34" font-family="Archivo Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
   <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
-  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
+  <text x="${W-24}" y="32" font-family="Archivo Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
   <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
 
   <text x="24" y="60" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="2">SOLD ${sellPct}%${(holdTime && !hideAmounts && !hideHoldTime) ? "  ·  HELD " + holdTime.toUpperCase() : ""}</text>
-  <text x="24" y="96" font-family="Arial Black" font-size="30" fill="#FFD27A">$${tokenName.slice(0,14)}</text>
-  ${isProfit ? '<text x="' + (W-24) + '" y="92" font-family="Arial Black" font-size="22" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
+  <text x="24" y="96" font-family="Archivo Black" font-size="30" fill="#FFD27A">$${tokenName.slice(0,14)}</text>
+  ${isProfit ? '<text x="' + (W-24) + '" y="92" font-family="Archivo Black" font-size="22" fill="' + pnlColor + '" text-anchor="end">' + (hideAmounts ? "***" : multiplier + "x") + '</text>' : ''}
 
-  <text x="24" y="150" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${(hideAmounts || hideSolAmount) ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
-  <text x="${W-24}" y="146" font-family="Arial Black" font-size="20" fill="${pnlColor}" text-anchor="end">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
+  <text x="24" y="150" font-family="Archivo Black" font-size="42" fill="url(#pnlGrad)">${isProfit ? '&#9650;' : '&#9660;'} ${(hideAmounts || hideSolAmount) ? '***' : sign+(Math.abs(pnlSol) < 0.001 ? Math.abs(pnlSol).toFixed(6) : Math.abs(pnlSol).toFixed(3))+' SOL'}</text>
+  <text x="${W-24}" y="146" font-family="Archivo Black" font-size="20" fill="${pnlColor}" text-anchor="end">${sign}${Math.abs(pnlPct).toFixed(1)}%</text>
   <text x="${W-24}" y="168" font-family="Arial" font-size="16" fill="#FF9500" text-anchor="end">${hideAmounts ? '***' : sign+'$'+Math.abs(pnlUsd).toFixed(2)}</text>
   <text x="24" y="196" font-family="Arial" font-size="13" fill="rgba(255,255,255,0.65)">${memeText}</text>
   <line x1="24" y1="206" x2="${W-24}" y2="206" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
 
   <text x="24" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">ENTRY</text>
-  <text x="24" y="238" font-family="Arial Black" font-size="16" fill="white">${formatMcap(entryMcap)}</text>
+  <text x="24" y="238" font-family="Archivo Black" font-size="16" fill="white">${formatMcap(entryMcap)}</text>
   <text x="180" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">EXIT</text>
-  <text x="180" y="238" font-family="Arial Black" font-size="16" fill="white">${formatMcap(exitMcap)}</text>
+  <text x="180" y="238" font-family="Archivo Black" font-size="16" fill="white">${formatMcap(exitMcap)}</text>
   <text x="336" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">INVESTED</text>
-  <text x="336" y="238" font-family="Arial Black" font-size="15" fill="white">${(hideAmounts || hideInvested) ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' \u25CE'}</text>
+  <text x="336" y="238" font-family="Archivo Black" font-size="15" fill="white">${(hideAmounts || hideInvested) ? '***' : (invested < 0.001 ? invested.toFixed(6) : invested.toFixed(4))+' \u25CE'}</text>
   <text x="470" y="222" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">RETURNED</text>
-  <text x="470" y="238" font-family="Arial Black" font-size="15" fill="${pnlColor}">${(hideAmounts || hideInvested) ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' \u25CE'}</text>
+  <text x="470" y="238" font-family="Archivo Black" font-size="15" fill="${pnlColor}">${(hideAmounts || hideInvested) ? '***' : (returned < 0.001 ? returned.toFixed(6) : returned.toFixed(4))+' \u25CE'}</text>
   <line x1="24" y1="250" x2="${W-24}" y2="250" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
 
   <rect x="24" y="260" width="${qrDataUrl ? W-140 : W-48}" height="34" rx="6" fill="rgba(255,107,0,0.08)"/>
   <rect x="24" y="260" width="3" height="34" rx="1.5" fill="${rankColor}"/>
   <text x="36" y="274" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">RANK BENEFIT</text>
-  <text x="36" y="288" font-family="Arial Black" font-size="12" fill="${rankColor}">${rankName.toUpperCase()} · ${feeRate}% FEE · SAVED $${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)}</text>
+  <text x="36" y="288" font-family="Archivo Black" font-size="12" fill="${rankColor}">${rankName.toUpperCase()} · ${feeRate}% FEE · SAVED $${hideAmounts ? "***" : feeSaved < 0.01 ? feeSaved.toFixed(4) : feeSaved.toFixed(2)}</text>
 
-  ${qrDataUrl ? `<image x="${W-104}" y="256" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="304" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="314" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort}</text>` : ''}
+  ${qrDataUrl ? `<image x="${W-104}" y="256" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="304" font-family="Archivo Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="314" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort}</text>` : ''}
 
   <line x1="24" y1="326" x2="${W-24}" y2="326" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="24" y="346" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>
@@ -298,36 +298,36 @@ async function generateStatsCard(opts) {
   <rect width="3" height="${H}" fill="${periodAccent}"/>
   <rect x="${W-3}" width="3" height="${H}" fill="${periodAccent}"/>
 
-  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="24" y="30" font-family="Archivo Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
   <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
-  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
+  <text x="${W-24}" y="32" font-family="Archivo Black" font-size="12" fill="${rankColor}" text-anchor="end">${rankName.toUpperCase()} (${rankNum}/7)</text>
   <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="${periodAccent}" stroke-width="1" opacity="0.4"/>
 
   <text x="24" y="62" font-family="Arial" font-size="11" fill="${periodAccent}" letter-spacing="3">${periodLabel}</text>
-  <text x="24" y="118" font-family="Arial Black" font-size="42" fill="url(#pnlGrad)">${periodPnl >= 0 ? '&#9650;' : '&#9660;'} ${periodSign}${Math.abs(periodPnl) < 0.001 ? Math.abs(periodPnl).toFixed(6) : Math.abs(periodPnl).toFixed(3)} SOL</text>
+  <text x="24" y="118" font-family="Archivo Black" font-size="42" fill="url(#pnlGrad)">${periodPnl >= 0 ? '&#9650;' : '&#9660;'} ${periodSign}${Math.abs(periodPnl) < 0.001 ? Math.abs(periodPnl).toFixed(6) : Math.abs(periodPnl).toFixed(3)} SOL</text>
   <text x="26" y="140" font-family="Arial" font-size="16" fill="#FF9500">${periodSign}$${(Math.abs(periodPnl)*_cardSolPx).toFixed(2)}</text>
   <line x1="24" y1="154" x2="${W-24}" y2="154" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
 
   <text x="24" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WIN RATE</text>
-  <text x="24" y="196" font-family="Arial Black" font-size="22" fill="white">${winRate}%</text>
+  <text x="24" y="196" font-family="Archivo Black" font-size="22" fill="white">${winRate}%</text>
   <text x="140" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">TRADES</text>
-  <text x="140" y="196" font-family="Arial Black" font-size="22" fill="white">${trades}</text>
+  <text x="140" y="196" font-family="Archivo Black" font-size="22" fill="white">${trades}</text>
   <text x="250" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">STREAK</text>
-  <text x="250" y="196" font-family="Arial Black" font-size="22" fill="${streak >= 0 ? '#14F195' : '#FF4444'}">${streak >= 0 ? '+' : ''}${streak}</text>
+  <text x="250" y="196" font-family="Archivo Black" font-size="22" fill="${streak >= 0 ? '#14F195' : '#FF4444'}">${streak >= 0 ? '+' : ''}${streak}</text>
   <text x="360" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">BEST</text>
-  <text x="360" y="196" font-family="Arial Black" font-size="17" fill="#14F195">+${fmtK(bestTrade)}</text>
+  <text x="360" y="196" font-family="Archivo Black" font-size="17" fill="#14F195">+${fmtK(bestTrade)}</text>
   <text x="490" y="174" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WORST</text>
-  <text x="490" y="196" font-family="Arial Black" font-size="17" fill="#FF4444">${fmtK(worstTrade)}</text>
+  <text x="490" y="196" font-family="Archivo Black" font-size="17" fill="#FF4444">${fmtK(worstTrade)}</text>
   <line x1="24" y1="208" x2="${W-24}" y2="208" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
   <text x="24" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">AVG TRADE</text>
-  <text x="24" y="248" font-family="Arial Black" font-size="16" fill="white">${avgTrade >= 0 ? '+' : ''}${fmtK(avgTrade)} SOL</text>
+  <text x="24" y="248" font-family="Archivo Black" font-size="16" fill="white">${avgTrade >= 0 ? '+' : ''}${fmtK(avgTrade)} SOL</text>
   <text x="180" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">FEES PAID / SAVED</text>
-  <text x="180" y="248" font-family="Arial Black" font-size="13" fill="#F5A623">${fmtK(totalFees)} / $${(feeSaved*_cardSolPx).toFixed(2)}</text>
+  <text x="180" y="248" font-family="Archivo Black" font-size="13" fill="#F5A623">${fmtK(totalFees)} / $${(feeSaved*_cardSolPx).toFixed(2)}</text>
   <text x="340" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">WEEK</text>
-  <text x="340" y="248" font-family="Arial Black" font-size="16" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${fmtK(weekPnl)}</text>
+  <text x="340" y="248" font-family="Archivo Black" font-size="16" fill="${weekPnl >= 0 ? '#14F195' : '#FF4444'}">${wSign}${fmtK(weekPnl)}</text>
   <text x="470" y="228" font-family="Arial" font-size="8" fill="${periodAccent}" letter-spacing="1.5">MONTH</text>
-  <text x="470" y="248" font-family="Arial Black" font-size="16" fill="${monthPnl >= 0 ? '#14F195' : '#FF4444'}">${mSign}${fmtK(monthPnl)}</text>
+  <text x="470" y="248" font-family="Archivo Black" font-size="16" fill="${monthPnl >= 0 ? '#14F195' : '#FF4444'}">${mSign}${fmtK(monthPnl)}</text>
   <line x1="24" y1="262" x2="${W-24}" y2="262" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
 
   <text x="24" y="280" font-family="Arial" font-size="10" fill="${periodAccent}" letter-spacing="1.5">RANK PROGRESS → ${nextRankNames[rankNum] || 'MAX'}</text>
@@ -336,7 +336,7 @@ async function generateStatsCard(opts) {
   <text x="24" y="312" font-family="Arial" font-size="11" fill="rgba(255,255,255,0.5)">${rankProgress.toFixed(0)}% · ${fmtK(volume)} / ${nextRankSol || "MAX"} SOL</text>
 
   <rect x="24" y="324" width="${qrDataUrl ? W-140 : W-48}" height="1" fill="rgba(255,255,255,0)"/>
-  ${qrDataUrl ? `<image x="${W-104}" y="322" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="370" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="380" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort2}</text>` : ''}
+  ${qrDataUrl ? `<image x="${W-104}" y="322" width="40" height="40" href="${qrDataUrl}"/><text x="${W-84}" y="370" font-family="Archivo Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="380" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort2}</text>` : ''}
 
   <line x1="24" y1="392" x2="${W-24}" y2="392" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="24" y="410" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>
@@ -398,26 +398,26 @@ async function generateRankCard(opts) {
   <rect width="3" height="${H}" fill="url(#rankGrad)"/>
   <rect x="${W-3}" width="3" height="${H}" fill="url(#rankGrad)"/>
 
-  <text x="24" y="30" font-family="Arial Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
+  <text x="24" y="30" font-family="Archivo Black" font-size="19" fill="#FF6B00" letter-spacing="3">HAWKX</text>
   <text x="${W-24}" y="18" font-family="Arial" font-size="10" fill="rgba(255,255,255,0.7)" text-anchor="end">@${username}</text>
-  <text x="${W-24}" y="32" font-family="Arial Black" font-size="12" fill="${rankColor}" text-anchor="end">RANK CARD</text>
+  <text x="${W-24}" y="32" font-family="Archivo Black" font-size="12" fill="${rankColor}" text-anchor="end">RANK CARD</text>
   <line x1="24" y1="42" x2="${W-24}" y2="42" stroke="url(#ogGrad)" stroke-width="1" opacity="0.4"/>
 
   <text x="24" y="62" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="3">YOUR RANK</text>
-  <text x="24" y="120" font-family="Arial Black" font-size="52" fill="${rankColor}">${rankName.toUpperCase()}</text>
+  <text x="24" y="120" font-family="Archivo Black" font-size="52" fill="${rankColor}">${rankName.toUpperCase()}</text>
   <text x="24" y="142" font-family="Arial" font-size="13" fill="rgba(255,255,255,0.5)">Rank ${rankNum} of 7</text>
   <line x1="24" y1="154" x2="${W-24}" y2="154" stroke="url(#ogGrad)" stroke-width="1" opacity="0.25"/>
 
   <text x="24" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">FEE</text>
-  <text x="24" y="196" font-family="Arial Black" font-size="20" fill="${rankColor}">${fee.toFixed(2)}%</text>
+  <text x="24" y="196" font-family="Archivo Black" font-size="20" fill="${rankColor}">${fee.toFixed(2)}%</text>
   <text x="140" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">SAVED</text>
-  <text x="140" y="196" font-family="Arial Black" font-size="20" fill="#14F195">${savingsPct}%</text>
+  <text x="140" y="196" font-family="Archivo Black" font-size="20" fill="#14F195">${savingsPct}%</text>
   <text x="250" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">VOLUME</text>
-  <text x="250" y="196" font-family="Arial Black" font-size="16" fill="white">${fmtVol(volume)} SOL</text>
+  <text x="250" y="196" font-family="Archivo Black" font-size="16" fill="white">${fmtVol(volume)} SOL</text>
   <text x="400" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">TRADES</text>
-  <text x="400" y="196" font-family="Arial Black" font-size="20" fill="white">${totalTrades}</text>
+  <text x="400" y="196" font-family="Archivo Black" font-size="20" fill="white">${totalTrades}</text>
   <text x="510" y="174" font-family="Arial" font-size="8" fill="#FF9500" letter-spacing="1.5">WIN RATE</text>
-  <text x="510" y="196" font-family="Arial Black" font-size="20" fill="white">${winRate}%</text>
+  <text x="510" y="196" font-family="Archivo Black" font-size="20" fill="white">${winRate}%</text>
   <line x1="24" y1="208" x2="${W-24}" y2="208" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
 
   <text x="24" y="228" font-family="Arial" font-size="10" fill="#FF9500" letter-spacing="1.5">PROGRESS TO ${nextRank.toUpperCase()}</text>
@@ -426,7 +426,7 @@ async function generateRankCard(opts) {
   <text x="24" y="266" font-family="Arial" font-size="12" fill="${rankColor}">${rankProgress.toFixed(0)}% · ${fmtVol(volume)} / ${nextRankSol || "MAX"} SOL needed</text>
   <line x1="24" y1="280" x2="${W-24}" y2="280" stroke="url(#ogGrad)" stroke-width="1" opacity="0.2"/>
 
-  ${qrDataUrl3 ? `<image x="${W-104}" y="288" width="40" height="40" href="${qrDataUrl3}"/><text x="${W-84}" y="336" font-family="Arial Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="346" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort3}</text>` : ''}
+  ${qrDataUrl3 ? `<image x="${W-104}" y="288" width="40" height="40" href="${qrDataUrl3}"/><text x="${W-84}" y="336" font-family="Archivo Black" font-size="8" fill="#FF9500" text-anchor="middle">10% DISCOUNT</text><text x="${W-84}" y="346" font-family="Arial" font-size="7" fill="rgba(255,255,255,0.5)" text-anchor="middle">${refCodeShort3}</text>` : ''}
 
   <line x1="24" y1="392" x2="${W-24}" y2="392" stroke="url(#ogGrad)" stroke-width="1" opacity="0.15"/>
   <text x="24" y="410" font-family="Arial" font-style="italic" font-size="10" fill="rgba(255,255,255,0.35)">Always Watching. Always First.</text>

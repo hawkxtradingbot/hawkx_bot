@@ -80,7 +80,7 @@ async function buildBridgeScreen(userId, rawState) {
 
   // Fixed relayer + destination-gas costs don't scale down, so tiny bridges lose most of
   // their value. Real case: 0.0024 SOL (~$0.36) lost ~68%. Below MIN_USD we block the send.
-  const MIN_USD = 5;
+  const MIN_USD = 1;
   let usdIn = null, lossPct = null;
   if (s.amount) {
     try {
