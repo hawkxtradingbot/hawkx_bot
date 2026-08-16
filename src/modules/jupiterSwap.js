@@ -220,33 +220,15 @@ async function getTokenDecimals(mint) {
 }
 
 async function realBuy({ keypair, tokenMint, solLamports, slippageBps, speed, jitoTipLamports, customFeeSol, feeLamports }) {
+  // Bundled: fee is injected INTO the swap tx by executeSwap (atomic, no race, safe-fail if it
+  // would overflow the tx). Swap on the full amount minus the fee so totals still balance.
   const fee = (feeLamports && feeLamports > 0 && process.env.TREASURY_WALLET) ? feeLamports : 0;
-  let swapLamports = solLamports;
-  let feeCollected = false;
-  if (fee > 0) {
-    try {
-      const connection = getConnection();
-      const feeTx = new (require("@solana/web3.js").Transaction)().add(
-        SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: new PublicKey(process.env.TREASURY_WALLET), lamports: fee })
-      );
-      const { blockhash } = await connection.getLatestBlockhash("confirmed");
-      feeTx.recentBlockhash = blockhash;
-      feeTx.feePayer = keypair.publicKey;
-      feeTx.sign(keypair);
-      await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true, maxRetries: 3 });
-      swapLamports = solLamports - fee;
-      feeCollected = true;
-    } catch (e) {
-      console.log("[Fee-First] fee transfer failed, swapping full amount:", e.message);
-      swapLamports = solLamports;
-      feeCollected = false;
-    }
-  }
+  const swapLamports = fee > 0 ? (solLamports - fee) : solLamports;
   const quote = await getQuote(SOL_MINT, tokenMint, String(swapLamports), slippageBps);
   if (!quote || quote.error) return { ok: false, error: quote && quote.error ? quote.error : "no quote" };
-  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports: 0 });
+  const res = await executeSwap({ keypair, quote, speed, jitoTipLamports, customFeeSol, feeLamports: fee });
   const decimals = await getTokenDecimals(tokenMint);
-  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals, feeCollected };
+  return { ...res, outAmount: quote.outAmount, inAmount: quote.inAmount, decimals, feeCollected: res.feeInjected === true };
 }
 
 // High-level: sell a token for SOL. tokenAmountRaw = integer string in token base units.

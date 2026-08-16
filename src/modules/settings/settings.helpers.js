@@ -14,18 +14,23 @@ const {
 async function showSettings(ctx, user) {
   const settings = db.getSettings(user.user_id);
   const isProMode = user.mode === "pro";
+  const _isSol = !(user.active_chain && user.active_chain !== "SOL");
+  const _coin = _isSol ? "SOL" : "ETH";
+  const _sc = db.getChainConfig(user.active_chain || "SOL");
+  const _scIcons = { SOL: "🟣", HOOD: "🟢" };
+  const _chainLine = `${_scIcons[user.active_chain] || "🔗"} Chain: *${_sc?.label || user.active_chain || "Solana"}*\n\n`;
   const userWithSettings = { ...user, settings };
   const guide = isProMode
-    ? "⚙️ *Pro Settings* — Choose a category:\n\n" +
-      "⚡ *Execution* — Buy/sell amounts, slippage, speed\n" +
-      "🛡 *MEV* — Protect trades from sandwich bots\n" +
+    ? "⚙️ *Pro Settings* — Choose a category:\n\n" + _chainLine +
+      "⚡ *Execution* — Buy/sell amounts, slippage" + (_isSol ? ", speed" : "") + "\n" +
+      (_isSol ? "🛡 *MEV* — Protect trades from sandwich bots\n" : "") +
       "🔒 *Risk* — Max trade size, daily limits, SL/TP\n" +
       "🔔 *Alerts* — Price alerts and notifications"
-    : "⚙️ *Beginner Settings* — Tap any button to change instantly.\n\n" +
-      "🟢 *Buy amounts* — SOL per trade\n" +
+    : "⚙️ *Beginner Settings* — Tap any button to change instantly.\n\n" + _chainLine +
+      `🟢 *Buy amounts* — ${_coin} per trade\n` +
       "🔴 *Sell %* — % of position to sell\n" +
       "📉 *Slippage* — Price tolerance %\n" +
-      "⚡ *Speed* — Trade execution priority\n" +
+      (_isSol ? "⚡ *Speed* — Trade execution priority\n" : "") +
       "🔐 *PIN* — Security for key export/withdraw";
   const kb = isProMode
     ? buildProSettingsMenu(userWithSettings)

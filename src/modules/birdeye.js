@@ -17,12 +17,16 @@ async function getPrice(address) {
 }
 
 // Full token overview: price, mcap, liquidity, volume, holders, decimals
+const _ovCache = new Map(); // address -> { data, ts }; one Birdeye call serves all callers per window
+const OV_TTL_MS = 12000; // 12s cache — cuts CU usage so the monitor doesn't blow the rate limit
 async function getTokenOverview(address) {
+  const _cx = _ovCache.get(address);
+  if (_cx && (Date.now() - _cx.ts) < OV_TTL_MS) return _cx.data;
   try {
     const { data } = await axios.get(`${BASE}/defi/token_overview?address=${address}`, { headers: headers(), timeout: 1200 });
     if (!data?.success) return null;
     const d = data.data;
-    return {
+    const _ov = {
       address: d.address,
       symbol: d.symbol,
       name: d.name,
@@ -39,6 +43,8 @@ async function getTokenOverview(address) {
       sells24h: d.sell24h,
       totalSupply: d.totalSupply || d.supply || 0,
     };
+    _ovCache.set(address, { data: _ov, ts: Date.now() });
+    return _ov;
   } catch (e) {
     const { alertAdmin } = require("./adminAlert");
     const detail = e.response?.data?.message || e.message || "unknown error";

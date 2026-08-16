@@ -90,10 +90,10 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   // Merge in REAL on-chain tokens not already tracked as a position - shown the same way as
   // HawkX-bought tokens, using current price as both entry and current (so PnL starts at 0%
   // until price moves, since we do not know the true historical cost for externally-acquired tokens).
-  if (_activeChainPf === "SOL" && (filter === "all" || filter === "manual")) {
+  if (filter === "all" || filter === "manual") {
     try {
       const activeWalletPf = db.getWallet(user.active_wallet_id);
-      if (activeWalletPf) {
+      if (activeWalletPf && _activeChainPf === "SOL") {
         const { getWalletTokenBalances } = require("./walletScanner");
         const _timeoutMs = 5000;
         const onChainTokens = await Promise.race([
@@ -104,21 +104,21 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         const untrackedPf = onChainTokens.filter(t => !trackedCasPf.has(t.mint));
         if (untrackedPf.length) {
           const { getTokenInfo: _gti } = require("./tokenInfo");
-          const untrackedPositions = await Promise.all(untrackedPf.map(async (t) => {
+          // Synthetic, RE-COMPUTED EVERY RENDER — no DB write, no stale state.
+          // Reflects exactly what the wallet holds right now on-chain.
+          for (const t of untrackedPf) {
             const info = await _gti(t.mint).catch(() => null);
             const price = info?.price || 0;
             const rawName = info?.name || t.symbol || t.mint.slice(0,8);
-            const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40); // strip HTML-breaking chars - token metadata is arbitrary on-chain data we do not control
-            return {
-              position_id: `unt${t.mint.slice(0,8)}`,
-              user_id: user.user_id, wallet_id: user.active_wallet_id,
+            const safeName = String(rawName).replace(/[<>&"']/g, "").slice(0, 40);
+            positions.push({
+              position_id: `ext_${t.mint}`, user_id: user.user_id, wallet_id: user.active_wallet_id,
               token_ca: t.mint, token_name: safeName || t.mint.slice(0,8),
               buy_price: price, sol_invested: t.amount * price, token_amount: t.amount,
               status: "open", source: "external", source_ref: "", chain: "SOL",
-              entry_mcap: info?.mcap || 0, _untracked: true,
-            };
-          }));
-          positions = positions.concat(untrackedPositions);
+              entry_mcap: info?.mcap || 0,
+            });
+          }
         }
       }
     } catch (e) { console.error("[Portfolio] on-chain merge failed:", e.message); }
@@ -194,28 +194,29 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
   let totalInvested = 0, totalCurrent = 0;
 
   const REAL_PORT = process.env.MOCK_TRADES === "false";
-  for (const pos of paginated) {
-    let currentPrice;
-    if (REAL_PORT) {
-      currentPrice = null;
+  // Fetch all position prices IN PARALLEL instead of one-by-one (was sequential -> slow with multiple positions)
+  const _priceMap = new Map();
+  if (REAL_PORT) {
+    await Promise.all(paginated.map(async (pos) => {
+      let cp = null;
       try {
         const { getTokenOverview } = require("./birdeye");
         const ov = await getTokenOverview(pos.token_ca);
-        if (ov && ov.price > 0) currentPrice = ov.price;
+        if (ov && ov.price > 0) cp = ov.price;
       } catch {}
-      // Birdeye failed/rate-limited - try DexScreener before falling back to entry price
-      if (!currentPrice) {
+      if (!cp) {
         try {
           const axios = require("axios");
           const dr = await axios.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 4000 });
           const pair = dr.data?.pairs?.[0];
-          if (pair?.priceUsd) currentPrice = parseFloat(pair.priceUsd);
+          if (pair?.priceUsd) cp = parseFloat(pair.priceUsd);
         } catch {}
       }
-      if (!currentPrice) currentPrice = pos.buy_price || simulatePriceMovement(pos.token_ca);
-    } else {
-      currentPrice = simulatePriceMovement(pos.token_ca);
-    }
+      _priceMap.set(pos.position_id, cp || pos.buy_price || simulatePriceMovement(pos.token_ca));
+    }));
+  }
+  for (const pos of paginated) {
+    const currentPrice = REAL_PORT ? _priceMap.get(pos.position_id) : simulatePriceMovement(pos.token_ca);
     const pnlPct       = pos.buy_price > 0 ? ((currentPrice - pos.buy_price) / pos.buy_price * 100) : 0;
     const currentValue = pos.sol_invested * (1 + pnlPct / 100);
     totalInvested += pos.sol_invested;
@@ -260,7 +261,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
 
     const mcE = eMc !== "—" ? ` · <b>MC</b> ${eMc}` : "";
     const mcN = cMc !== "—" ? ` · <b>MC</b> ${cMc}` : "";
-    msg += `${isSel ? "▶ " : ""}${icon} <a href="https://dexscreener.com/solana/${pos.token_ca}"><b>${name}</b></a> ${srcTag}${autoTag}${autoIcons}\n`;
+    const extWarn = pos.source === "external" ? " ⚠️ <i>not bought on HawkX — trade with caution</i>" : "";
+    msg += `${isSel ? "▶ " : ""}${icon} <a href="https://dexscreener.com/solana/${pos.token_ca}"><b>${name}</b></a> ${srcTag}${autoTag}${autoIcons}${extWarn}\n`;
     msg += `📋 <code>${pos.token_ca}</code>\n`;
     msg += `📊 <b>Entry</b>${mcE} · <b>PR</b> ${fmtP(entryPrice)}\n`;
     msg += `💰 <b>Bought</b> ${bSol.toFixed(3)} SOL (${usd(bSol)}) · ${bCount} buys\n`;
@@ -283,7 +285,8 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
     let name = (pos.token_name || pos.token_ca.slice(0,8)).trim();
     if (name.length > 10) name = name.slice(0, 10) + "…";
     const isSel = selPos && pos.position_id === selPos.position_id;
-    const pnlPct = pos.buy_price > 0 ? ((simulatePriceMovement(pos.token_ca) - pos.buy_price) / pos.buy_price * 100) : 0;
+    const _lpx = REAL_PORT ? (_priceMap.get(pos.position_id) || pos.buy_price) : simulatePriceMovement(pos.token_ca);
+    const pnlPct = pos.buy_price > 0 ? ((_lpx - pos.buy_price) / pos.buy_price * 100) : 0;
     const icon  = pnlPct >= 0 ? "🟢" : "🔴";
     kb.text(isSel ? `${icon} ${name} ✅` : `${icon} ${name}`, `pos_select_${pos.position_id}_${filter}_${page}`);
   });

@@ -29,13 +29,21 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     // P&L for active wallet
     const allPos = db.getOpenPositions(userId);
     const openPos = allPos.filter(p => p.wallet_id === walletId);
+    const _REAL_W = process.env.MOCK_TRADES === "false";
     let totalInv = 0, totalCur = 0;
-    openPos.forEach(p => {
-      const cp = simulatePriceMovement(p.token_ca);
+    for (const p of openPos) {
+      let cp = null;
+      if (_REAL_W && (p.chain||"SOL") === "SOL") {
+        try { const { getTokenOverview } = require("../birdeye"); const ov4 = await getTokenOverview(p.token_ca); if (ov4 && ov4.price > 0) cp = ov4.price; } catch {}
+        if (!cp) { try { const ax4 = require("axios"); const dr4 = await ax4.get("https://api.dexscreener.com/latest/dex/tokens/" + p.token_ca, { timeout: 4000 }); const pr4 = dr4.data?.pairs?.[0]; if (pr4?.priceUsd) cp = parseFloat(pr4.priceUsd); } catch {} }
+      } else if (_REAL_W) {
+        try { const { getTokenInfo } = require("../chains/evm/uniswap"); const ti4 = await getTokenInfo(p.chain, p.token_ca); if (ti4 && ti4.priceInEth > 0) cp = ti4.priceInEth; } catch {}
+      }
+      if (!cp) cp = p.buy_price || 0;
       const pnlPct = p.buy_price > 0 ? ((cp - p.buy_price) / p.buy_price) * 100 : 0;
       totalInv += p.sol_invested;
       totalCur += p.sol_invested * (1 + pnlPct / 100);
-    });
+    }
     const totalPnlSol = totalCur - totalInv;
     const _solPxW = await db.getSolPriceUsdShared();
     const totalPnlUsd = totalPnlSol * _solPxW;
@@ -44,16 +52,28 @@ async function showWalletScreen(ctx, userId, activeWalletId, msg) {
     const walletIdx = wallets.findIndex(w => w.wallet_id === walletId) + 1;
     const walletLimit = config.WALLET_LIMITS[freshUser.rank] || 5;
 
+    const _wc = db.getChainConfig(activeChain);
+    const _sym = activeChain === "SOL" ? "SOL" : (_wc?.native_symbol || "ETH");
+    const _wIcons = { SOL: "🟣", HOOD: "🟢" };
+    const _balLine = activeChain === "SOL"
+      ? `💰 Balance: *${balance.toFixed(4)} SOL* (≈ ${balUsd.toFixed(2)})
+`
+      : `💰 Balance: *${balance.toFixed(4)} ${_sym}*
+`;
+    const _pnlLine = activeChain === "SOL"
+      ? `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / ${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
+`
+      : "";
     const text = 
       `💼 *Wallet Management*
+` +
+      `${_wIcons[activeChain] || "🔗"} Chain: *${_wc?.label || activeChain}*
 
 ` +
       `Active: *W${walletIdx} — ${label}*
 ` +
-      `💰 Balance: *${balance.toFixed(4)} SOL* (≈ ${balUsd.toFixed(2)})
-` +
-      `📈 P&L: *${sign}${Math.min(Math.abs(totalPnlSol), 9999).toFixed(4)} SOL* / ${Math.min(Math.abs(totalPnlUsd), 99999).toFixed(2)}
-` +
+      _balLine +
+      _pnlLine +
       `📋 Address:
 \`${address}\`
 
@@ -664,6 +684,12 @@ Enter new wallet name:`, { parse_mode: "Markdown" });
         return true;
       }
       db.setSysConfig(_wLockKey, String(Date.now()));
+
+      // Kill-switch: withdraw is money leaving, so an emergency pause must stop it.
+      try {
+        const _ks = require("../killSwitch");
+        if (_ks.isActive()) { await ctx.reply("⏸ *HawkX is briefly paused.*\n\nWithdrawals are off right now — your funds are safe and fully yours. You can still sell your positions. Back shortly.", { parse_mode: "Markdown" }); db.setSysConfig(`withdraw_lock_${userId}`, ""); return true; }
+      } catch {}
 
       const REAL_W = process.env.MOCK_TRADES === "false";
 

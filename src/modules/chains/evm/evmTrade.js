@@ -56,9 +56,8 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
     const slippage = settings.slippage_pct || 10;
     const { getEffectiveFeeRate } = require("../../executor");
     const feeRate = getEffectiveFeeRate(user);
-    const feeEth = amountEth * feeRate;
-    const swapAmountEth = amountEth - feeEth;
-    const amountInWei = ethers.parseEther(String(swapAmountEth));
+    let feeEth = amountEth * feeRate;
+    let feeCollectedOk = false;
 
     // Collect fee: send to EVM treasury before the swap, same principle as Solana's fee transfer
     if (feeEth > 0 && process.env.EVM_TREASURY_WALLET) {
@@ -69,8 +68,18 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
           value: ethers.parseEther(String(feeEth)),
         });
         await feeTx.wait();
-      } catch (e) { console.error("[EVM Buy] fee collection failed:", e.message); }
+        feeCollectedOk = true;
+      } catch (e) {
+        // Fee send failed — do NOT strand the ETH. Fold it back into the swap so the user
+        // gets full value, record fee as 0, and alert admin to investigate.
+        console.error("[EVM Buy] fee collection failed, swapping full amount:", e.message);
+        feeEth = 0;
+        try { require("../../adminAlert").alertAdmin("EVM Fee", "HOOD buy fee send failed, swapped full amount instead: " + e.message).catch(()=>{}); } catch {}
+      }
     }
+    // swapAmount = full amount minus fee ONLY if the fee actually went out; else swap everything.
+    const swapAmountEth = amountEth - feeEth;
+    const amountInWei = ethers.parseEther(String(swapAmountEth));
 
     const result = await executeSwap({
       chain, wallet: evmWallet,
@@ -86,7 +95,7 @@ async function evmBuy(ctx, user, tokenAddress, amountEth, source, sourceRef, opt
       tokenCa: tokenAddress, tokenName: tokenAddress.slice(0,8),
       platform: "evm_real", action: "buy",
       solAmount: amountEth, tokenAmount: tokenAmountFloat, priceSol: amountEth / tokenAmountFloat,
-      feeSol: 0, feeRate: 0, txHash: result.txHash, status: "confirmed",
+      feeSol: 0, feeNative: feeEth, feeCurrency: (chainCfg?.native_symbol || "ETH"), feeRate, txHash: result.txHash, status: "confirmed",
       chain,
     });
     db.openPosition({
@@ -186,7 +195,7 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
     const { getEffectiveFeeRate } = require("../../executor");
     const feeRate = getEffectiveFeeRate(user);
     const grossReceived = parseFloat(ethers.formatEther(result.amountOut));
-    const feeEth = grossReceived * feeRate;
+    let feeEth = grossReceived * feeRate;
     const solReceived = grossReceived - feeEth;
 
     // Collect fee: send to EVM treasury after receiving swap proceeds
@@ -198,7 +207,12 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
           value: ethers.parseEther(String(feeEth)),
         });
         await feeTx.wait();
-      } catch (e) { console.error("[EVM Sell] fee collection failed:", e.message); }
+      } catch (e) {
+        // Fee send failed — record fee as 0 (it wasn't collected) and alert admin. User keeps the ETH.
+        console.error("[EVM Sell] fee collection failed:", e.message);
+        feeEth = 0;
+        try { require("../../adminAlert").alertAdmin("EVM Fee", "HOOD sell fee send failed, fee not collected: " + e.message).catch(()=>{}); } catch {}
+      }
     }
     const sellPrice = solReceived / sellTokenAmount;
     const pnlPct = position.buy_price > 0 ? ((sellPrice - position.buy_price) / position.buy_price) * 100 : 0;
@@ -208,7 +222,7 @@ async function evmSell(ctx, user, position, pctToSell = 100, opts = {}) {
       tokenCa: position.token_ca, tokenName: position.token_name,
       platform: "evm_real", action: "sell",
       solAmount: solReceived, tokenAmount: sellTokenAmount, priceSol: sellPrice,
-      feeSol: 0, feeRate: 0, txHash: result.txHash, status: "confirmed", chain,
+      feeSol: 0, feeNative: feeEth, feeCurrency: (chainCfg?.native_symbol || "ETH"), feeRate, txHash: result.txHash, status: "confirmed", chain,
     });
 
     if (pctToSell >= 100) {

@@ -21,22 +21,25 @@ function getReferralRate(referrerId, level) {
   return STANDARD_RATES[level] || 0;
 }
 
-function creditReferralEarnings(userId, tradeId, feeSol) {
-  if (!feeSol || feeSol <= 0) return;
+function creditReferralEarnings(userId, tradeId, feeAmount, currency = "SOL") {
+  if (!feeAmount || feeAmount <= 0) return;
   let currentId = userId;
   for (let level = 0; level < 6; level++) {
     const user = db.getUser(currentId);
     if (!user || !user.referrer_id) break;
     const referrerId = user.referrer_id;
     const rate       = getReferralRate(referrerId, level);
-    const earning    = feeSol * rate;
+    const earning    = feeAmount * rate;
     if (earning > 0) {
       db.addReferralEarning({
         userId:     referrerId,
         fromUserId: userId,
         level:      level + 1,
-        feeSol,
-        earnedSol:  earning,
+        feeSol:     currency === "SOL" ? feeAmount : 0,
+        earnedSol:  currency === "SOL" ? earning : 0,
+        feeNative:  feeAmount,
+        earnedNative: earning,
+        currency,
         tradeId,
       });
     }

@@ -193,6 +193,27 @@ function setupMessages(bot) {
       return showCwSetupScreen(ctx, userId, ctx.chat.id);
     }
 
+      // EVM/HOOD custom buy amount
+    if (pending === "evm_buy_custom") {
+      db.setSysConfig(`pending_${userId}`, "");
+      const amt = parseFloat(text);
+      if (isNaN(amt) || amt <= 0) { await ctx.reply("❌ Enter a valid amount (e.g. 0.25)."); return; }
+      const tokenCa = db.getSysConfig(`pending_ca_${userId}`) || "";
+      if (!tokenCa) { await ctx.reply("❌ No token selected. Paste a token first."); return; }
+      const freshU = db.getUser(userId);
+      const activeChain = db.getActiveChain(userId);
+      const { evmBuy } = require("../chains/evm/evmTrade");
+      try {
+        await evmBuy(ctx, freshU, tokenCa, amt, "manual", null, {}, activeChain);
+      } catch (e) {
+        const { formatError } = require("../errorFormat");
+        const fe = formatError(e, "evm buy");
+        if (fe.alert) require("../adminAlert").alertAdmin("EVM Buy", fe.adminDetail || String(e.message||e)).catch(()=>{});
+        await ctx.reply("❌ " + fe.userMsg);
+      }
+      return;
+    }
+
       if (settingsPending.includes(pending)) {
       const freshUser = db.getUser(userId);
       return handleTextInput(ctx, freshUser, pending);
@@ -662,7 +683,14 @@ const t = text.trim().toLowerCase();
       // 1. Buy: check wallet balance
       if (loType3 === "buy") {
         const w = db.getWallets(userId).find(x => x.wallet_id === loWalletId);
-        const bal = w ? parseFloat(db.getSysConfig(`mock_balance_${w.public_key}`) || "0") : 0;
+        let bal = 0;
+        if (w) {
+          try {
+            const chainForBal = w.chain || "SOL";
+            if (chainForBal === "SOL") { bal = await require("../walletSwitcher").getBalance(w.public_key); }
+            else { const cc = db.getChainConfig(chainForBal); bal = await require("../chains/evm/wallet").getEvmBalance(w.public_key, cc.rpc_url); }
+          } catch { bal = 0; }
+        }
         if (val > bal) {
           await ctx.reply(`⚠️ *Low Balance Warning*\n\nOrder amount: *${val} SOL*\nWallet balance: *${bal.toFixed(3)} SOL*\n\nThe order is saved, but it may fail to execute if balance is still low when triggered. Top up your wallet.`, { parse_mode: "Markdown" });
         }
@@ -1635,7 +1663,14 @@ const t = text.trim().toLowerCase();
       /^[1-9A-HJ-NP-Za-km-z]+$/.test(text)
     ) {
       if (ks) {
-        await ctx.reply("🔴 Trading paused.");
+        await ctx.reply("⏸ *HawkX is briefly paused.*\n\nBuying is off right now — your funds are safe and fully yours. You can still *sell* your positions any time from Portfolio. Back shortly.", { parse_mode: "Markdown" });
+        return;
+      }
+      // Chain-aware: HOOD/EVM tokens need the EVM scanner (Uniswap fetcher), not the Solana one.
+      const _acChain = db.getActiveChain(userId);
+      if (_acChain && _acChain !== "SOL") {
+        const { showEvmTokenScreen } = require("./helpers.routes");
+        await showEvmTokenScreen(ctx, user, text);
         return;
       }
       // Check auto buy first!

@@ -237,6 +237,10 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const _bl = db.getSysConfig(`bridge_processing_${userId}`);
       if (_bl && (Date.now() - parseInt(_bl)) < 60000) { await ctx.answerCallbackQuery("⏳ Already processing."); return true; }
       db.setSysConfig(`bridge_processing_${userId}`, String(Date.now()));
+      try {
+        const _ks = require("../killSwitch");
+        if (_ks.isActive()) { db.setSysConfig(`bridge_processing_${userId}`, ""); await ctx.answerCallbackQuery("Paused", { show_alert: false }); await ctx.reply("⏸ *HawkX is briefly paused.*\n\nBridging is off right now — your funds are safe and fully yours. You can still sell your positions. Back shortly.", { parse_mode: "Markdown" }); return true; }
+      } catch {}
       await ctx.answerCallbackQuery("⏳ Starting...");
       const B = require("./callbacks.bridge");
       const st = B.seed(userId, JSON.parse(db.getSysConfig(`bridge_state_${userId}`) || "{}"));

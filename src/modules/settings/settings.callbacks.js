@@ -746,10 +746,10 @@ const { sendPrompt, deleteMsg, refreshSettings, showSettings } = require("./sett
 ` +
       `▸ Min: 0.0001 | Std: 0.005 | Fast: 0.01 | Pri: 0.05`;
     try {
-      await ctx.editMessageText(execGuide, { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) });
+      await ctx.editMessageText(execGuide, { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s, false, false, false, user.active_chain || "SOL") });
       db.setSysConfig(`exec_msg_${user.user_id}`, String(ctx.callbackQuery?.message?.message_id || 0));
     } catch {
-      const sent = await ctx.reply("⚡ *Execution Settings*", { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s) });
+      const sent = await ctx.reply("⚡ *Execution Settings*", { parse_mode: "Markdown", reply_markup: buildExecutionSettingsMenu(s, false, false, false, user.active_chain || "SOL") });
       db.setSysConfig(`exec_msg_${user.user_id}`, String(sent.message_id));
     }
     return;

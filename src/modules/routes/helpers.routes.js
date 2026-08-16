@@ -162,15 +162,12 @@ async function safeEdit(ctx, text, keyboard) {
         await ctx.reply(text, plainOpts);
       }
     } else {
+      // Any other edit failure (stale message, not-modified, etc): re-send as a new message,
+      // falling back to plain text if Markdown fails. Never let the screen silently die.
       try {
         await ctx.reply(text, mdOpts);
       } catch (e2) {
-        if (
-          e2?.description?.includes("parse entities") ||
-          e2?.description?.includes("can't parse")
-        ) {
-          await ctx.reply(text, plainOpts);
-        }
+        try { await ctx.reply(text, plainOpts); } catch {}
       }
     }
   }
@@ -359,7 +356,13 @@ async function buildReferralScreen(ctx, userId, showWallets) {
   msg += `👥 Direct referrals: *${dirCount}*\n`;
   msg += `💎 Total earned: *${(total?.total || 0).toFixed(6)} SOL*\n`;
   msg += `✅ Claimed: *${(paid?.total || 0).toFixed(6)} SOL*\n`;
-  msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n\n`;
+  msg += `💰 Available to claim: *${(pending2?.total || 0).toFixed(6)} SOL*\n`;
+  // Show other-chain (HOOD/ETH) referral earnings when present
+  try {
+    const otherCurs = db.getPendingCurrencies(userId).filter(x => x.cur !== "SOL");
+    for (const oc of otherCurs) { if (oc.total > 0) msg += `💰 Available (${oc.cur}): *${Number(oc.total).toFixed(6)} ${oc.cur}*\n`; }
+  } catch {}
+  msg += `\n`;
   msg += `🎟 *Your Code:* \`${myCode}\`\n`;
   msg += `🔗 *Your Link:*\n\`${refLink}\`\n\n`;
   msg += `💳 *Payout Wallet:* ${payoutLabel} ✅\n`;
@@ -370,8 +373,26 @@ async function buildReferralScreen(ctx, userId, showWallets) {
     msg += `\n\n🎁 *10% fee discount* active! Fee: *0.90%* instead of 1.00%.`;
   }
 
+  // ── Cashback section (only shown when an offer is active) ──
+  const cb = require("../cashback");
+  const cbWin = cb.windowInfo();
+  let cbOwed = 0;
+  if (cbWin.active) {
+    const cbCfg = cb.getConfig();
+    cbOwed = cb.cashbackOwedSol(userId);
+    const daysLeft = Math.ceil(cbWin.msLeft / 86400000);
+    const already = cb.alreadyClaimed(userId);
+    msg += `\n\n💸 *Cashback — ${cbCfg.pct}% of fees*\n`;
+    msg += `Fees paid this period: *${cb.feesPaidInWindow(userId).toFixed(6)} SOL*\n`;
+    msg += `Cashback available: *${cbOwed.toFixed(6)} SOL*${cbCfg.mode !== "SOL" ? " (or "+cbCfg.tokenLabel+")" : ""}\n`;
+    msg += `⏱ ${daysLeft}d left${already ? "  ·  ✅ claimed" : ""}`;
+  }
+
   const claimable = pending2?.total || 0;
   const rows = [];
+  if (cbWin.active && cbOwed > 0 && !cb.alreadyClaimed(userId)) {
+    rows.push([{ text: `💸 Claim ${cbOwed.toFixed(4)} SOL Cashback`, callback_data: "cashback_claim" }]);
+  }
   // Claim — always shown (handler checks 0.01 min)
   rows.push([{ text: `💰 Claim ${claimable.toFixed(4)} SOL`, callback_data: "referral_claim" }]);
 
@@ -531,9 +552,17 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
   const loWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user2.active_wallet_id);
   const selWal2 = wallets2.find(w => w.wallet_id === loWalletId) || wallets2[0];
   const walletNum2 = wallets2.indexOf(selWal2) + 1;
+  const _REAL_LO2 = process.env.MOCK_TRADES === "false";
   let priceInfo = "";
   try { const mp = getMockPrice(ca); priceInfo = `💰 *${mp.toFixed(8)}* [DEVNET]`; } catch {}
-  const loBal = selWal2 ? parseFloat(db.getSysConfig(`mock_balance_${selWal2.public_key}`) || "0") : 0;
+  let loBal = 0;
+  if (selWal2) {
+    try {
+      const _lc2 = selWal2.chain || "SOL";
+      if (_lc2 === "SOL") { loBal = await require("../walletSwitcher").getBalance(selWal2.public_key); }
+      else { const cc2 = db.getChainConfig(_lc2); loBal = await require("../chains/evm/wallet").getEvmBalance(selWal2.public_key, cc2.rpc_url); }
+    } catch { loBal = 0; }
+  }
   const walletLabel = selWal2 ? (selWal2.label && !selWal2.label.match(/^W\d+$/) ? selWal2.label : `W${walletNum2}`) : "—";
 
   // MC (live) + Holdings + PnL (if you have an open position in this token)
@@ -549,7 +578,12 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
     try {
       const { simulatePriceMovement } = require("../executor");
       const { formatPnl, formatSol } = require("../portfolio");
-      const curPrice = simulatePriceMovement(ca);
+      let curPrice = null;
+      if (_REAL_LO2) {
+        try { const { getTokenOverview } = require("../birdeye"); const ov3 = await getTokenOverview(ca); if (ov3 && ov3.price > 0) curPrice = ov3.price; } catch {}
+        if (!curPrice) { try { const ax3 = require("axios"); const dr3 = await ax3.get("https://api.dexscreener.com/latest/dex/tokens/" + ca, { timeout: 4000 }); const pr3 = dr3.data?.pairs?.[0]; if (pr3?.priceUsd) curPrice = parseFloat(pr3.priceUsd); } catch {} }
+      }
+      if (!curPrice) curPrice = pos2.buy_price || 0;
       const pnlPct = pos2.buy_price > 0 ? ((curPrice - pos2.buy_price) / pos2.buy_price * 100) : 0;
       const pnlSol = pos2.sol_invested * (pnlPct / 100);
       holdLine = `\n💎 Holding: ${(pos2.token_amount||0).toLocaleString()}  ·  📈 PnL: ${formatPnl(pnlPct)} (${formatSol(pnlSol)} SOL)`;
@@ -625,13 +659,22 @@ async function buildTokenOrdersScreen(ctx, userId, ca, walletExpanded, forceMsgI
 }
 async function showLimitOrdersScreen(ctx, userId) {
   const orders = db.getLimitOrders(userId);
-  const wallets = db.getWallets(userId) || [];
+  const _loChain = db.getActiveChain(userId);
+  const wallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === _loChain);
   const user = db.getUser(userId);
   // Use lo_selected_wallet if set, otherwise use active wallet
-  const selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
+  let selWalletId = parseInt(db.getSysConfig(`lo_sel_wallet_${userId}`) || user.active_wallet_id);
+  if (!wallets.find(w => w.wallet_id === selWalletId)) selWalletId = wallets[0]?.wallet_id;
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
-  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
+  const _loSym = _loChain === "SOL" ? "SOL" : (db.getChainConfig(_loChain)?.native_symbol || "ETH");
+  let balance = 0;
+  if (activeWallet) {
+    try {
+      if (_loChain === "SOL") { balance = await require("../walletSwitcher").getBalance(activeWallet.public_key); }
+      else { const cc = db.getChainConfig(_loChain); balance = await require("../chains/evm/wallet").getEvmBalance(activeWallet.public_key, cc.rpc_url); }
+    } catch { balance = 0; }
+  }
   // Filter positions by SELECTED wallet
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
   // Filter orders by selected wallet
@@ -1019,15 +1062,45 @@ async function showEvmTokenScreen(ctx, user, tokenAddress, asReply = false) {
     infoLines += `💰 <i>Price unavailable - no liquidity pool found for this pair</i>\n`;
   }
 
-  const kb = { inline_keyboard: [
+  // Wallet balance (native coin) — matches the Solana scanner UX
+  const sym = chainCfg?.native_symbol || 'ETH';
+  const evmWallet = db.getWalletForChain(userId, activeChain);
+  if (evmWallet?.public_key) {
+    try {
+      const { getEvmBalance } = require("../chains/evm/wallet");
+      const bal = await getEvmBalance(evmWallet.public_key, chainCfg.rpc_url);
+      infoLines += `👛 <b>Balance</b> ${Number(bal).toFixed(4)} ${sym}\n`;
+    } catch { infoLines += `👛 <i>Balance unavailable</i>\n`; }
+  }
+
+  // Any open position in THIS token on THIS chain → show holdings + sell buttons
+  let heldPos = null;
+  try {
+    const positions = db.getOpenPositions(userId) || [];
+    heldPos = positions.find(pp => (pp.token_ca||"").toLowerCase() === tokenAddress.toLowerCase() && (pp.chain||"SOL") === activeChain);
+  } catch {}
+  if (heldPos) {
+    infoLines += `\n📊 <b>Your Position</b>\n`;
+    infoLines += `Holding: ${Number(heldPos.token_amount||0).toFixed(4)} tokens\n`;
+    infoLines += `Invested: ${Number(heldPos.sol_invested||0).toFixed(4)} ${sym}\n`;
+  }
+
+  const rows = [
     [
       { text: `🟢 Buy ${b1}`, callback_data: `evm_buy_${b1}` },
       { text: `🟢 Buy ${b2}`, callback_data: `evm_buy_${b2}` },
       { text: `🟢 Buy ${b3}`, callback_data: `evm_buy_${b3}` },
     ],
     [{ text: "✏️ Custom Amount", callback_data: "evm_buy_custom" }],
-    [{ text: "🔄 Refresh", callback_data: "evm_token_refresh" }, { text: "← Back", callback_data: "menu_main" }],
-  ]};
+  ];
+  if (heldPos) {
+    rows.push([
+      { text: "🔴 Sell 50%", callback_data: "evm_sell_50" },
+      { text: "🔴 Sell 100%", callback_data: "evm_sell_100" },
+    ]);
+  }
+  rows.push([{ text: "🔄 Refresh", callback_data: "evm_token_refresh" }, { text: "← Back", callback_data: "menu_main" }]);
+  const kb = { inline_keyboard: rows };
 
   if (asReply) return ctx.reply(infoLines, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
   return safeEdit(ctx, infoLines, kb, { parse_mode: "HTML", disable_web_page_preview: true });

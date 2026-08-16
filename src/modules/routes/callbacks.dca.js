@@ -28,11 +28,19 @@ function fmtNext(nextAt) {
 // ── MAIN DCA SCREEN: wallet selector + holdings + orders ──
 async function showDcaScreen(ctx, userId) {
   const user = db.getUser(userId);
-  const wallets = db.getWallets(userId) || [];
+  const _ac = db.getActiveChain(userId);
+  const wallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === _ac);
   const selWalletId = parseInt(db.getSysConfig(`dca_sel_wallet_${userId}`) || user.active_wallet_id);
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
   const walletNum = wallets.indexOf(activeWallet) + 1;
-  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
+  let balance = 0;
+  if (activeWallet) {
+    try {
+      if (_ac === "SOL") { balance = await require("../walletSwitcher").getBalance(activeWallet.public_key); }
+      else { const cc = db.getChainConfig(_ac); balance = await require("../chains/evm/wallet").getEvmBalance(activeWallet.public_key, cc.rpc_url); }
+    } catch { balance = 0; }
+  }
+  const _sym = _ac === "SOL" ? "SOL" : (db.getChainConfig(_ac)?.native_symbol || "ETH");
 
   // Holdings in selected wallet
   const allPos = db.getAllOpenPositions().filter(p => p.user_id === userId && p.wallet_id === selWalletId);
@@ -78,7 +86,7 @@ async function showDcaScreen(ctx, userId) {
     }
     kb.inline_keyboard.push([{ text: "▲ Close", callback_data: "dca_wallet_collapse" }]);
   } else {
-    kb.inline_keyboard.push([{ text: `💼 W${walletNum} ✅ — ${balance.toFixed(3)} SOL ▼`, callback_data: "dca_wallet_expand" }]);
+    kb.inline_keyboard.push([{ text: `💼 W${walletNum} ✅ — ${balance.toFixed(3)} ${_sym} ▼`, callback_data: "dca_wallet_expand" }]);
   }
 
   // Token buttons — ONE per token, stacked icons, adaptive rows
@@ -128,10 +136,18 @@ const CNT_PRESETS = [5, 10, 20];
 
 async function showTokenDca(ctx, userId, ca) {
   const user = db.getUser(userId);
-  const wallets = db.getWallets(userId) || [];
+  const _ac = db.getActiveChain(userId);
+  const wallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === _ac);
   const selWalletId = parseInt(db.getSysConfig(`dca_sel_wallet_${userId}`) || user.active_wallet_id);
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
-  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
+  let balance = 0;
+  if (activeWallet) {
+    try {
+      if (_ac === "SOL") { balance = await require("../walletSwitcher").getBalance(activeWallet.public_key); }
+      else { const cc = db.getChainConfig(_ac); balance = await require("../chains/evm/wallet").getEvmBalance(activeWallet.public_key, cc.rpc_url); }
+    } catch { balance = 0; }
+  }
+  const _sym = _ac === "SOL" ? "SOL" : (db.getChainConfig(_ac)?.native_symbol || "ETH");
 
   const orders = db.getDcaOrders(userId, ca).filter(o => o.wallet_id === selWalletId || !o.wallet_id);
   let name = orders[0]?.token_name || ca.slice(0,8);
@@ -191,7 +207,7 @@ async function showTokenDca(ctx, userId, ca) {
     if (dParts.length) msg += dParts.join(" · ") + "\n";
     if (ageStr || safetyStr) msg += `${ageStr ? "🕐 Age "+ageStr : ""}${ageStr && safetyStr ? " · " : ""}${safetyStr ? "🛡 "+safetyStr : ""}\n`;
   }
-  msg += `💵 Wallet: *${balance.toFixed(3)} SOL*\n`;
+  msg += `💵 Wallet: *${balance.toFixed(3)} ${_sym}*\n`;
   msg += `━━━━━━━━━━━━━━━━━━━\n`;
 
   const kb = { inline_keyboard: [] };
@@ -289,10 +305,18 @@ async function finalizeDca(ctx, userId, intervalSec) {
   if (!ca) { await ctx.reply("❌ Setup expired. Start again."); return; }
 
   const user = db.getUser(userId);
-  const wallets = db.getWallets(userId) || [];
+  const _ac = db.getActiveChain(userId);
+  const wallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === _ac);
   const selWalletId = parseInt(db.getSysConfig(`dca_sel_wallet_${userId}`) || user.active_wallet_id);
   const activeWallet = wallets.find(w => w.wallet_id === selWalletId) || wallets[0];
-  const balance = activeWallet ? parseFloat(db.getSysConfig(`mock_balance_${activeWallet.public_key}`) || "0") : 0;
+  let balance = 0;
+  if (activeWallet) {
+    try {
+      if (_ac === "SOL") { balance = await require("../walletSwitcher").getBalance(activeWallet.public_key); }
+      else { const cc = db.getChainConfig(_ac); balance = await require("../chains/evm/wallet").getEvmBalance(activeWallet.public_key, cc.rpc_url); }
+    } catch { balance = 0; }
+  }
+  const _sym = _ac === "SOL" ? "SOL" : (db.getChainConfig(_ac)?.native_symbol || "ETH");
   const totalCost = amt * cnt;
 
   db.addDcaOrder(userId, {
@@ -329,7 +353,7 @@ async function finalizeDca(ctx, userId, intervalSec) {
     const need = (totalCost - balance).toFixed(3);
     confirmMsg += `⚠️ *Low balance:* wallet has ${balance.toFixed(3)} SOL, needs ${totalCost.toFixed(2)} SOL.\nDeposit *${need} SOL* more or some buys may fail.\n`;
   } else {
-    confirmMsg += `💼 Wallet: ${balance.toFixed(3)} SOL — enough ✅\n`;
+    confirmMsg += `💼 Wallet: ${balance.toFixed(3)} ${_sym} — enough ✅\n`;
   }
 
   try { await ctx.answerCallbackQuery({ text: "✅ DCA started!" }); } catch {}

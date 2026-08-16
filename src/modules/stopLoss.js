@@ -31,12 +31,33 @@ async function checkPosition(pos, notifyFn) {
   const settings     = db.getSettings(pos.user_id) || {};
   const REAL_SL = process.env.MOCK_TRADES === "false";
   let currentPrice;
+  const posChain = pos.chain || "SOL";
   if (REAL_SL) {
-    try {
-      const { getTokenOverview } = require("./birdeye");
-      const ov = await getTokenOverview(pos.token_ca);
-      currentPrice = (ov && ov.price > 0) ? ov.price : simulatePriceMovement(pos.token_ca);
-    } catch { currentPrice = simulatePriceMovement(pos.token_ca); }
+    // MAINNET: only ever decide on a REAL price. Chain-specific source. If it fails, SKIP this tick.
+    // NEVER use a simulated price to trigger a real sell.
+    if (posChain === "SOL") {
+      try {
+        const { getTokenOverview } = require("./birdeye");
+        const ov = await getTokenOverview(pos.token_ca);
+        if (ov && ov.price > 0) currentPrice = ov.price;
+      } catch {}
+      if (!currentPrice) {
+        try {
+          const axP = require("axios");
+          const drP = await axP.get("https://api.dexscreener.com/latest/dex/tokens/" + pos.token_ca, { timeout: 5000 });
+          const prP = drP.data && drP.data.pairs && drP.data.pairs[0];
+          if (prP && prP.priceUsd) currentPrice = parseFloat(prP.priceUsd);
+        } catch {}
+      }
+    } else {
+      // EVM/HOOD: price via the chain's Uniswap quoter (priceInEth), same source used to trade it.
+      try {
+        const { getTokenInfo } = require("./chains/evm/uniswap");
+        const ti = await getTokenInfo(posChain, pos.token_ca);
+        if (ti && ti.priceInEth > 0) currentPrice = ti.priceInEth;
+      } catch {}
+    }
+    if (!currentPrice || currentPrice <= 0) return; // no real price → skip, retry next tick (no fake-price decisions)
   } else {
     currentPrice = simulatePriceMovement(pos.token_ca);
   }
@@ -173,19 +194,76 @@ async function checkPosition(pos, notifyFn) {
 }
 
 async function executeSell(pos, user, sellPct, currentPrice, pnlPct, reason, notifyFn) {
-  const solReceived  = pos.sol_invested * (1 + pnlPct / 100) * (sellPct / 100);
   const { getEffectiveFeeRate } = require("./executor");
   const feeRate      = getEffectiveFeeRate(user);
-  const feeSol       = solReceived * feeRate;
-  const txHash       = `DEVNET_AUTO_${Date.now()}`;
+  const sellFraction = sellPct / 100;
   const sign         = pnlPct >= 0 ? "+" : "";
+  const REAL = process.env.MOCK_TRADES === "false";
+  const chain = pos.chain || "SOL";
+
+  let solReceived = pos.sol_invested * (1 + pnlPct / 100) * sellFraction;
+  let feeSol      = solReceived * feeRate;
+  let feeNative   = feeSol;
+  let feeCurrency = "SOL";
+  let txHash      = `DEVNET_AUTO_${Date.now()}`;
+  let platform    = "devnet_mock";
+
+  if (REAL && chain === "SOL") {
+    try {
+      const { realSell, getTokenDecimals } = require("./jupiterSwap");
+      const { decryptWallet } = require("./walletVault");
+      const settingsS = db.getSettings(pos.user_id) || {};
+      const sellWalletId = pos.wallet_id || user.active_wallet_id;
+      const keypair = decryptWallet(sellWalletId);
+      const sellDecimals = await getTokenDecimals(pos.token_ca);
+      const tokensToSell = (pos.token_amount || 0) * sellFraction;
+      const tokenAmountRaw = Math.floor(tokensToSell * Math.pow(10, sellDecimals));
+      if (tokenAmountRaw <= 0) return;
+      const slippageBpsS = Math.floor((settingsS.slippage_pct || 10) * 100);
+      const speedS = settingsS.speed_mode || "fast";
+      const mevOnS = (settingsS.mev_protect ?? 1) ? true : false;
+      const jitoTipS = mevOnS ? Math.floor((settingsS.jito_tip || 0) * 1e9) : 0;
+      const rs = await realSell({ keypair, tokenMint: pos.token_ca, tokenAmountRaw, slippageBps: slippageBpsS, speed: speedS, jitoTipLamports: jitoTipS, customFeeSol: settingsS.priority_fee_manual_sol, feeRate });
+      if (!rs.ok) {
+        require("./adminAlert").alertAdmin("AutoSell", `${reason} real sell failed for user ${pos.user_id}: ${rs.error}`).catch(()=>{});
+        if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell didn't go through — will retry. Your position is still open.` });
+        return;
+      }
+      const feeLamports = rs.feeCollected === true ? (rs.feeLamports || 0) : 0;
+      solReceived = (Number(rs.outAmount) - feeLamports) / 1e9;
+      feeSol = feeLamports / 1e9;
+      feeNative = feeSol; feeCurrency = "SOL";
+      txHash = rs.signature; platform = "solana_real";
+    } catch (err) {
+      require("./adminAlert").alertAdmin("AutoSell", `${reason} error for user ${pos.user_id}: ${err.message}`).catch(()=>{});
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell hit an error — will retry. Your position is still open.` });
+      return;
+    }
+  } else if (REAL && chain !== "SOL") {
+    try {
+      const { evmSell } = require("./chains/evm/evmTrade");
+      const r2 = await evmSell(null, user, pos, sellPct, { silent: true });
+      if (!r2 || r2.ok === false) {
+        require("./adminAlert").alertAdmin("AutoSell", `${reason} EVM sell failed for user ${pos.user_id}`).catch(()=>{});
+        if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell didn't go through — will retry. Your position is still open.` });
+        return;
+      }
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `🤖 *${reason} Triggered*\n\nToken: *${pos.token_name || pos.token_ca.slice(0,8)}*\nSold: *${sellPct}%*\nP&L: *${sign}${pnlPct.toFixed(1)}%*` });
+      return;
+    } catch (err) {
+      require("./adminAlert").alertAdmin("AutoSell", `${reason} EVM error for user ${pos.user_id}: ${err.message}`).catch(()=>{});
+      if (notifyFn) notifyFn(pos.user_id, "auto_sell", { message: `⚠️ *${reason}* triggered but the sell hit an error — will retry. Your position is still open.` });
+      return;
+    }
+  }
 
   db.recordTrade({
     userId: pos.user_id, walletId: pos.wallet_id,
     tokenCa: pos.token_ca, tokenName: pos.token_name || "Unknown",
-    platform: "devnet_mock", action: "sell",
-    solAmount: solReceived, tokenAmount: pos.token_amount * (sellPct / 100),
+    platform, action: "sell",
+    solAmount: solReceived, tokenAmount: pos.token_amount * sellFraction,
     priceSol: currentPrice, feeSol, feeRate, txHash, status: "confirmed",
+    chain, feeNative, feeCurrency,
   });
 
   if (sellPct >= 100) {
@@ -199,7 +277,7 @@ async function executeSell(pos, user, sellPct, currentPrice, pnlPct, reason, not
 
   db.addVolume(pos.user_id, solReceived);
   const { creditReferralEarnings } = require("./referrals");
-  creditReferralEarnings(pos.user_id, null, feeSol);
+  creditReferralEarnings(pos.user_id, null, feeNative, feeCurrency);
 
   if (notifyFn) {
     notifyFn(pos.user_id, "auto_sell", {
@@ -298,12 +376,31 @@ async function checkLimitOrders(notifyFn) {
       if (Date.now() - createdAt < 5000) continue;
       const REAL_LO = process.env.MOCK_TRADES === "false";
       let currentPrice;
+      const ordChain = order.chain || "SOL";
       if (REAL_LO) {
-        try {
-          const { getTokenOverview } = require("./birdeye");
-          const ov = await getTokenOverview(order.token_ca);
-          currentPrice = (ov && ov.price > 0) ? ov.price : getMockPrice(order.token_ca);
-        } catch { currentPrice = getMockPrice(order.token_ca); }
+        // MAINNET: real price only, chain-specific source. Never fire a limit order on a fake price.
+        if (ordChain === "SOL") {
+          try {
+            const { getTokenOverview } = require("./birdeye");
+            const ov = await getTokenOverview(order.token_ca);
+            if (ov && ov.price > 0) currentPrice = ov.price;
+          } catch {}
+          if (!currentPrice) {
+            try {
+              const axL = require("axios");
+              const drL = await axL.get("https://api.dexscreener.com/latest/dex/tokens/" + order.token_ca, { timeout: 5000 });
+              const prL = drL.data && drL.data.pairs && drL.data.pairs[0];
+              if (prL && prL.priceUsd) currentPrice = parseFloat(prL.priceUsd);
+            } catch {}
+          }
+        } else {
+          try {
+            const { getTokenInfo } = require("./chains/evm/uniswap");
+            const ti = await getTokenInfo(ordChain, order.token_ca);
+            if (ti && ti.priceInEth > 0) currentPrice = ti.priceInEth;
+          } catch {}
+        }
+        if (!currentPrice || currentPrice <= 0) continue; // no real price → skip, retry next tick
       } else {
         currentPrice = getMockPrice(order.token_ca);
       }
@@ -396,70 +493,15 @@ async function checkLimitOrders(notifyFn) {
         if (pos) {
           const user = db.getUser(order.user_id);
           if (user) {
-            const { mockSell } = require("./executor");
-            // Can't use ctx here — use notify instead
             const sellPct   = order.sell_pct || 100;
             const pnlPct    = ((currentPrice - pos.buy_price) / pos.buy_price) * 100;
             const solRec    = pos.sol_invested * (1 + pnlPct / 100) * (sellPct / 100);
-            const { getEffectiveFeeRate } = require("./executor");
-            const feeRate   = getEffectiveFeeRate(user);
-            const feeSol    = solRec * feeRate;
+            const sign      = pnlPct >= 0 ? "+" : "";
 
-            db.recordTrade({
-              userId: pos.user_id, walletId: pos.wallet_id,
-              tokenCa: pos.token_ca, tokenName: pos.token_name || "",
-              platform: "devnet_mock", action: "sell",
-              solAmount: solRec, tokenAmount: pos.token_amount * (sellPct/100),
-              priceSol: currentPrice, feeSol, feeRate,
-              txHash: `DEVNET_LIMIT_${Date.now()}`, status: "confirmed",
-            });
-
-            if (sellPct >= 100) db.closePosition(pos.position_id);
-            db.addVolume(pos.user_id, solRec);
-
-            const sign = pnlPct >= 0 ? "+" : "";
-            if (notifyFn) {
-              notifyFn(order.user_id, "limit_order", {
-                message:
-                  `📌 *Limit Order Executed*\n\n` +
-                  `Token: *${pos.token_name || pos.token_ca.slice(0,8)}*\n` +
-                  `Sold: *${sellPct}%* at target price\n` +
-                  `P&L: *${sign}${pnlPct.toFixed(1)}%*\n` +
-                  `Received: *${solRec.toFixed(4)} SOL*`,
-              });
-              // Generate PnL card
-              try {
-                const { generateTradeCard } = require("./statsCard");
-                const { RANKS } = require("./keyboards");
-                const rank = RANKS[user.rank] || RANKS[1];
-                const soldInvested = pos.sol_invested * (sellPct / 100);
-                const pnlSolVal = solRec - soldInvested;
-                const hideAmounts = db.getSysConfig(`pnlcard_hide_${user.user_id}`) === "1";
-                const feeSaved = Math.max(0, (solRec * 0.01) - feeSol);
-                const cardResult = await generateTradeCard({
-                  username: user.username || "Trader",
-                  rankName: rank.name, rankNum: user.rank || 1,
-                  tokenName: pos.token_name || pos.token_ca.slice(0,8),
-                  pnlSol: hideAmounts ? 0 : pnlSolVal,
-                  pnlPct, sellPct,
-                  pnlUsd: hideAmounts ? 0 : Math.abs(pnlSolVal * (global.__hawkxSolPx || 150)),
-                  entryMcap: pos.entry_mcap || 0, exitMcap: currentMcap,
-                  invested: hideAmounts ? 0 : soldInvested,
-                  returned: hideAmounts ? 0 : solRec,
-                  feeSaved: hideAmounts ? 0 : feeSaved,
-                  feeRate: rank.fee,
-                  dailyFeeSaved: hideAmounts ? 0 : db.getDailyFeeSaved(user.user_id),
-                  weeklyFeeSaved: hideAmounts ? 0 : db.getWeeklyFeeSaved(user.user_id),
-                  hideAmounts,
-                });
-                if (cardResult?.type === "photo") {
-                  const pnlKb = { inline_keyboard: [[
-                    { text: hideAmounts ? "Show Amounts" : "Hide Amounts", callback_data: `pnlcard_toggle_hide_${user.user_id}` }
-                  ]]};
-                  notifyFn(order.user_id, "pnl_card", { buffer: cardResult.buffer, kb: pnlKb });
-                }
-              } catch(e) { console.error('[LimitCard]', e.message); }
-            }
+            // Route through the REAL executeSell (SOL via realSell / HOOD via evmSell / devnet mock,
+            // with safe-fail: no fake record on failure). It records the trade + closes the position.
+            await executeSell(pos, user, sellPct, currentPrice, pnlPct, "📌 Limit Order", notifyFn);
+            db.cancelLimitOrder(order.user_id, order.id);
           }
         }
       }

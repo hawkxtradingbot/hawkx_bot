@@ -2,11 +2,63 @@ const db = require("../../../database");
 const { buildReferralScreen } = require("./helpers.routes");
 const { InputFile } = require("grammy");
 
+function cfgExplorer(chain, tx){ try{ const cfg=db.getChainConfig(chain); return cfg&&cfg.explorer_url ? "[Explorer]("+cfg.explorer_url+"/tx/"+tx+")" : tx; }catch{ return tx; } }
 async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
     // ── REFERRALS ─────────────────────────────────────────────
     if (data === "menu_referrals") {
       await ctx.answerCallbackQuery();
       return buildReferralScreen(ctx, userId, false);
+    }
+
+    // ── CLAIM CASHBACK ────────────────────────────────────────
+    if (data === "cashback_claim") {
+      const cb = require("../cashback");
+      const w = cb.windowInfo();
+      if (!w.active) { await ctx.answerCallbackQuery({ text: "No active cashback offer right now.", show_alert: true }); return true; }
+      if (cb.alreadyClaimed(userId)) { await ctx.answerCallbackQuery({ text: "You've already claimed this period.", show_alert: true }); return true; }
+      const owed = cb.cashbackOwedSol(userId);
+      if (owed <= 0) { await ctx.answerCallbackQuery({ text: "Nothing to claim yet — trade to earn cashback.", show_alert: true }); return true; }
+
+      // per-user lock (same TOCTOU protection as referral claim)
+      const lockKey = `cashback_lock_${userId}`;
+      const lock = db.getSysConfig(lockKey);
+      if (lock && (Date.now() - parseInt(lock)) < 60000) { await ctx.answerCallbackQuery({ text: "A claim is already processing. Please wait.", show_alert: true }); return true; }
+      db.setSysConfig(lockKey, String(Date.now()));
+
+      await ctx.answerCallbackQuery();
+      const wallets = db.getWallets(userId) || [];
+      const payoutAddr = db.getSysConfig(`payout_wallet_${userId}`) || (wallets[0]?.public_key || "");
+      try {
+        if (!payoutAddr) { await ctx.reply("❌ No payout wallet set. Set one in Referrals."); return true; }
+        const REAL = process.env.MOCK_TRADES === "false";
+        if (!REAL) {
+          cb.markClaimed(userId, "DEVNET");
+          await ctx.reply(`✅ *Cashback claimed* [DEVNET]\n\n${owed.toFixed(6)} SOL simulated.`, { parse_mode: "Markdown" });
+          return true;
+        }
+        const treasuryKey = process.env.TREASURY_PRIVATE_KEY || "";
+        if (!treasuryKey) { await ctx.reply("❌ Payouts not active yet."); return true; }
+        const { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Keypair } = require("@solana/web3.js");
+        const bs58 = require("bs58");
+        const connection = new Connection(process.env.HELIUS_RPC_URL || process.env.BACKUP_RPC_URL, "confirmed");
+        const treasury = Keypair.fromSecretKey(bs58.decode(treasuryKey));
+        const lamports = Math.floor(owed * LAMPORTS_PER_SOL);
+        const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: treasury.publicKey, toPubkey: new PublicKey(payoutAddr), lamports }));
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+        tx.recentBlockhash = blockhash; tx.feePayer = treasury.publicKey; tx.sign(treasury);
+        const sig = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
+        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+        cb.markClaimed(userId, sig);
+        await ctx.reply(`✅ *Cashback claimed!*\n\n${owed.toFixed(6)} SOL sent.\n🔗 [Solscan](https://solscan.io/tx/${sig})`, { parse_mode: "Markdown", disable_web_page_preview: true });
+      } catch (e) {
+        const { formatError } = require("../errorFormat");
+        const fe = formatError(e, "cashback claim");
+        if (fe.alert) require("../adminAlert").alertAdmin("Cashback", fe.adminDetail || String(e.message||e)).catch(()=>{});
+        await ctx.reply("❌ " + fe.userMsg);
+      } finally {
+        db.setSysConfig(`cashback_lock_${userId}`, "");
+      }
+      return true;
     }
 
     // ── CLAIM EARNINGS ────────────────────────────────────────
@@ -93,6 +145,26 @@ async function handleReferralCallbacks(ctx, data, userId, user, bot, ks) {
           await ctx.answerCallbackQuery({ text: "Payout failed: " + em.slice(0,60), show_alert: true });
           return true;
         }
+        // ── Also pay any pending HOOD/ETH referral earnings ──
+        try {
+          const ethCurs = db.getPendingCurrencies(userId).filter(x => x.cur !== "SOL");
+          for (const ec of ethCurs) {
+            const owedEth = ec.total || 0;
+            if (owedEth <= 0) continue;
+            const evmWallets = (db.getWallets(userId) || []).filter(w => (w.chain||"SOL") === "HOOD");
+            const ethDest = evmWallets[0]?.public_key;
+            if (!ethDest) continue; // no HOOD wallet → leave earnings pending until they have one
+            const { sendEvmNative } = require("../evmPayout");
+            const res = await sendEvmNative(ethDest, owedEth, "HOOD");
+            if (res.ok) {
+              db.claimEarnings(userId, 0, "HOOD");
+              await ctx.reply(`✅ *Also claimed ${owedEth.toFixed(6)} ${ec.cur}!*\nSent to your HOOD wallet.\n🔗 ${cfgExplorer("HOOD", res.txHash)}`, { parse_mode: "Markdown", disable_web_page_preview: true });
+            } else {
+              require("../adminAlert").alertAdmin("EVM Claim", `referral ETH payout failed user ${userId}: ${res.error}`).catch(()=>{});
+            }
+          }
+        } catch (e) { require("../adminAlert").alertAdmin("EVM Claim", "referral ETH claim error: " + e.message).catch(()=>{}); }
+
         return buildReferralScreen(ctx, userId, false);
       }
 

@@ -65,7 +65,7 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data === "trade_quickbuy") {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      if (ks) { await ctx.answerCallbackQuery({ text: "⏸ HawkX is briefly paused.\n\nBuying is off right now — your funds are safe and fully yours. You can still SELL your positions any time. Back shortly.", show_alert: true }); return true; }
       await ctx.answerCallbackQuery();
       const msg = await ctx.reply("▶▶ *Send Token CA*\n\nPaste the contract address:", { parse_mode: "Markdown" });
       db.setSysConfig(`prompt_msg_${userId}`, String(msg.message_id));
@@ -73,7 +73,7 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data.startsWith("buy_ca_amt_")) {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      if (ks) { await ctx.answerCallbackQuery({ text: "⏸ HawkX is briefly paused.\n\nBuying is off right now — your funds are safe and fully yours. You can still SELL your positions any time. Back shortly.", show_alert: true }); return true; }
       const amt = parseFloat(data.replace("buy_ca_amt_", ""));
       const ca = db.getSysConfig(`pending_ca_${userId}`);
       if (!ca) { await ctx.answerCallbackQuery("❌ Please paste a token CA first."); return true; }
@@ -92,7 +92,7 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
     }
     // Pro safety override — buy a risky token after confirmation
     if (data.startsWith("buy_override_")) {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
+      if (ks) { await ctx.answerCallbackQuery({ text: "⏸ HawkX is briefly paused.\n\nBuying is off right now — your funds are safe and fully yours. You can still SELL your positions any time. Back shortly.", show_alert: true }); return true; }
       if ((user.mode || "beginner") !== "pro") { await ctx.answerCallbackQuery("❌ Override is Pro-only.", { show_alert: true }); return true; }
       const rest = data.replace("buy_override_", "");
       const lastUnderscore = rest.lastIndexOf("_");
@@ -115,7 +115,6 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
 
     // ── SELL ─────────────────────────────────────────────────
     if (data.startsWith("sell_pct_")) {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
       const parts = data.split("_");
       await ctx.answerCallbackQuery();
       const position = db.getPosition(parseInt(parts[3]), userId);
@@ -124,7 +123,6 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data.startsWith("sell_quick_")) {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
       const pct = parseInt(data.replace("sell_quick_", ""));
       const positions = db.getOpenPositions(userId);
       if (!positions.length) { await ctx.answerCallbackQuery("No open positions."); return true; }
@@ -133,7 +131,6 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
       return true;
     }
     if (data === "sell_initial" || data.startsWith("sell_initial_") || data.startsWith("sell_initial_pos_")) {
-      if (ks) { await ctx.answerCallbackQuery("🔴 Trading paused.", { show_alert: true }); return true; }
       await ctx.answerCallbackQuery();
       const posId = data.startsWith("sell_initial_pos_") ? parseInt(data.replace("sell_initial_pos_", "")) : (data.includes("_") && data !== "sell_initial" ? parseInt(data.split("_")[2]) : null);
       const positions = posId ? [db.getPosition(posId, userId)] : db.getOpenPositions(userId);
