@@ -9,17 +9,27 @@ async function handleTradingCallbacks(ctx, data, userId, user, bot, ks) {
     // ── PORTFOLIO ─────────────────────────────────────────────
     if (data === "pos_wallet_expand") {
       await ctx.answerCallbackQuery();
-      return getPortfolio(ctx, user, "all", 0, false, null, true);
+      return getPortfolio(ctx, db.getUser(userId), "all", 0, false, null, true);
     }
     if (data.startsWith("pos_setwallet_")) {
-      const wId = parseInt(data.replace("pos_setwallet_", ""));
+      const wId = parseInt(data.replace("pos_setwallet_", ""), 10);
+      const activeChain = db.getActiveChain(userId);
+      const selectedWallet = db.getWallet(wId);
+      if (
+        !selectedWallet ||
+        String(selectedWallet.user_id) !== String(userId) ||
+        (selectedWallet.chain || "SOL") !== activeChain
+      ) {
+        await ctx.answerCallbackQuery("❌ Wallet is not available on this chain.", { show_alert: true });
+        return true;
+      }
       db.getDb().prepare("UPDATE users SET active_wallet_id = ? WHERE user_id = ?").run(wId, userId);
       await ctx.answerCallbackQuery("✅ Wallet switched!");
-      return getPortfolio(ctx, db.getUser(userId));
+      return getPortfolio(ctx, db.getUser(userId), "all", 0, false, null, false);
     }
     if (data === "menu_portfolio") {
       await ctx.answerCallbackQuery();
-      return getPortfolio(ctx, user, "all", 0, false, null);
+      return getPortfolio(ctx, db.getUser(userId), "all", 0, false, null);
     }
     if (data.startsWith("pos_filter_")) {
       const parts = data.split("_");

@@ -378,9 +378,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
       const _rankSolPx = await db.getSolPriceUsdShared().catch(() => 150);
       const rankMsg = buildRankInfoMessage(freshUser, _feeSavedSol * _rankSolPx);
       const rankKb = { inline_keyboard: [[{ text: "← Back", callback_data: "menu_main" }]] };
-      try { await ctx.editMessageText(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }
-      catch { await ctx.reply(rankMsg, { parse_mode: "Markdown", reply_markup: rankKb }); }
-      return;
+      return safeEdit(ctx, rankMsg, rankKb);
     }
 
     // ── STATS ─────────────────────────────────────────────────
@@ -437,7 +435,7 @@ async function handleMenuCallbacks(ctx, data, userId, user, bot, ks) {
         [{ text: "📤 Monthly Card", callback_data: "stats_card_month" }, { text: "🏅 Rank Card", callback_data: "gen_rank_card" }],
         [{ text: "← Back", callback_data: "menu_main" }, { text: "🔄 Refresh", callback_data: "menu_stats" }],
       ]};
-      return ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
+      return safeEdit(ctx, msg, kb);
     }
 
     if (data === "stats_card_today" || data === "stats_card_week" || data === "stats_card_month") {

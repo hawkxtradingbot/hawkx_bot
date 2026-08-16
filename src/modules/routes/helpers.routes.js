@@ -151,23 +151,42 @@ async function safeEdit(ctx, text, keyboard) {
   const plainOpts = { reply_markup: keyboard };
   try {
     await ctx.editMessageText(text, mdOpts);
+    return true;
   } catch (e) {
+    const description = String(e?.description || e?.message || "");
+    // Telegram reports an unchanged screen as an error. It is already in the
+    // desired state, so do not send a duplicate copy of the screen.
+    if (description.includes("not modified")) return true;
+
     if (
-      e?.description?.includes("parse entities") ||
-      e?.description?.includes("can't parse")
+      description.includes("parse entities") ||
+      description.includes("can't parse")
     ) {
       try {
         await ctx.editMessageText(text, plainOpts);
+        return true;
       } catch {
-        await ctx.reply(text, plainOpts);
+        try {
+          await ctx.reply(text, plainOpts);
+          return true;
+        } catch {
+          return false;
+        }
       }
     } else {
-      // Any other edit failure (stale message, not-modified, etc): re-send as a new message,
-      // falling back to plain text if Markdown fails. Never let the screen silently die.
+      // The current message may be unavailable when a command opened the
+      // screen, or when Telegram has removed the original message. In that
+      // case a new screen is the only recovery path.
       try {
         await ctx.reply(text, mdOpts);
+        return true;
       } catch (e2) {
-        try { await ctx.reply(text, plainOpts); } catch {}
+        try {
+          await ctx.reply(text, plainOpts);
+          return true;
+        } catch {
+          return false;
+        }
       }
     }
   }

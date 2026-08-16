@@ -15,6 +15,7 @@ function setupCommands(bot) {
     { command: "start",     description: "🏠 Main Menu" },
     { command: "buy",       description: "🟢 Buy a token" },
     { command: "sell",      description: "🔴 Sell positions" },
+    { command: "portfolio", description: "📂 Open positions" },
     { command: "positions", description: "📂 Open positions" },
     { command: "wallets",   description: "💼 Manage wallets" },
     { command: "settings",  description: "⚙️ Settings" },
@@ -54,6 +55,13 @@ function setupCommands(bot) {
   });
 
   bot.command("positions", async (ctx) => {
+    const user = db.getUser(ctx.from.id);
+    if (!user) return ctx.reply("Please /start first.");
+    const { getPortfolio } = require("../portfolio");
+    return getPortfolio(ctx, user);
+  });
+
+  bot.command("portfolio", async (ctx) => {
     const user = db.getUser(ctx.from.id);
     if (!user) return ctx.reply("Please /start first.");
     const { getPortfolio } = require("../portfolio");

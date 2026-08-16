@@ -170,7 +170,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
         try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
       }
     }
-    return;
+    return true;
   }
 
   // ── Pagination ───────────────────────────────────────────────
@@ -345,6 +345,7 @@ async function getPortfolio(ctx, user, filter = "all", page = 0, expanded = fals
       try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
     }
   }
+  return true;
 }
 
 // ── Single token position view (shown after buy) ──────────────
@@ -357,7 +358,7 @@ async function getTokenPosition(ctx, user, positionId) {
 
   if (!pos) {
     try { await ctx.answerCallbackQuery("Position not found."); } catch {}
-    return;
+    return true;
   }
 
   db.setSysConfig(`last_position_${user.user_id}`, String(positionId));
@@ -522,6 +523,7 @@ async function getTokenPosition(ctx, user, positionId) {
       try { await ctx.reply(msg, { parse_mode: "HTML", disable_web_page_preview: true, reply_markup: kb }); } catch {}
     }
   }
+  return true;
 }
 
 module.exports = { getPortfolio, getTokenPosition, getSourceLabel, formatPnl, formatSol };
